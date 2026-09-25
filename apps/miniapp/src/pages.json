@@ -1,0 +1,24 @@
+{
+  "pages": [
+    { "path": "pages/activity/index", "style": { "navigationBarTitleText": "活动" } },
+    { "path": "pages/assistant/index", "style": { "navigationBarTitleText": "助手" } },
+    { "path": "pages/mine/index", "style": { "navigationBarTitleText": "我的" } }
+  ],
+  "tabBar": {
+    "color": "#737A76",
+    "selectedColor": "#0B6847",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/activity/index", "text": "活动" },
+      { "pagePath": "pages/assistant/index", "text": "助手" },
+      { "pagePath": "pages/mine/index", "text": "我的" }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "会聚",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F7F8F6"
+  }
+}

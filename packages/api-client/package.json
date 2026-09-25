@@ -1,0 +1,14 @@
+{
+  "name": "@huiju/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "由会聚 OpenAPI 文档生成的类型与薄客户端。",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  }
+}

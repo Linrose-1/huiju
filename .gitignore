@@ -1,0 +1,48 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies and package manager caches
+node_modules/
+.pnpm-store/
+
+# Build and compiler output
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# uni-app and HBuilderX output
+apps/miniapp/unpackage/
+apps/miniapp/.hbuilderx/
+
+# Test and browser artifacts
+test-results/
+playwright-report/
+blob-report/
+screenshots/
+
+# Runtime artifacts
+.codex-runtime-logs/
+apps/**/.codex-runtime-logs/
+*.log
+*.err
+*.pid
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini

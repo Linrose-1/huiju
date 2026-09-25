@@ -1,0 +1,38 @@
+{
+  "name": "@huiju/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env ./node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "build": "nest build",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs generate",
+    "db:check": "node ./node_modules/drizzle-kit/bin.cjs check",
+    "db:migrate": "node --env-file=../../.env ./node_modules/drizzle-kit/bin.cjs migrate"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.1.0",
+    "@nestjs/core": "^12.1.0",
+    "@nestjs/platform-express": "^12.1.0",
+    "@nestjs/swagger": "^12.0.2",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "drizzle-orm": "^0.45.3",
+    "mysql2": "^3.24.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.6",
+    "@nestjs/schematics": "^12.0.5",
+    "@nestjs/testing": "^12.1.0",
+    "@types/node": "^24.13.6",
+    "drizzle-kit": "^0.31.11",
+    "supertest": "^7.3.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.1"
+  }
+}
