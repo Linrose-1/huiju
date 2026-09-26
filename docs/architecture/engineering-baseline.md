@@ -1,6 +1,6 @@
 # 本地工程基线与迁移流程
 
-状态：2026-09-25 可重复运行基线。当前只验证健康接口，不代表微信登录、业务 API 或 MySQL 事务已经跑通。
+状态：2026-09-26 可重复运行基线。工程检查及最小业务API已有实现与自动化证据，本机MySQL单事务回滚和多连接并发测试通过；真实微信、完整人工与真机验收尚未完成。本文区分历史迁移证据与当前实现，最新进度见根HANDOFF。
 
 ## 环境配置
 
@@ -9,9 +9,12 @@
 | 变量 | 当前用途 |
 | --- | --- |
 | `NODE_ENV`、`PORT` | API 运行模式与监听端口；`PORT` 必须为 1–65535 的整数，默认 3000 |
-| `DATABASE_URL` | Drizzle 迁移和后续业务数据库连接；当前健康接口不连接数据库 |
+| `DATABASE_URL` | Drizzle迁移及现有身份、资料、活动和报名业务连接；健康接口本身不连接数据库 |
 | `MYSQL_DEV_PORT`、`MYSQL_DEV_PASSWORD`、`MYSQL_DEV_ROOT_PASSWORD` | 本地 Compose MySQL；示例仅供本地开发，不能用于共享或生产环境 |
-| `WECHAT_MINIAPP_*`、`AI_*`、`OBJECT_STORAGE_*` | 对应功能实现时再启用；当前健康接口不读取 |
+| `WECHAT_MINIAPP_APP_ID`、`WECHAT_MINIAPP_SECRET` | 微信身份交换与手机号授权；缺失时返回明确不可用，不绕过认证 |
+| `MEMBER_SESSION_TTL_SECONDS`、`MEMBER_SESSION_MAX_ACTIVE` | 会话有效期与有效会话上限，默认604800秒/5个 |
+| `LOCAL_AVATAR_DIRECTORY` | 本地头像目录，默认API工作目录下`.local-uploads/avatars`，不提交运行文件 |
+| `AI_*`、`OBJECT_STORAGE_*` | 当前最小链路不启用，头像与页面资源保存在本地 |
 
 `.env.example` 的数据库地址与 Compose 的默认账号、端口一致。若修改数据库密码，也要同步调整 `DATABASE_URL`；连接串中的特殊字符需要 URL 编码。生产环境由部署系统注入变量，不复制本地示例密码。
 

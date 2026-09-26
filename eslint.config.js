@@ -12,11 +12,11 @@ export default tseslint.config(
     languageOptions: { parserOptions: { parser: tseslint.parser } },
   },
   {
-    files: ['apps/miniapp/src/App.vue'],
-    languageOptions: { globals: { console: 'readonly' } },
+    files: ['apps/miniapp/src/**/*.vue'],
+    languageOptions: { globals: { console: 'readonly', uni: 'readonly' } },
   },
   {
-    files: ['apps/miniapp/src/pages/**/index.vue'],
+    files: ['apps/miniapp/src/pages/**/*.vue'],
     rules: {
       'vue/multi-word-component-names': 'off',
       'vue/singleline-html-element-content-newline': 'off',

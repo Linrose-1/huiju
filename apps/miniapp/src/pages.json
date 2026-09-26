@@ -1,8 +1,54 @@
 {
   "pages": [
-    { "path": "pages/activity/index", "style": { "navigationBarTitleText": "活动" } },
-    { "path": "pages/assistant/index", "style": { "navigationBarTitleText": "助手" } },
-    { "path": "pages/mine/index", "style": { "navigationBarTitleText": "我的" } }
+    {
+      "path": "pages/activity/index",
+      "style": {
+        "navigationBarTitleText": "活动",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/assistant/index",
+      "style": {
+        "navigationBarTitleText": "助手"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录与完善资料"
+      }
+    },
+    {
+      "path": "pages/activity/detail",
+      "style": {
+        "navigationBarTitleText": "活动详情"
+      }
+    },
+    {
+      "path": "pages/registration/form",
+      "style": {
+        "navigationBarTitleText": "报名表"
+      }
+    },
+    {
+      "path": "pages/registration/detail",
+      "style": {
+        "navigationBarTitleText": "我的报名详情"
+      }
+    },
+    {
+      "path": "pages/registration/index",
+      "style": {
+        "navigationBarTitleText": "我报名的"
+      }
+    }
   ],
   "tabBar": {
     "color": "#737A76",
@@ -10,15 +56,36 @@
     "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
     "list": [
-      { "pagePath": "pages/activity/index", "text": "活动" },
-      { "pagePath": "pages/assistant/index", "text": "助手" },
-      { "pagePath": "pages/mine/index", "text": "我的" }
+      {
+        "pagePath": "pages/activity/index",
+        "text": "活动",
+        "iconPath": "static/huiju/tab-activity-normal.png",
+        "selectedIconPath": "static/huiju/tab-activity-selected.png"
+      },
+      {
+        "pagePath": "pages/assistant/index",
+        "text": "助手",
+        "iconPath": "static/huiju/tab-assistant-placeholder.png",
+        "selectedIconPath": "static/huiju/tab-assistant-placeholder.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/huiju/tab-mine-normal.png",
+        "selectedIconPath": "static/huiju/tab-mine-selected.png"
+      }
     ]
   },
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "会聚",
     "navigationBarBackgroundColor": "#FFFFFF",
-    "backgroundColor": "#F7F8F6"
+    "backgroundColor": "#F5F8F7"
+  },
+  "easycom": {
+    "autoscan": true,
+    "custom": {
+      "^uni-(.*)": "@/uni_modules/uni-$1/components/uni-$1/uni-$1.vue"
+    }
   }
 }

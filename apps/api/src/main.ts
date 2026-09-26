@@ -1,13 +1,13 @@
-import { ValidationPipe } from '@nestjs/common'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import { NestFactory } from '@nestjs/core'
 import { SwaggerModule } from '@nestjs/swagger'
 import { AppModule } from './app.module.js'
 import { createOpenApiDocument } from './openapi.js'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create<NestExpressApplication>(AppModule)
   app.setGlobalPrefix('api/v1')
-  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }))
+  app.useBodyParser('json', { limit: '3mb' })
 
   SwaggerModule.setup('api/docs', app, () => createOpenApiDocument(app))
 
