@@ -13,9 +13,12 @@
     "dev:api": "pnpm --filter @huiju/api dev",
     "build": "pnpm -r --if-present build",
     "type-check": "pnpm -r --if-present type-check",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm test:scripts && pnpm -r --if-present test",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "lint": "eslint .",
-    "verify": "pnpm lint && pnpm type-check && pnpm test && pnpm build",
+    "verify": "pnpm lint && pnpm type-check && pnpm test && pnpm build && pnpm --filter @huiju/api db:check && node scripts/check-api-contract.mjs",
+    "verify:plan": "node scripts/verification-plan.mjs",
+    "api:check": "pnpm --filter @huiju/api build && node scripts/check-api-contract.mjs",
     "api:generate": "pnpm --filter @huiju/api build && node apps/api/scripts/export-openapi.mjs && openapi-typescript docs/api/openapi.json -o packages/api-client/src/generated.ts"
   },
   "devDependencies": {

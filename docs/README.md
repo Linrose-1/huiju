@@ -13,3 +13,5 @@
 首个业务流程的技术设计入口：[身份与会话](architecture/auth.md)、[权限策略](architecture/permissions.md)、[数据关系](architecture/database.md)、[活动与报名状态](architecture/first-flow.md)。
 
 本地环境、MySQL 版本、迁移与客户端生成步骤见[本地工程基线](architecture/engineering-baseline.md)。
+
+按任务选择检查见[验证与验收](testing/README.md)，命令副作用见[工程脚本](../scripts/README.md)。来自猩球工坊与猩商态的工程取舍记录在[工程实践借鉴](architecture/工程实践借鉴.md)，不作为产品规则来源。

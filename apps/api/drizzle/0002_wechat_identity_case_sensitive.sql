@@ -1,0 +1,3 @@
+ALTER TABLE `wechat_identities` MODIFY COLUMN `app_id` varchar(64) character set utf8mb4 collate utf8mb4_0900_bin NOT NULL;--> statement-breakpoint
+ALTER TABLE `wechat_identities` MODIFY COLUMN `open_id` varchar(128) character set utf8mb4 collate utf8mb4_0900_bin NOT NULL;--> statement-breakpoint
+ALTER TABLE `wechat_identities` MODIFY COLUMN `union_id` varchar(128) character set utf8mb4 collate utf8mb4_0900_bin;

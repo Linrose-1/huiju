@@ -7,7 +7,9 @@ import { AppModule } from '../dist/app.module.js'
 import { createOpenApiDocument } from '../dist/openapi.js'
 
 const projectRoot = resolve(fileURLToPath(new URL('../../../', import.meta.url)))
-const outputPath = resolve(projectRoot, 'docs/api/openapi.json')
+const outputPath = process.argv[2]
+  ? resolve(process.argv[2])
+  : resolve(projectRoot, 'docs/api/openapi.json')
 const app = await NestFactory.create(AppModule, { logger: false })
 
 try {

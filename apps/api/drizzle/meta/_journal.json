@@ -15,6 +15,13 @@
       "when": 1790318654144,
       "tag": "0001_seed_platform_root",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1790399733818,
+      "tag": "0002_wechat_identity_case_sensitive",
+      "breakpoints": true
     }
   ]
 }

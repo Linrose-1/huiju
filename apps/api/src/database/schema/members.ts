@@ -4,6 +4,7 @@ import {
   boolean,
   char,
   check,
+  customType,
   datetime,
   index,
   mysqlEnum,
@@ -13,6 +14,17 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core'
+
+// 外部身份标识按原始字符精确匹配，不继承数据库的大小写不敏感排序规则。
+const identityVarchar = customType<{
+  data: string
+  driverData: string
+  config: { length: number }
+  configRequired: true
+}>({
+  dataType: ({ length }) =>
+    `varchar(${length}) character set utf8mb4 collate utf8mb4_0900_bin`,
+})
 
 export const members = mysqlTable(
   'members',
@@ -67,9 +79,9 @@ export const wechatIdentities = mysqlTable(
         onDelete: 'cascade',
         onUpdate: 'restrict',
       }),
-    appId: varchar('app_id', { length: 64 }).notNull(),
-    openId: varchar('open_id', { length: 128 }).notNull(),
-    unionId: varchar('union_id', { length: 128 }),
+    appId: identityVarchar('app_id', { length: 64 }).notNull(),
+    openId: identityVarchar('open_id', { length: 128 }).notNull(),
+    unionId: identityVarchar('union_id', { length: 128 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`),
