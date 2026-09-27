@@ -94,7 +94,7 @@ export class ActivityService {
       .orderBy(asc(registrationQuestions.sortOrder))
     const organizer = state === 'removed' ? null : (await this.database.db
       .select({
-        avatarUrl: members.avatarUrl,
+        memberId: members.id, avatarUrl: members.avatarUrl,
         displayName: members.displayName
       })
       .from(members)
@@ -157,7 +157,7 @@ export class ActivityService {
     }
     const rows = await this.database.db
       .select({
-        avatarUrl: members.avatarUrl,
+        memberId: members.id, avatarUrl: members.avatarUrl,
         displayName: members.displayName
       })
       .from(registrations)

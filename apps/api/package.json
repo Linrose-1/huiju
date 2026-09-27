@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file-if-exists=../../.env ./node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "local-test": "node --env-file-if-exists=../../.env scripts/local-test.mjs --local-test",
     "build": "nest build",
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "type-check": "tsc --noEmit",
@@ -23,7 +24,8 @@
     "drizzle-orm": "^0.45.3",
     "mysql2": "^3.24.4",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.6",

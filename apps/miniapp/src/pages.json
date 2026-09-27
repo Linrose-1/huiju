@@ -46,9 +46,17 @@
     {
       "path": "pages/registration/index",
       "style": {
-        "navigationBarTitleText": "我报名的"
+        "navigationBarTitleText": "我的活动"
       }
-    }
+    },
+    { "path": "pages/activity/editor", "style": { "navigationBarTitleText": "发起活动", "navigationBarBackgroundColor": "#f4f9f7", "backgroundColor": "#f4f9f7" } },
+    { "path": "pages/activity/manage", "style": { "navigationBarTitleText": "活动管理" } },
+    { "path": "pages/activity/organized", "style": { "navigationBarTitleText": "我的活动" } },
+    { "path": "pages/invitation/index", "style": { "navigationBarTitleText": "我的邀请码" } },
+    { "path": "pages/notification/index", "style": { "navigationBarTitleText": "站内通知" } },
+    { "path": "pages/member/profile", "style": { "navigationBarTitleText": "个人资料" } },
+    { "path": "pages/member/card-settings", "style": { "navigationBarTitleText": "名片展示设置" } },
+    { "path": "pages/member/card", "style": { "navigationBarTitleText": "会员名片" } }
   ],
   "tabBar": {
     "color": "#737A76",

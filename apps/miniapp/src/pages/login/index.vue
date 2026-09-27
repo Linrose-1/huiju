@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { api, errorMessage, refreshMember } from '@/services/api'
-import { mediaUrl } from '@/services/api/environment'
+import { mediaUrl, LOCAL_TEST } from '@/services/api/environment'
 import { loginWithWechat, uploadAvatar } from '@/services/wechat'
 import { finishProfile } from '@/services/navigation'
 const session = useSessionStore(), name = ref(''), invite = ref(''), returnTo = ref(''), busy = ref(false), error = ref('')
@@ -50,6 +50,10 @@ async function submit() {
     })
 }
 function legal(title: string) { uni.showModal({ title, content: '正式文本尚未配置，当前仅供本地开发验收。', showCancel: false }); }
+function testPhone() { if (LOCAL_TEST) void perform(() => api.phone('huiju-local-test')) }
+function testAvatar() {
+    if (LOCAL_TEST) void perform(() => api.avatar('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAn0lEQVRoge2SQQkAQRDDKiPiKmP9cyLuEQYKEZCGhtfTRDdgA6pXZBfqXaIbsAHVK7IL9S7RDdiA6hXZhXqX6AZsQPWK7EK9S3QDNqB6RXah3iW6ARtQvSK7UO8S3YANqF6RXah3iW7ABlSvyC7Uu0Q3YAOqV2QX6l2iG7AB1SuyC/Uu0Q3YgOoV2YV6l+gGbED1iuxCvUt0AzagesU/fHBggNPKQZE8AAAAAElFTkSuQmCC', 'image/png'))
+}
 function avatar(event: {
     detail: {
         avatarUrl?: string
@@ -68,6 +72,12 @@ function phone(event: {
 </script>
 <template>
   <view class="login">
+    <view
+      v-if="LOCAL_TEST"
+      class="error"
+    >
+      本地模拟测试：独立测试会员，手机号不经过微信授权。
+    </view>
     <image
       class="campus"
       src="/static/huiju/campus.jpg"
@@ -94,7 +104,14 @@ function phone(event: {
                 color="#bdc6c0"
               />
             </view><button
-              v-if="session.token"
+              v-if="LOCAL_TEST && session.token"
+              class="field-button"
+              :disabled="busy"
+              @click="testAvatar"
+            >
+              使用测试头像
+            </button><button
+              v-else-if="session.token"
               class="field-button"
               open-type="chooseAvatar"
               :disabled="busy"
@@ -117,7 +134,7 @@ function phone(event: {
         <view class="form-row">
           <text>用户名称</text><input
             v-model="name"
-            type="nickname"
+            :type="LOCAL_TEST ? 'text' : 'nickname'"
             maxlength="100"
             class="name-input"
             placeholder="请输入用户名称"
@@ -131,6 +148,13 @@ function phone(event: {
           >
             {{ session.member.boundPhone }}
           </text><button
+            v-else-if="LOCAL_TEST && session.token"
+            class="field-button"
+            :disabled="busy"
+            @click="testPhone"
+          >
+            绑定模拟手机号
+          </button><button
             v-else-if="session.token"
             class="field-button"
             open-type="getPhoneNumber"
@@ -171,7 +195,7 @@ function phone(event: {
         :disabled="busy"
         @click="submit"
       >
-        {{ session.token?'保存资料并继续':'微信登录' }}
+        {{ session.token?'保存资料并继续':LOCAL_TEST?'进入本地测试':'微信登录' }}
       </button><view class="legal">登录与授权用于建立会员身份和报名联系。<text @click="legal('用户协议')">用户协议</text> · <text @click="legal('隐私政策')">隐私政策</text></view><button
         class="text-button"
         @click="finishProfile('')"

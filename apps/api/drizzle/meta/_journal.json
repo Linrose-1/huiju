@@ -22,6 +22,13 @@
       "when": 1790399733818,
       "tag": "0002_wechat_identity_case_sensitive",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1790511704282,
+      "tag": "0003_activity_reading",
+      "breakpoints": true
     }
   ]
 }

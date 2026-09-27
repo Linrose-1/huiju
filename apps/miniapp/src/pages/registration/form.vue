@@ -212,8 +212,8 @@ onShow(load)
                 v-if="selected(question.id,option)"
                 type="checkbox-filled"
                 color="#217458"
-                size="18"
-              /> {{ option }}
+                size="24rpx"
+              /><text class="option-label">{{ option }}</text>
             </button>
           </view>
         </view><view class="notice form-notice">
@@ -252,4 +252,4 @@ onShow(load)
     </template>
   </view>
 </template>
-<style scoped>.section-title{margin:0}.field-label{font-size:28rpx}.hint{color:#7e8a95;font-size:24rpx;line-height:1.6;margin-top:12rpx}.input-wrap{position:relative}.input-wrap .input{padding-right:66rpx}.clear-input{position:absolute;right:0;top:0;width:64rpx;height:80rpx;padding:0;background:transparent;display:flex;align-items:center;justify-content:center}.clear-input[disabled]{background:transparent}.long-answer{position:relative}.long-answer textarea{padding-bottom:44rpx;height:200rpx}.word-count{position:absolute;right:18rpx;bottom:12rpx;color:#7e8a95;font-size:23rpx;pointer-events:none}.options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx}.options.single{grid-template-columns:repeat(4,minmax(0,1fr))}.option{font-size:25rpx;background:#f3f5f5;color:#203039;border-radius:12rpx;padding:14rpx 8rpx;min-width:0;width:100%;overflow-wrap:anywhere;border:1rpx solid transparent;min-height:57rpx}.option.chosen{background:#edf5ef;border-color:#397e62;color:#16634b}.form-notice{margin-top:24rpx;display:flex;align-items:flex-start;gap:14rpx}.notice-title{font-size:27rpx;font-weight:600;margin-bottom:6rpx}.capacity{font-size:23rpx;color:#435466;max-width:42%}.capacity>text:first-child{color:#127957;font-weight:600;font-size:30rpx}.fixed-footer .primary{font-size:29rpx}</style>
+<style scoped>.section-title{margin:0}.field-label{font-size:28rpx}.hint{color:#7e8a95;font-size:24rpx;line-height:1.6;margin-top:12rpx}.input-wrap{position:relative}.input-wrap .input{padding-right:66rpx}.clear-input{position:absolute;right:0;top:0;width:64rpx;height:80rpx;padding:0;background:transparent;display:flex;align-items:center;justify-content:center}.clear-input[disabled]{background:transparent}.long-answer{position:relative}.long-answer textarea{padding-bottom:44rpx;height:200rpx}.word-count{position:absolute;right:18rpx;bottom:12rpx;color:#7e8a95;font-size:23rpx;pointer-events:none}.options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx}.options.single{grid-template-columns:repeat(4,minmax(0,1fr))}.option{display:flex;align-items:center;justify-content:center;gap:6rpx;font-size:24rpx;background:#f3f5f5;color:#203039;border-radius:12rpx;padding:14rpx 8rpx;min-width:0;width:100%;overflow-wrap:anywhere;border:1rpx solid transparent;min-height:57rpx}.option-label{min-width:0}.option.chosen{background:#edf5ef;border-color:#397e62;color:#16634b}.form-notice{margin-top:24rpx;display:flex;align-items:flex-start;gap:14rpx}.notice-title{font-size:27rpx;font-weight:600;margin-bottom:6rpx}.capacity{font-size:23rpx;color:#435466;max-width:42%}.capacity>text:first-child{color:#127957;font-weight:600;font-size:30rpx}.fixed-footer .primary{font-size:29rpx}</style>

@@ -44,3 +44,16 @@ test('cancelled and removed activities never show a successful attendance instru
   assert.equal(exported.registrationStatus({ registrationState: 'open' }, { status: 'active' }).tone, 'success')
   assert.equal(exported.registrationStatus({ registrationState: 'open' }, { status: 'cancelled' }).title, '已取消报名')
 })
+
+
+test('design date formats retain China weekday and both dates across year boundary', () => {
+  const start = '2026-12-31T15:30:00Z', end = '2026-12-31T17:00:00Z'
+  assert.equal(exported.activityTimeRangeWeekday(start, end), '2026.12.31 周四 23:30 – 2027.01.01 周五 01:00')
+  assert.equal(exported.activityTimeRangeCn(start, end), '2026年12月31日（周四）23:30 – 2027年1月1日（周五）01:00')
+  for (const format of [exported.activityTimeRangeWeekday, exported.activityTimeRangeCn]) {
+    assert.equal(format(start, 'invalid'), '时间待更新')
+    assert.equal(format('invalid', end), '时间待更新')
+  }
+  assert.equal(exported.activityTimeRangeWeekday('2026-10-03T06:00:00Z', '2026-10-03T09:30:00Z'), '2026.10.03 周六 14:00 – 17:30')
+  assert.equal(exported.activityTimeRangeCn('2026-10-03T06:00:00Z', '2026-10-03T09:30:00Z'), '2026年10月3日（周六）14:00 – 17:30')
+})

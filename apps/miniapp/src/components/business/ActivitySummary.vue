@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Activity } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
-import { activityTimeRange, fee } from '@/services/presentation'
+import { activityTimeRangeWeekday, fee } from '@/services/presentation'
 defineProps<{
     activity: Activity
     showOrganizer?: boolean
@@ -51,7 +51,7 @@ defineProps<{
         <view
           class="icon-placeholder"
           style="width:18px;height:18px"
-        /><text>{{ activityTimeRange(activity.startsAt, activity.endsAt) }}</text>
+        /><text>{{ activityTimeRangeWeekday(activity.startsAt, activity.endsAt) }}</text>
       </view><view class="meta">
         <uni-icons
           type="location"

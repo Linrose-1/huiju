@@ -14,6 +14,7 @@
 | `WECHAT_MINIAPP_APP_ID`、`WECHAT_MINIAPP_SECRET` | 微信身份交换与手机号授权；缺失时返回明确不可用，不绕过认证 |
 | `MEMBER_SESSION_TTL_SECONDS`、`MEMBER_SESSION_MAX_ACTIVE` | 会话有效期与有效会话上限，默认604800秒/5个 |
 | `LOCAL_AVATAR_DIRECTORY` | 本地头像目录，默认API工作目录下`.local-uploads/avatars`，不提交运行文件 |
+| `LOCAL_COVER_DIRECTORY` | 本地活动封面目录，默认API工作目录下`.local-uploads/covers`，数据库只存相对路径 |
 | `AI_*`、`OBJECT_STORAGE_*` | 当前最小链路不启用，头像与页面资源保存在本地 |
 
 `.env.example` 的数据库地址与 Compose 的默认账号、端口一致。若修改数据库密码，也要同步调整 `DATABASE_URL`；连接串中的特殊字符需要 URL 编码。生产环境由部署系统注入变量，不复制本地示例密码。

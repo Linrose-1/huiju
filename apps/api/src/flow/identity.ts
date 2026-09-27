@@ -9,6 +9,7 @@ import {
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import sharp from 'sharp'
 import { members, memberSessions, memberVisibilities, wechatIdentities } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
 import { WechatAdapter } from './wechat.js'
@@ -37,25 +38,31 @@ export function tokenHash(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
 
-export function validAvatar(input: AvatarInput) {
+export async function validAvatar(input: AvatarInput) {
   const bytes = Buffer.from(input.base64, 'base64')
-  const png = bytes.length >= 24
-    && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
-    && bytes.subarray(-12, -8).readUInt32BE(0) === 0
-    && bytes.subarray(-8, -4).toString() === 'IEND'
-  const jpeg = bytes.length > 4 && bytes[0] === 255 && bytes[1] === 216
-    && bytes[2] === 255
-    && bytes[bytes.length - 2] === 255
-    && bytes[bytes.length - 1] === 217
   if (bytes.length < 24 || bytes.length > 2 * 1024 * 1024
-    || !(input.mimeType === 'image/png' ? png : jpeg)) {
+    || !['image/png', 'image/jpeg'].includes(input.mimeType)) {
     fail('INVALID_IMAGE', '请选择 2MB 以内的 PNG 或 JPG 图片')
+  }
+  try {
+    // Bound decoded memory as well as upload size; metadata alone cannot detect damaged pixels.
+    const image = sharp(bytes, { failOn: 'warning', limitInputPixels: 4096 * 4096 })
+    const metadata = await image.metadata()
+    if (`image/${metadata.format}` !== input.mimeType) {
+      throw new Error('Image format mismatch')
+    }
+    await image.raw().toBuffer()
+  }
+  catch {
+    fail('INVALID_IMAGE', '请选择有效且不超过 1677 万像素、2MB 的 PNG 或 JPG 图片')
   }
   return bytes
 }
 
 @Injectable()
 export class IdentityService {
+  protected sessionHash(token: string) { return tokenHash(token) }
+
   constructor(
     private readonly database: FlowDatabase,
     private readonly wechat: WechatAdapter
@@ -147,7 +154,7 @@ export class IdentityService {
         .values({
           id: randomUUID(),
           memberId: owner.id,
-          tokenHash: tokenHash(token),
+          tokenHash: this.sessionHash(token),
           expiresAt
         })
       return owner
@@ -170,7 +177,7 @@ export class IdentityService {
       .select({ member: members })
       .from(memberSessions)
       .innerJoin(members, eq(members.id, memberSessions.memberId))
-      .where(and(eq(memberSessions.tokenHash, tokenHash(header.slice(7))), isNull(memberSessions.revokedAt), gt(memberSessions.expiresAt, new Date()), eq(members.kind, 'member')))
+      .where(and(eq(memberSessions.tokenHash, this.sessionHash(header.slice(7))), isNull(memberSessions.revokedAt), gt(memberSessions.expiresAt, new Date()), eq(members.kind, 'member')))
       .limit(1)
     if (!row) {
       fail('SESSION_REQUIRED', '登录已失效，请重新登录', 401)
@@ -185,7 +192,7 @@ export class IdentityService {
     await this.database.db
       .update(memberSessions)
       .set({ revokedAt: new Date() })
-      .where(eq(memberSessions.tokenHash, tokenHash(header!.slice(7))))
+      .where(eq(memberSessions.tokenHash, this.sessionHash(header!.slice(7))))
     return { ok: true }
   }
 
@@ -228,7 +235,7 @@ export class IdentityService {
 
   async avatar(header: string | undefined, input: AvatarInput) {
     const member = (await this.require(header))!
-    const bytes = validAvatar(input)
+    const bytes = await validAvatar(input)
     const name = `${randomUUID()}.${input.mimeType === 'image/png' ? 'png' : 'jpg'}`
     await mkdir(this.directory(), { recursive: true })
     await writeFile(resolve(this.directory(), name), bytes, { flag: 'wx' })

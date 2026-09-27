@@ -4,7 +4,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { api, refreshMember, errorMessage } from '@/services/api'
 import { mediaUrl } from '@/services/api/environment'
-import { navigate, routes, loginPage, unavailable } from '@/services/navigation'
+import { navigate, routes, loginPage } from '@/services/navigation'
 const session = useSessionStore(), count = ref<number | null>(null), error = ref(''), loading = ref(false)
 async function load() { count.value = null; error.value = ''; if (!session.token)
     return; loading.value = true; try {
@@ -22,11 +22,7 @@ function openRegistrations() { if (!session.token)
     loginPage(routes.registrations)
 else
     navigate(routes.registrations); }
-function invitation() { if (!session.member) {
-    loginPage(routes.mine)
-    return
-} uni.showModal({ title: '我的邀请码', content: session.member.inviteCode, confirmText: '复制', success: result => { if (result.confirm)
-        uni.setClipboardData({ data: session.member!.inviteCode }); } }); }
+function invitation() { navigate(routes.invitation) }
 async function logout() { const result = await uni.showModal({ title: '退出登录', content: '下次报名需要重新登录，确认退出？' }); if (!result.confirm)
     return; try {
     await api.logout()
@@ -69,7 +65,7 @@ onShow(load)
           </view>
         </view><button
           class="edit"
-          @click="loginPage(routes.mine)"
+          @click="session.token ? navigate(routes.profile) : loginPage(routes.profile)"
         >
           {{ session.token?'编辑资料':'去登录' }} <uni-icons
             type="arrow-right"
@@ -100,7 +96,7 @@ onShow(load)
           />
         </view><view class="grow"><view class="serif namecard-title">我的名片</view><view class="muted small">选择对同学展示的信息</view></view><button
           class="edit"
-          @click="unavailable('名片设置暂未开放')"
+          @click="navigate(routes.cardSettings)"
         >
           设置名片 <uni-icons
             type="arrow-right"
@@ -128,7 +124,7 @@ onShow(load)
           </view><view class="muted small tile-desc">查看已报名的活动</view>
         </view><view
           class="tile"
-          @click="unavailable('我发起的暂未开放')"
+          @click="navigate(routes.organizedActivities)"
         >
           <view class="row">
             <view class="tile-icon">
@@ -137,7 +133,7 @@ onShow(load)
                 size="35"
                 color="#17553f"
               />
-            </view><view class="grow"><view class="tile-title">我发起的</view><view class="muted small">暂未开放</view></view><uni-icons
+            </view><view class="grow"><view class="tile-title">我发起的</view><view class="muted small">草稿与已发布活动</view></view><uni-icons
               type="arrow-right"
               size="20"
             />
@@ -147,13 +143,13 @@ onShow(load)
       <view class="menu-card">
         <view
           class="menu-row row"
-          @click="unavailable('站内通知暂未开放')"
+          @click="navigate(routes.notifications)"
         >
           <uni-icons
             type="notification"
             size="39"
             color="#17543d"
-          /><view class="grow"><view class="tile-title">站内通知</view><view class="muted small">暂未开放</view></view><uni-icons
+          /><view class="grow"><view class="tile-title">站内通知</view><view class="muted small">已报名活动的变动消息</view></view><uni-icons
             type="arrow-right"
             size="20"
             color="#818791"

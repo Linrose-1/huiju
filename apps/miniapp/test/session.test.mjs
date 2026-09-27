@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url)
 const { createPinia, setActivePinia } = require('pinia')
 const base = 'https://test.invalid/api/v1'
 const sampleMember = { id: 'member', memberNumber: 'HJ-1', displayName: 'Member', avatarUrl: null, boundPhone: null, profileComplete: false, inviteCode: 'ABC' }
-function harness(initialStorage = new Map()) {
+function harness(initialStorage = new Map(), localTest = false) {
   setActivePinia(createPinia())
   const queue = []
   const logins = []
@@ -26,7 +26,7 @@ function harness(initialStorage = new Map()) {
   }
   const cache = new Map()
   function load(path) {
-    if (path === '@/services/api/environment' || path === './environment') return { API_BASE_URL: base }
+    if (path === '@/services/api/environment' || path === './environment') return { API_BASE_URL: base, LOCAL_TEST: localTest }
     let file = resolve(root, path.replace(/^@\//, '') + (path.endsWith('.ts') ? '' : '.ts'))
     if (!existsSync(file)) file = file.slice(0, -3) + '/index.ts'
     if (cache.has(file)) return cache.get(file).exports
@@ -52,6 +52,19 @@ test('cold start does not create an identity or block public activity requests',
   assert.equal(h.queue[0].header.Authorization, undefined)
   h.respond(200, { items: [] })
   assert.deepEqual(await result, { items: [] })
+})
+
+test('local test cold starts use a stable mock credential without wx.login', async () => {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const h = harness(new Map(), true)
+    const login = h.wechat().bootstrapIdentity()
+    await setImmediate()
+    assert.equal(h.logins.length, 0)
+    assert.equal(h.queue[0].data.code, 'huiju-local-test')
+    h.respond(200, { token: 'test-token', expiresAt: '2099-01-01', member: sampleMember })
+    await login
+    assert.equal(h.store.member.id, sampleMember.id)
+  }
 })
 
 test('environment switch removes previous environment token and keeps identity empty', () => {

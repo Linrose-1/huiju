@@ -11,6 +11,8 @@
     "dev:miniapp": "pnpm --filter @huiju/miniapp dev",
     "dev:admin": "pnpm --filter @huiju/admin dev",
     "dev:api": "pnpm --filter @huiju/api dev",
+    "dev:api:local-test": "pnpm --filter @huiju/api build && pnpm --filter @huiju/api local-test",
+    "dev:miniapp:local-test": "pnpm --filter @huiju/miniapp dev --mode local-test",
     "build": "pnpm -r --if-present build",
     "type-check": "pnpm -r --if-present type-check",
     "test": "pnpm test:scripts && pnpm -r --if-present test",

@@ -1,6 +1,6 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL } from './environment'
-import type { Member, Activity, Session, Registration, MyRegistration, RegistrationInput, PublicMember } from './types'
+import type { Member, Activity, Session, Registration, MyRegistration, RegistrationInput, PublicMember, ActivityWriteInput, ManagedActivity, OrganizerRegistration, ActivityNotification, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard } from './types'
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 0) { super(message) }
 }
@@ -48,6 +48,24 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  profileDetails: () => request<ProfileDetails>('/members/me/profile-details', 'GET', undefined, true),
+  saveProfileDetails: (input: ProfileDetailsInput) => request<ProfileDetails>('/members/me/profile-details', 'POST', input, true),
+  cardSettings: () => request<CardSettings>('/members/me/card-settings', 'GET', undefined, true),
+  saveCardSettings: (input: CardSettings) => request<CardSettings>('/members/me/card-settings', 'POST', input, true),
+  memberCard: (id: string) => request<MemberCard>(`/members/${encodeURIComponent(id)}/card`, 'GET', undefined, true),
+  recordView: (id: string, input: {eventId: string; visitorId: string}) => request<{ok: boolean}>(`/activities/${encodeURIComponent(id)}/views`, 'POST', input, useSessionStore().token ? true : 'none'),
+  activityReaders: (id: string, offset = 0) => request<ReadingList>(`/activities/${encodeURIComponent(id)}/readers?offset=${offset}`, 'GET', undefined, 'none'),
+  activityViewStats: (id: string) => request<ReadingStats>(`/activities/${encodeURIComponent(id)}/view-stats`, 'GET', undefined, true),
+  uploadCover: (base64: string, mimeType: 'image/png' | 'image/jpeg') => request<{coverUrl: string}>('/media/covers', 'POST', { base64, mimeType }, true),
+  createActivity: (input: ActivityWriteInput) => request<ManagedActivity>('/activities', 'POST', input, true),
+  updateActivity: (id: string, input: ActivityWriteInput) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/edit`, 'POST', input, true),
+  publishActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/publish`, 'POST', {}, true),
+  managedActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/manage`, 'GET', undefined, true),
+  organizedActivities: () => request<{items: ManagedActivity[]; hasMore: boolean}>('/members/me/activities', 'GET', undefined, true),
+  organizerRoster: (id: string) => request<{items: OrganizerRegistration[]}>(`/activities/${encodeURIComponent(id)}/registrations/manage`, 'GET', undefined, true),
+  cancelActivity: (id: string, reason: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/cancel`, 'POST', { reason }, true),
+  notifications: () => request<{items: ActivityNotification[]; hasMore: boolean}>('/members/me/notifications', 'GET', undefined, true),
+  readNotification: (id: string) => request<{ok: boolean}>(`/members/me/notifications/${encodeURIComponent(id)}/read`, 'POST', {}, true),
   login: (code: string, inviteCode?: string) => request<Session>('/auth/wechat/session', 'POST', { code, ...(inviteCode ? { inviteCode } : {}) }, 'none'),
   logout: () => request<{ ok: boolean }>('/auth/session', 'DELETE', undefined, true),
   phone: (code: string) => memberMutation('/members/me/phone', 'POST', { code }),

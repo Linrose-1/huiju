@@ -2,6 +2,10 @@ packages:
   - apps/*
   - packages/*
 autoInstallPeers: false
+packageExtensions:
+  '@dcloudio/uni-mp-vite@3.0.0-5020420260813003':
+    dependencies:
+      estree-walker: 2.0.2
 allowBuilds:
   '@parcel/watcher': true
   '@scarf/scarf': false

@@ -6,6 +6,32 @@ export function dateTime(value: string): string {
   return `${date.getUTCFullYear()}.${pad(date.getUTCMonth() + 1)}.${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`
 }
 export function fee(activity: Activity) { return activity.feeType === 'paid' ? `¥${((activity.feeAmountCents || 0) / 100).toFixed(2)}` : '免费' }
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+function chinaParts(value: string) {
+  const date = new Date(Date.parse(value) + 8 * 60 * 60 * 1000)
+  if (!Number.isFinite(date.getTime())) return null
+  const pad = (v: number) => String(v).padStart(2, '0')
+  return {
+    date: `${date.getUTCFullYear()}.${pad(date.getUTCMonth() + 1)}.${pad(date.getUTCDate())}`,
+    time: `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`,
+    week: WEEKDAYS[date.getUTCDay()],
+    cnDate: `${date.getUTCFullYear()}年${date.getUTCMonth() + 1}月${date.getUTCDate()}日`,
+  }
+}
+export function activityTimeRangeWeekday(startsAt: string, endsAt: string): string {
+  const start = chinaParts(startsAt)
+  const end = chinaParts(endsAt)
+  if (!start || !end) return '时间待更新'
+  const head = `${start.date} ${start.week} ${start.time}`
+  return start.date === end.date ? `${head} – ${end.time}` : `${head} – ${end.date} ${end.week} ${end.time}`
+}
+export function activityTimeRangeCn(startsAt: string, endsAt: string): string {
+  const start = chinaParts(startsAt)
+  const end = chinaParts(endsAt)
+  if (!start || !end) return '时间待更新'
+  const head = `${start.cnDate}（${start.week}）${start.time}`
+  return start.date === end.date ? `${head} – ${end.time}` : `${head} – ${end.cnDate}（${end.week}）${end.time}`
+}
 export function activityTimeRange(startsAt: string, endsAt: string): string {
   const start = dateTime(startsAt)
   const end = dateTime(endsAt)

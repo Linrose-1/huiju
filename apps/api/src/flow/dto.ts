@@ -156,6 +156,9 @@ export class QuestionDto {
 }
 
 export class PublicMemberDto {
+  @ApiProperty({ format: 'uuid' })
+  memberId!: string
+
   @ApiProperty({
     nullable: true,
     type: String

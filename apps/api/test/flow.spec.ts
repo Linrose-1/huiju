@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import sharp from 'sharp'
 import type { AddressInfo } from 'node:net'
 import type { INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -40,9 +41,41 @@ describe('registration eligibility and answers', () => {
     expect(tokenHash('secret')).toHaveLength(64)
     expect(tokenHash('secret')).not.toContain('secret')
   })
-  it('rejects malformed image data including a truncated PNG without parser errors', () => {
-    expect(() => validAvatar({mimeType:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10]).toString('base64')})).toThrow('请选择')
-    expect(() => validAvatar({mimeType:'image/jpeg',base64:Buffer.from('<svg/>').toString('base64')})).toThrow('请选择')
+  it('rejects malformed image data including forged image signatures', async () => {
+    const inputs = [
+      { mimeType: 'image/png', bytes: Buffer.from([137,80,78,71,13,10,26,10]) },
+      { mimeType: 'image/jpeg', bytes: Buffer.from('<svg/>') },
+      { mimeType: 'image/png', bytes: Buffer.from('89504e470d0a1a0a000000000000000049454e4400000000', 'hex') },
+      { mimeType: 'image/jpeg', bytes: Buffer.from([255,216,255,...Array(19).fill(0),255,217]) },
+    ]
+    for (const input of inputs) {
+      await expect(validAvatar({ mimeType: input.mimeType, base64: input.bytes.toString('base64') })).rejects.toThrow('请选择')
+    }
+  })
+  it('accepts decoded PNG and JPEG and rejects mismatched types and damaged pixels', async () => {
+    for (const format of ['png', 'jpeg'] as const) {
+      const bytes = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#167a52' } }).toFormat(format).toBuffer()
+      const input = { mimeType: `image/${format}`, base64: bytes.toString('base64') }
+      expect(await validAvatar(input)).toEqual(bytes)
+      await expect(validAvatar({ ...input, mimeType: format === 'png' ? 'image/jpeg' : 'image/png' })).rejects.toThrow('请选择')
+      const damaged = Buffer.from(bytes)
+      if (format === 'png') {
+        const data = damaged.indexOf('IDAT')
+        expect(data).toBeGreaterThan(0)
+        damaged[data + 4] ^= 255
+      } else {
+        const scan = damaged.indexOf(Buffer.from([255, 218]))
+        expect(scan).toBeGreaterThan(0)
+        damaged.fill(0, scan + 2, damaged.length - 2)
+      }
+      await expect(validAvatar({ ...input, base64: damaged.toString('base64') })).rejects.toThrow('请选择')
+    }
+  })
+  it('rejects oversized uploads and excessive decoded dimensions', async () => {
+    await expect(validAvatar({ mimeType: 'image/png', base64: Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64') })).rejects.toThrow('请选择')
+    const bytes = await sharp({ create: { width: 4097, height: 4096, channels: 3, background: '#167a52' } }).png().toBuffer()
+    expect(bytes.length).toBeLessThan(2 * 1024 * 1024)
+    await expect(validAvatar({ mimeType: 'image/png', base64: bytes.toString('base64') })).rejects.toThrow('像素')
   })
 })
 describe('real HTTP validation without database or WeChat calls', () => {
