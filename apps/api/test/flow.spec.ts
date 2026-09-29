@@ -81,7 +81,7 @@ describe('registration eligibility and answers', () => {
 describe('real HTTP validation without database or WeChat calls', () => {
   let app: INestApplication
   let url: string
-  const list = vi.fn().mockResolvedValue({items:[]})
+  const list = vi.fn().mockResolvedValue({items:[],hasMore:false})
   const write = vi.fn().mockResolvedValue({status:'active'})
   beforeAll(async () => {
     const module = await Test.createTestingModule({imports:[AppModule]}).overrideProvider(FlowDatabase).useValue({get db(){throw new Error('Database access forbidden in isolated test')}}).overrideProvider(ActivityService).useValue({list,write}).compile()
@@ -94,7 +94,17 @@ describe('real HTTP validation without database or WeChat calls', () => {
   it('public browsing remains available without a session', async () => {
     const response = await fetch(`${url}/activities`)
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({items:[]})
+    expect(await response.json()).toEqual({items:[],hasMore:false})
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({offset:0,sort:'latest'}))
+  })
+  it('validates list paging and filters before reaching the service', async () => {
+    const response = await fetch(`${url}/activities?offset=10&sort=upcoming&q=${encodeURIComponent('上海')}`)
+    expect(response.status).toBe(200)
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({offset:10,sort:'upcoming',q:'上海'}))
+    for (const query of ['offset=-1','offset=1.5','offset=1000001','sort=unknown',`q=${'a'.repeat(101)}`]) {
+      const invalid = await fetch(`${url}/activities?${query}`)
+      expect(invalid.status).toBe(400)
+    }
   })
   it('rejects absent/forged auth before any database access', async () => {
     const response = await fetch(`${url}/auth/session`,{headers:{authorization:'Bearer fake'}})

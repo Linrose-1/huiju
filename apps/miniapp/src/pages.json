@@ -14,6 +14,10 @@
       }
     },
     {
+      "path": "pages/assistant/activity-draft",
+      "style": { "navigationBarTitleText": "帮我发活动", "navigationBarBackgroundColor": "#f4f9f7", "backgroundColor": "#f4f9f7" }
+    },
+    {
       "path": "pages/mine/index",
       "style": {
         "navigationBarTitleText": "我的"
@@ -30,6 +34,10 @@
       "style": {
         "navigationBarTitleText": "活动详情"
       }
+    },
+    {
+      "path": "pages/activity/feedback",
+      "style": { "navigationBarTitleText": "评论与点评" }
     },
     {
       "path": "pages/registration/form",
@@ -73,8 +81,8 @@
       {
         "pagePath": "pages/assistant/index",
         "text": "助手",
-        "iconPath": "static/huiju/tab-assistant-placeholder.png",
-        "selectedIconPath": "static/huiju/tab-assistant-placeholder.png"
+        "iconPath": "static/huiju/tab-assistant-normal.png",
+        "selectedIconPath": "static/huiju/tab-assistant-selected.png"
       },
       {
         "pagePath": "pages/mine/index",

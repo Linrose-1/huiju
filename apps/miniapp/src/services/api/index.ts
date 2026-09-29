@@ -1,18 +1,19 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL } from './environment'
+import type { Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
 import type { Member, Activity, Session, Registration, MyRegistration, RegistrationInput, PublicMember, ActivityWriteInput, ManagedActivity, OrganizerRegistration, ActivityNotification, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard } from './types'
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 0) { super(message) }
 }
 export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '暂时无法完成，请稍后重试' }
-async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', data?: object, auth: boolean | 'none' = false): Promise<T> {
+async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', data?: object, auth: boolean | 'none' = false, timeout = 15000): Promise<T> {
   const session = useSessionStore()
   if (session.token && Date.parse(session.expiresAt) <= Date.now()) session.clear()
   if (auth === true && !session.token) throw new ApiError('SESSION_REQUIRED', '登录已失效，请重新登录', 401)
   const epoch = session.epoch
   const token = session.token
   return new Promise((resolve, reject) => {
-    uni.request({ url: API_BASE_URL + path, method, data, timeout: 15000,
+    uni.request({ url: API_BASE_URL + path, method, data, timeout,
       header: { 'Content-Type': 'application/json', ...(token && auth !== 'none' ? { Authorization: `Bearer ${token}` } : {}) },
       success(response) {
         if ((epoch !== session.epoch || token !== session.token) && (auth !== false || !!token)) { reject(new ApiError('STALE_REQUEST', '身份已变更，请重新操作')); return }
@@ -48,6 +49,18 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  generateActivityDraft: (idea: string) => request<AiActivityDraftResult>('/ai/activity-drafts', 'POST', { idea }, true, 100000),
+  markAttendance: (id: string, registrationId: string) => request<Attendance>(`/activities/${encodeURIComponent(id)}/registrations/${encodeURIComponent(registrationId)}/attendance`, 'POST', {}, true),
+  feedbackComments: (id: string, offset = 0, mine = false) => request<CommentList>(`/activities/${encodeURIComponent(id)}/comments${mine ? '/mine' : ''}?offset=${offset}`, 'GET', undefined, mine ? true : 'none'),
+  feedbackReviews: (id: string, offset = 0) => request<ReviewList>(`/activities/${encodeURIComponent(id)}/reviews?offset=${offset}`, 'GET', undefined, 'none'),
+  feedbackContext: (id: string) => request<FeedbackContext>(`/activities/${encodeURIComponent(id)}/feedback-context`, 'GET', undefined, useSessionStore().token ? true : 'none'),
+  reviewStats: (id: string) => request<ReviewStats>(`/activities/${encodeURIComponent(id)}/reviews/stats`, 'GET', undefined, true),
+  createComment: (id: string, content: string) => request<{ok: boolean}>(`/activities/${encodeURIComponent(id)}/comments`, 'POST', { content }, true),
+  editComment: (id: string, content: string) => request<{ok: boolean}>(`/comments/${encodeURIComponent(id)}/edit`, 'POST', { content }, true),
+  deleteComment: (id: string) => request<{ok: boolean}>(`/comments/${encodeURIComponent(id)}/delete`, 'POST', {}, true),
+  createReview: (id: string, content: string, score: number) => request<{ok: boolean}>(`/activities/${encodeURIComponent(id)}/reviews`, 'POST', { content, score }, true),
+  editReview: (id: string, content: string, score: number) => request<{ok: boolean}>(`/reviews/${encodeURIComponent(id)}/edit`, 'POST', { content, score }, true),
+  deleteReview: (id: string) => request<{ok: boolean}>(`/reviews/${encodeURIComponent(id)}/delete`, 'POST', {}, true),
   profileDetails: () => request<ProfileDetails>('/members/me/profile-details', 'GET', undefined, true),
   saveProfileDetails: (input: ProfileDetailsInput) => request<ProfileDetails>('/members/me/profile-details', 'POST', input, true),
   cardSettings: () => request<CardSettings>('/members/me/card-settings', 'GET', undefined, true),
@@ -61,17 +74,22 @@ export const api = {
   updateActivity: (id: string, input: ActivityWriteInput) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/edit`, 'POST', input, true),
   publishActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/publish`, 'POST', {}, true),
   managedActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/manage`, 'GET', undefined, true),
-  organizedActivities: () => request<{items: ManagedActivity[]; hasMore: boolean}>('/members/me/activities', 'GET', undefined, true),
+  organizedActivities: () => request<{items: ManagedActivity[]; hasMore: boolean; total: number}>('/members/me/activities', 'GET', undefined, true),
   organizerRoster: (id: string) => request<{items: OrganizerRegistration[]}>(`/activities/${encodeURIComponent(id)}/registrations/manage`, 'GET', undefined, true),
   cancelActivity: (id: string, reason: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/cancel`, 'POST', { reason }, true),
-  notifications: () => request<{items: ActivityNotification[]; hasMore: boolean}>('/members/me/notifications', 'GET', undefined, true),
+  notifications: () => request<{items: ActivityNotification[]; hasMore: boolean; unreadCount: number}>('/members/me/notifications', 'GET', undefined, true),
   readNotification: (id: string) => request<{ok: boolean}>(`/members/me/notifications/${encodeURIComponent(id)}/read`, 'POST', {}, true),
   login: (code: string, inviteCode?: string) => request<Session>('/auth/wechat/session', 'POST', { code, ...(inviteCode ? { inviteCode } : {}) }, 'none'),
   logout: () => request<{ ok: boolean }>('/auth/session', 'DELETE', undefined, true),
   phone: (code: string) => memberMutation('/members/me/phone', 'POST', { code }),
   profile: (displayName: string) => memberMutation('/members/me/profile', 'POST', { displayName }),
   avatar: (base64: string, mimeType: 'image/png' | 'image/jpeg') => memberMutation('/members/me/avatar', 'POST', { base64, mimeType }),
-  activities: () => request<{items: Activity[]}>('/activities'),
+  activities: (query: { offset?: number; sort?: 'latest' | 'upcoming'; q?: string } = {}) => {
+    const params = [`offset=${query.offset ?? 0}`]
+    if (query.sort) params.push(`sort=${query.sort}`)
+    if (query.q) params.push(`q=${encodeURIComponent(query.q)}`)
+    return request<{items: Activity[]; hasMore: boolean}>(`/activities?${params.join('&')}`)
+  },
   activity: (id: string) => request<Activity>(`/activities/${encodeURIComponent(id)}`),
   roster: (id: string) => request<{items: PublicMember[]}>(`/activities/${encodeURIComponent(id)}/registrations`),
   register: (id: string, input: RegistrationInput) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations`, 'POST', input, true),

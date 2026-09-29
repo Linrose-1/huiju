@@ -44,7 +44,10 @@ describe.skipIf(!enabled)('real MySQL flow in a rolled-back transaction', () => 
         const headerA = `Bearer ${sessionA.token}`
         const headerB = `Bearer ${sessionB.token}`
         const headerC = `Bearer ${sessionC.token}`
+        expect(sessionA.member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
+        expect(new Set([sessionA, sessionB, sessionC].map(value => value.member.memberNumber)).size).toBe(3)
         const repeated = await identity.login(codeB, sessionC.member.inviteCode)
+        expect(repeated.member.memberNumber).toBe(sessionB.member.memberNumber)
         expect(repeated.member.id).toBe(sessionB.member.id)
         const [memberB] = await tx.select().from(members).where(eq(members.id, sessionB.member.id))
         expect(memberB.inviterMemberId).toBe(sessionA.member.id)

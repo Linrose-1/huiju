@@ -8,6 +8,8 @@ import { mediaUrl } from '@/services/api/environment'
 import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
 import { chooseCover } from '@/services/wechat'
+import { takeActivityDraft } from '@/services/ai-draft'
+import type { AiActivityDraft } from '@/services/api/types'
 import RequestState from '@/components/base/RequestState.vue'
 
 type QuestionType = 'short_text' | 'long_text' | 'single' | 'multiple'
@@ -15,6 +17,9 @@ type DraftQuestion = { key: number; id?: string; prompt: string; type: QuestionT
 const questionTypes: QuestionType[] = ['short_text', 'long_text', 'single', 'multiple']
 const questionLabels = ['简答', '长文本', '单选', '多选']
 const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref('')
+const aiDraftApplied = ref(false)
+const aiDraftMissing = ref(false)
+let fromAi = false
 const source = ref<ManagedActivity | null>(null)
 const coverUrl = ref(''), coverError = ref(''), uploadingCover = ref(false)
 const form = reactive({ title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
@@ -42,7 +47,7 @@ watch(() => form.capacity, value => { if (value || step.value === 0) capacityLim
 const locationFocus = ref(false)
 const dateField = ref<'start' | 'end' | 'deadline' | null>(null)
 const pickerDate = ref(''), pickerTime = ref('')
-const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : ''))
+const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : fromAi ? '?aiDraft=1' : ''))
 
 function dateParts(value: string) {
   const date = new Date(Date.parse(value) + 8 * 60 * 60 * 1000), pad = (n: number) => String(n).padStart(2, '0')
@@ -64,6 +69,27 @@ function reset() {
   customDeadline.value = false
   source.value = null
   initialized = false
+  aiDraftApplied.value = false
+  aiDraftMissing.value = false
+}
+function applyAiDraft(draft: AiActivityDraft) {
+  const start = draft.startsAt ? dateParts(draft.startsAt) : { date: '', time: '' }
+  const end = draft.endsAt ? dateParts(draft.endsAt) : { date: '', time: '' }
+  const deadline = draft.registrationDeadline ? dateParts(draft.registrationDeadline) : { date: '', time: '' }
+  Object.assign(form, {
+    title: draft.title || '', description: draft.description || '', location: draft.location || '',
+    startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time,
+    deadlineDate: deadline.date, deadlineTime: deadline.time,
+    capacity: draft.capacity ? String(draft.capacity) : '', feeType: draft.feeType || '',
+    amount: draft.feeAmountCents ? (draft.feeAmountCents / 100).toFixed(2) : ''
+  })
+  capacityLimited.value = draft.capacity !== null
+  customDeadline.value = draft.registrationDeadline !== null
+  questions.value = draft.questions.map(question => ({
+    key: ++sequence, prompt: question.prompt, type: question.type || 'short_text',
+    required: question.required ?? false, options: (question.options || []).join('\n')
+  }))
+  aiDraftApplied.value = true
 }
 async function load() {
   if (busy.value || disposed) return
@@ -95,6 +121,11 @@ async function load() {
         form.amount = activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : ''
       }
     }
+    if (!id.value && !initialized && fromAi) {
+      const draft = takeActivityDraft(owner, epoch)
+      if (draft) applyAiDraft(draft)
+      else aiDraftMissing.value = true
+    }
     initialized = true
   } catch (e) { if (request === generation && !disposed) error.value = errorMessage(e) }
   finally { if (request === generation && !disposed) loading.value = false }
@@ -118,6 +149,7 @@ function payload(): ActivityWriteInput {
     return { title: activity.title, description: activity.description, coverUrl: activity.coverUrl, location: activity.location, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
+  if (!form.feeType) throw new Error('请选择免费活动或收费活动')
   const startsAt = timestamp(form.startDate, form.startTime, source.value?.startsAt), endsAt = timestamp(form.endDate, form.endTime, source.value?.endsAt)
   if (!startsAt || !endsAt) throw new Error('请选择完整的开始与结束日期、时间')
   if (!id.value && Date.parse(startsAt) <= Date.now()) throw new Error('活动开始时间应晚于当前时间')
@@ -318,7 +350,7 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
   loading.value = false
   error.value = '登录身份已变更，请重新加载后填写活动'
 }, { flush: 'sync' })
-onLoad(options => { id.value = String(options?.id || '') })
+onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1' })
 onShow(load)
 onUnload(() => { disposed = true; generation++; stopSessionWatch() })
 </script>
@@ -369,6 +401,18 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
     />
     <template v-if="!loading && !error">
       <view
+        v-if="aiDraftMissing"
+        class="notice"
+      >
+        AI 草稿已失效，你可以手动填写活动，或返回助手重新生成。
+      </view>
+      <view
+        v-if="aiDraftApplied"
+        class="notice"
+      >
+        AI 草稿已填入，请核对全部内容。封面可手动设置，咨询联系方式需补齐；报名问题的题型、必填和选项也请逐一确认。
+      </view>
+      <view
         v-if="!editable"
         class="notice"
       >
@@ -409,14 +453,20 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
             class="paid-details"
           >
             <view class="amount-row">
-              <text>参与费用</text><input
-                v-model="form.amount"
-                type="digit"
-                placeholder="请输入金额"
-                :maxlength="12"
-                :disabled="busy || locked || !editable"
-                :cursor-spacing="130"
-              ><text>元 / 人</text>
+              <text class="amount-label">参与费用</text>
+              <view class="amount-control">
+                <text class="amount-currency">¥</text>
+                <input
+                  v-model="form.amount"
+                  class="amount-input"
+                  type="digit"
+                  placeholder="请输入金额"
+                  :maxlength="12"
+                  :disabled="busy || locked || !editable"
+                  :cursor-spacing="130"
+                >
+                <text class="amount-unit">元 / 人</text>
+              </view>
             </view>
             <view class="helper fee-hint">{{ feeDisclaimer }}</view>
           </view>
@@ -857,7 +907,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
             /><text>未设置活动封面</text>
           </view>
           <view class="preview-title">{{ form.title.trim() || '请补充活动标题' }}</view>
-          <view class="preview-badges"><text class="preview-fee">{{ form.feeType === 'paid' ? '收费活动 · ¥' + (form.amount || '待填写') : '免费活动' }}</text><text class="preview-state">{{ source?.lifecycle === 'published' ? '已发布 · 修改预览' : '待发布' }}</text></view>
+          <view class="preview-badges"><text class="preview-fee">{{ form.feeType === 'paid' ? '收费活动 · ¥' + (form.amount || '待填写') : form.feeType === 'free' ? '免费活动' : '费用待确认' }}</text><text class="preview-state">{{ source?.lifecycle === 'published' ? '已发布 · 修改预览' : '待发布' }}</text></view>
           <view class="preview-meta"><view class="clock-icon" /><text>{{ previewTime }}</text></view>
           <view class="preview-meta">
             <uni-icons
@@ -962,7 +1012,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               type="checkmarkempty"
               size="32rpx"
               color="#164f41"
-            /><view><text class="review-label">活动声明</text><text class="review-muted">{{ form.feeType === 'free' ? '本活动为免费活动，会聚不收取任何费用。' : feeDisclaimer + '。' }}</text></view>
+            /><view><text class="review-label">活动声明</text><text class="review-muted">{{ form.feeType === 'free' ? '本活动为免费活动，会聚不收取任何费用。' : form.feeType === 'paid' ? feeDisclaimer + '。' : '请先确认活动费用模式' }}</text></view>
           </view>
         </view>
       </view>
@@ -1153,7 +1203,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
 .activity-editor{min-height:100vh;background:#f4f9f7;color:#111a2d;padding:20rpx 47rpx calc(106rpx + env(safe-area-inset-bottom));font-size:27rpx;line-height:1.45}
 .steps{display:flex;align-items:center;justify-content:space-between;gap:10rpx;height:72rpx;margin:0 55rpx 16rpx}.step{flex-shrink:0;white-space:nowrap;font-size:27rpx;font-weight:500;line-height:51rpx;padding:0 20rpx;background:transparent;color:#717b90;border-radius:30rpx}.step.current{background:linear-gradient(110deg,#318e6f,#135741);color:#fff}.step.completed{color:#197757}.last-step{padding-right:0}.step-line{height:2rpx;background:#55a891;flex:1;min-width:24rpx}.muted-line{background:#cbd2dd}
 .form-card{background:#fff;border-radius:11rpx;padding:17rpx 18rpx;margin-bottom:14rpx}.card-heading{display:flex;align-items:center;justify-content:space-between;gap:8rpx;font-size:30rpx;line-height:42rpx;font-weight:600;margin-bottom:10rpx}.helper{font-size:24rpx;color:#7b879d;font-weight:400;line-height:1.5}.required{margin-left:3rpx;margin-right:0;color:#ea2027}.field{display:block;background:linear-gradient(110deg,#f7f9fa,#f5f7f8);border:1rpx solid #edf0f3;border-radius:8rpx;min-height:66rpx;height:66rpx;line-height:66rpx;width:100%;padding:0 15rpx;font-size:27rpx;color:#172239}.field::placeholder,.description-input::placeholder{color:#8c96a8}
-.type-card{padding-top:14rpx;padding-bottom:15rpx}.type-card .card-heading{margin-bottom:17rpx}.activity-types{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:19rpx}.type-option{display:flex;align-items:flex-start;gap:14rpx;text-align:left;border:1rpx solid #e0e6ed;background:#fafbfc;border-radius:7rpx;padding:20rpx 17rpx;min-height:117rpx;font-size:27rpx;line-height:1.6}.type-option.selected{border-color:#298363;background:#f6faf8}.type-name{display:block;font-size:30rpx;font-weight:600;white-space:nowrap}.type-note{display:block;font-size:24rpx;color:#768399;white-space:nowrap;letter-spacing:-.35rpx}.radio-dot{width:19rpx;height:29rpx;border:1.5rpx solid #9aa5b7;border-radius:50%;margin-top:7rpx;flex-shrink:0}.selected .radio-dot{border:6rpx solid #2b8064}.paid-details{margin-top:17rpx}.amount-row{display:flex;align-items:center;gap:15rpx}.amount-row input{flex:1;background:#f5f8f7;padding:14rpx}.fee-hint,.lock-hint{margin-top:11rpx;font-size:23rpx}.title-card{padding-top:11rpx;padding-bottom:11rpx}
+.type-card{padding-top:14rpx;padding-bottom:15rpx}.type-card .card-heading{margin-bottom:17rpx}.activity-types{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:19rpx}.type-option{display:flex;align-items:flex-start;gap:14rpx;text-align:left;border:1rpx solid #e0e6ed;background:#fafbfc;border-radius:7rpx;padding:20rpx 17rpx;min-height:117rpx;font-size:27rpx;line-height:1.6}.type-option.selected{border-color:#298363;background:#f6faf8}.type-name{display:block;font-size:30rpx;font-weight:600;white-space:nowrap}.type-note{display:block;font-size:24rpx;color:#768399;white-space:nowrap;letter-spacing:-.35rpx}.radio-dot{width:19rpx;height:29rpx;border:1.5rpx solid #9aa5b7;border-radius:50%;margin-top:7rpx;flex-shrink:0}.selected .radio-dot{border:6rpx solid #2b8064}.paid-details{margin-top:17rpx}.amount-row{display:flex;flex-direction:column;gap:10rpx}.amount-label{font-size:27rpx;font-weight:600;color:#263c35}.amount-control{display:flex;align-items:center;gap:12rpx;min-height:78rpx;padding:0 20rpx;border:1rpx solid #d9e5e1;border-radius:10rpx;background:#f7faf8}.amount-currency{font-size:30rpx;font-weight:600;color:#2b8064}.amount-input{flex:1;min-width:0;height:78rpx;font-size:30rpx;color:#263c35}.amount-unit{flex:none;font-size:25rpx;color:#667c73;white-space:nowrap}.fee-hint,.lock-hint{margin-top:11rpx;font-size:23rpx}.title-card{padding-top:11rpx;padding-bottom:11rpx}
 .cover-card{padding-top:11rpx;padding-bottom:11rpx}.cover-row{display:grid;grid-template-columns:2.1fr 1fr;gap:13rpx}.cover-image,.cover-empty,.cover-button{height:191rpx;border-radius:7rpx;width:100%}.cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8rpx;background:#edf3f2;color:#7a8894}.cover-optional{font-size:21rpx;color:#99a4af}.cover-button[disabled]{background:#fafbfc;color:#788599;border:1rpx dashed #cfd7e2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5rpx;font-size:27rpx;line-height:1.4}.unavailable-label{font-size:20rpx;color:#97a0ad}
 .description-box{border:1rpx solid #e2e7ee;border-radius:8rpx;overflow:hidden}.format-toolbar{height:63rpx;display:flex;align-items:center;gap:26rpx;padding:0 20rpx;background:#f5f7f9;border-bottom:1rpx solid #e3e8ef;color:#8993a2;font-size:32rpx}.format-bold{font-weight:700}.format-italic{font-family:Georgia,serif;font-style:italic}.format-underline{text-decoration:underline}.toolbar-divider{width:1rpx;height:29rpx;background:#dfe5ed}.toolbar-note{font-size:20rpx;margin-left:auto;white-space:nowrap}.description-input{font-size:27rpx;padding:14rpx 15rpx;height:110rpx;min-height:110rpx;width:100%;line-height:1.6;background:#fcfdfd}
 .time-card{padding-top:12rpx;padding-bottom:12rpx}.event-times{display:flex;align-items:center;gap:20rpx}.time-control{display:flex;align-items:center;gap:12rpx;flex:1;min-width:0;background:#f6f8fa;border-radius:8rpx;padding:13rpx 16rpx;height:95rpx;text-align:left;font-size:27rpx}.time-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:3rpx;white-space:nowrap}.time-separator{color:#9ba7ba}.end-time{padding-left:18rpx}.time-control:first-child::before,.clock-icon{content:'';display:block;width:17rpx;height:26rpx;border:1.6rpx solid #172239;border-radius:50%;flex-shrink:0;background:linear-gradient(#172239,#172239) 50% 25% / 1.3rpx 6rpx no-repeat,linear-gradient(35deg,transparent 40%,#172239 42%,#172239 59%,transparent 62%) 70% 65% / 6rpx 4rpx no-repeat}

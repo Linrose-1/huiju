@@ -4,7 +4,9 @@ import {
   desc,
   eq,
   gt,
-  isNull
+  isNull,
+  like,
+  sql
 } from 'drizzle-orm'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -12,6 +14,7 @@ import { resolve } from 'node:path'
 import sharp from 'sharp'
 import { members, memberSessions, memberVisibilities, wechatIdentities } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
+import { memberNumberPrefix, nextMemberNumber } from './member-number.js'
 import { WechatAdapter } from './wechat.js'
 import { AvatarInput, MemberDto } from './dto.js'
 export type Member = typeof members.$inferSelect
@@ -84,7 +87,7 @@ export class IdentityService {
             .select()
             .from(members)
             .where(eq(members.kind, 'platform_root'))
-            .limit(1))[0]
+            .limit(1).for('update'))[0]
           if (!root) {
             fail('PLATFORM_NOT_READY', '平台身份尚未初始化，请联系运营人员', 503)
           }
@@ -93,12 +96,21 @@ export class IdentityService {
             .from(members)
             .where(and(eq(members.inviteCode, inviteCode), eq(members.kind, 'member')))
             .limit(1))[0] : undefined
+          // Serialize number allocation across API processes using the existing root row.
+          // Locking reads see the latest committed number even under REPEATABLE READ.
+          const createdAt = new Date()
+          const prefix = memberNumberPrefix(createdAt)
+          const [latest] = await tx.select({ number: members.memberNumber }).from(members)
+            .where(and(like(members.memberNumber, prefix + '%'), sql`${members.memberNumber} regexp ${'^' + prefix + '[0-9]{6}$'}`))
+            .orderBy(desc(members.memberNumber)).limit(1).for('update')
+          const memberNumber = nextMemberNumber(prefix, latest?.number)
           const id = randomUUID()
           await tx
             .insert(members)
             .values({
               id,
-              memberNumber: `H${randomBytes(12).toString('hex')}`,
+              memberNumber,
+              createdAt,
               inviteCode: randomBytes(16).toString('hex'),
               inviterMemberId: inviter?.id ?? root.id
             })

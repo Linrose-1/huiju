@@ -2,8 +2,10 @@ import { refreshMember, ApiError } from '@/services/api'
 import { bootstrapIdentity } from '@/services/wechat'
 import { useSessionStore } from '@/stores/session'
 export const routes = {
+  feedback: '/pages/activity/feedback',
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',
   invitation: '/pages/invitation/index',
+  activityDraft: '/pages/assistant/activity-draft',
   editor: '/pages/activity/editor', manage: '/pages/activity/manage', organizedActivities: '/pages/activity/organized', notifications: '/pages/notification/index',
   activity: '/pages/activity/index', assistant: '/pages/assistant/index', mine: '/pages/mine/index',
   login: '/pages/login/index', detail: '/pages/activity/detail', form: '/pages/registration/form', result: '/pages/registration/detail', registrations: '/pages/registration/index'

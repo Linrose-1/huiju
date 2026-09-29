@@ -66,5 +66,5 @@ onUnload(() => { generation++; stop() })
   </view>
 </template>
 <style scoped>
-.card-page{min-height:100vh;background:#eff9f4;padding:26rpx 26rpx calc(32rpx + env(safe-area-inset-bottom))}.profile-gate{margin-top:40rpx;text-align:center;background:#fff;border-radius:24rpx;padding:42rpx 30rpx}.gate-heading{font-size:32rpx;font-weight:600;margin:20rpx 0}.gate-copy{font-size:26rpx;color:#7b8982;line-height:1.7;margin-bottom:30rpx}.profile-gate button{font-size:29rpx;min-height:82rpx}
+.card-page{min-height:100vh;background:#eff7f3}.profile-gate{margin:40rpx 26rpx 0;text-align:center;background:#fff;border-radius:24rpx;padding:42rpx 30rpx}.gate-heading{font-size:32rpx;font-weight:600;margin:20rpx 0}.gate-copy{font-size:26rpx;color:#7b8982;line-height:1.7;margin-bottom:30rpx}.profile-gate button{font-size:29rpx;min-height:82rpx}
 </style>

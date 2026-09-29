@@ -29,6 +29,27 @@
       "when": 1790511704282,
       "tag": "0003_activity_reading",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1790531700791,
+      "tag": "0004_activity_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1790573735507,
+      "tag": "0005_admin_auth_moderation",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1790671521022,
+      "tag": "0006_lethal_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

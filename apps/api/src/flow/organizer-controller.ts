@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Header, Headers, HttpCode, Param, ParseUUIDPipe, Post, StreamableFile } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { AvatarInput, OkDto } from './dto.js'
-import { ActivityWriteInput, CancelActivityInput, CoverUploadDto, ManagedActivityDto, ManagedActivityListDto, NotificationListDto, OrganizerRosterDto } from './organizer-dto.js'
+import { ActivityWriteInput, AttendanceDto, CancelActivityInput, CoverUploadDto, ManagedActivityDto, ManagedActivityListDto, NotificationListDto, OrganizerRosterDto } from './organizer-dto.js'
 import { OrganizerService } from './organizer.js'
 
 @ApiTags('organizer')
@@ -37,6 +37,9 @@ export class OrganizerController {
 
   @Get('activities/:id/registrations/manage') @ApiOkResponse({ type: OrganizerRosterDto })
   roster(@Param('id', ParseUUIDPipe) id: string, @Headers('authorization') header?: string) { return this.organizer.roster(id, header) }
+
+  @Post('activities/:id/registrations/:registrationId/attendance') @HttpCode(200) @ApiOkResponse({ type: AttendanceDto })
+  markAttendance(@Param('id', ParseUUIDPipe) id: string, @Param('registrationId', ParseUUIDPipe) registrationId: string, @Headers('authorization') header?: string) { return this.organizer.markAttendance(id, registrationId, header) }
 
   @Post('activities/:id/cancel') @HttpCode(200) @ApiOkResponse({ type: ManagedActivityDto })
   cancel(@Param('id', ParseUUIDPipe) id: string, @Body() body: CancelActivityInput, @Headers('authorization') header?: string) { return this.organizer.cancel(id, body.reason, header) }

@@ -11,6 +11,7 @@ import RequestState from '@/components/base/RequestState.vue'
 const session = useSessionStore()
 const id = ref(''), activity = ref<ManagedActivity | null>(null), roster = ref<OrganizerRegistration[]>([])
 const loading = ref(false), error = ref(''), actionError = ref(''), busy = ref(false), cancelling = ref(false), reason = ref(''), filter = ref('active'), expanded = ref('')
+const attendanceBusy = ref('')
 let generation = 0
 let shown = false
 const readingStats = ref<ReadingStats | null>(null), statsError = ref('')
@@ -23,6 +24,7 @@ function clear() {
   activity.value = null; roster.value = []; readingStats.value = null
   error.value = ''; actionError.value = ''; statsError.value = ''; reason.value = ''
   loading.value = false; busy.value = false; cancelling.value = false; expanded.value = ''
+  attendanceBusy.value = ''
 }
 async function loadStats() {
   if (!activity.value || !session.token) return
@@ -32,6 +34,8 @@ async function loadStats() {
   catch (e) { if (active()) statsError.value = errorMessage(e) }
 }
 const visible = computed(() => roster.value.filter(item => filter.value === 'all' || item.status === filter.value))
+const attendanceAllowed = computed(() => activity.value?.lifecycle === 'published' && activity.value.moderation === 'normal')
+const attendanceCount = computed(() => roster.value.filter(item => item.status === 'active' && item.attended).length)
 const editable = computed(() => activity.value && activity.value.moderation === 'normal' && (activity.value.lifecycle === 'draft' || (activity.value.lifecycle === 'published' && Date.parse(activity.value.endsAt) > Date.now())))
 const cancellable = computed(() => activity.value?.lifecycle === 'published' && Date.parse(activity.value.startsAt) > Date.now())
 const state = computed(() => {
@@ -77,6 +81,18 @@ async function cancel() {
     if (active()) await load()
   } catch (e) { if (active()) actionError.value = errorMessage(e) }
   finally { if (active()) busy.value = false }
+}
+async function markAttendance(item: OrganizerRegistration) {
+  if (busy.value || loading.value || !session.token || !attendanceAllowed.value || !roster.value.includes(item) || item.status !== 'active' || item.attended) return
+  const active = currentRequest(), activityId = id.value, registrationId = item.id
+  busy.value = true; attendanceBusy.value = registrationId; actionError.value = ''
+  try {
+    const result = await uni.showModal({ title: '标记到场', content: '确认这位报名者已到场？标记后将计入活动到场人数。', confirmText: '确认到场' })
+    if (!active() || !result.confirm) return
+    await api.markAttendance(activityId, registrationId)
+    if (active()) await load()
+  } catch (e) { if (active()) { actionError.value = errorMessage(e); if (e instanceof ApiError && e.code === 'PROFILE_INCOMPLETE') loginPage(routes.manage+'?id='+activityId) } }
+  finally { if (active()) { busy.value = false; attendanceBusy.value = '' } }
 }
 function answer(item: OrganizerRegistration, questionId: string) {
   const value = item.answers.find(a => a.questionId === questionId)?.value
@@ -196,6 +212,7 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
         </view>
         <view class="card">
           <view class="row between"><view class="section-title">报名名单</view><text class="muted small">{{ activity.lifecycle==='cancelled'?'取消前报名':'当前有效' }} {{ activity.cancellationRegistrationCount ?? activity.activeRegistrationCount }} 人</text></view>
+          <view class="muted small">已到场 {{ attendanceCount }} 人</view>
           <view class="notice">联系手机号和回答仅用于本次活动组织，请妥善保管。</view>
           <view class="filters">
             <button
@@ -233,6 +250,21 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
               <view class="grow"><view>{{ item.member.displayName || '会员' }}</view><view class="muted small">{{ item.status==='active'?'已报名':'已取消报名' }} · {{ dateTime(item.currentRegisteredAt) }}</view></view>
             </view>
             <view class="phone">联系手机号：<text user-select>{{ item.contactPhone }}</text></view>
+            <view
+              v-if="item.status==='active'"
+              class="attendance-row"
+            >
+              <text :class="['attendance-status', { attended: item.attended }]">{{ item.attended?'已到场':'未到场' }}</text>
+              <button
+                v-if="attendanceAllowed && !item.attended"
+                class="secondary attendance-button"
+                :disabled="busy"
+                :loading="attendanceBusy===item.id"
+                @click="markAttendance(item)"
+              >
+                标记到场
+              </button>
+            </view>
             <button
               class="text-button"
               @click="expanded=expanded===item.id?'':item.id"
@@ -314,6 +346,10 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
 .avatar{width:76rpx;height:76rpx}
 .grow>view:first-child{font-size:29rpx;font-weight:600;line-height:1.5;overflow-wrap:anywhere}
 .phone{font-size:26rpx;margin-top:12rpx;line-height:1.6}
+.attendance-row{display:flex;align-items:center;justify-content:space-between;gap:16rpx;margin-top:12rpx;min-height:68rpx}
+.attendance-status{font-size:26rpx;color:#75808a}
+.attendance-status.attended{color:#17664e}
+.attendance-button{margin:0;padding:14rpx 24rpx;min-height:68rpx;font-size:26rpx;border-radius:12rpx}
 .registrant .text-button{font-size:26rpx;text-align:right;min-height:64rpx}
 .answer{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;margin-top:18rpx}
 .danger{color:#a74b33;font-size:28rpx;min-height:64rpx;width:100%}

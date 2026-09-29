@@ -342,7 +342,14 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
         >
           加载更多
         </button>
-      </view><view class="card"><view class="section-title mark">评论与点评</view><text class="muted small">评论与点评暂未开放</text></view>
+      </view><view class="card">
+        <view class="section-title mark">评论与点评</view><text class="muted small">交流活动想法，分享参与感受。</text><button
+          class="view-all"
+          @click="navigate(routes.feedback + '?id=' + encodeURIComponent(id))"
+        >
+          查看评论与点评 →
+        </button>
+      </view>
       <view class="fixed-footer">
         <button
           class="secondary share"

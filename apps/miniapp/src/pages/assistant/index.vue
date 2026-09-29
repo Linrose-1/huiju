@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { routes, unavailable } from '@/services/navigation'
+import { navigate, routes } from '@/services/navigation'
 function browse() { uni.switchTab({ url: routes.activity }); }
+function draftActivity() { navigate(routes.activityDraft) }
 </script>
 <template>
   <view>
@@ -33,9 +34,9 @@ function browse() { uni.switchTab({ url: routes.activity }); }
             </view>快速完善活动信息
           </view><button
             class="primary task-button"
-            @click="unavailable('活动筹备暂不可用')"
+            @click="draftActivity"
           >
-            暂未开放 <uni-icons
+            开始筹备 <uni-icons
               type="arrow-right"
               size="22"
               color="white"

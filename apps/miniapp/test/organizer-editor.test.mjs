@@ -39,6 +39,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
   const dependencies = {
     '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onUnload(callback) { onUnload = callback } },
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
+    '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/presentation': { feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
     '@/services/wechat': { chooseCover },
     '@/services/api/environment': { mediaUrl: value => value },

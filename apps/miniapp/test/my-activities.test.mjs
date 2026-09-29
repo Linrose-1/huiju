@@ -44,3 +44,26 @@ for(const pagePath of ['activity/organized','registration/index']) {
     assert.equal(page.error.value,'');assert.deepEqual(page.items.value,[])
   })
 }
+
+
+test('mine uses the organized total, keeps active registration count and ignores results after hiding', async t => {
+  const session=reactive({token:'a',epoch:0});let hide;let finish
+  let pending=false
+  const deps={
+    '@dcloudio/uni-app':{onShow(){},onHide(fn){hide=fn},onUnload(){}},
+    '@/services/api':{refreshMember:async()=>{},errorMessage:e=>e.message,api:{
+      registrations:async()=>({items:[{status:'active'},{status:'cancelled'}]}),
+      notifications:async()=>({items:[],unreadCount:pending?0:103}),
+      organizedActivities:()=>pending?new Promise(resolve=>{finish=resolve}):Promise.resolve({items:[],total:125,hasMore:true})
+    }},
+    '@/services/api/environment':{}, '@/services/navigation':{}, '@/stores/session':{useSessionStore:()=>session}
+  }
+  const source=readFileSync(new URL('../src/pages/mine/index.vue',import.meta.url),'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
+  const scope=effectScope();t.after(()=>scope.stop())
+  const page=scope.run(()=>compile(source,deps,';export {load,count,organizedCount,unreadCount};'))
+  await page.load();assert.equal(page.count.value,1);assert.equal(page.organizedCount.value,125);assert.equal(page.unreadCount.value,103)
+  pending=true;const loading=page.load();await Promise.resolve();await Promise.resolve();hide();finish({items:[],total:200});await loading
+  assert.equal(page.organizedCount.value,null);assert.equal(page.unreadCount.value,0)
+  const returning=page.load();await Promise.resolve();await Promise.resolve();finish({items:[],total:125});await returning
+  assert.equal(page.organizedCount.value,125);assert.equal(page.unreadCount.value,0)
+})

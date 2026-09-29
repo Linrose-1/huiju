@@ -80,6 +80,8 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
         return result.value
       })
       expect(new Set(sessions.map(session => session.member.id)).size).toBe(1)
+      expect(new Set(sessions.map(session => session.member.memberNumber)).size).toBe(1)
+      expect(sessions[0].member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
       const memberId = sessions[0].member.id
       const identityRows = await db.select().from(wechatIdentities).where(and(
         eq(wechatIdentities.appId, appId), eq(wechatIdentities.openId, loginCodes[0]),
@@ -93,6 +95,15 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
       const [fixedMember] = await db.select().from(members).where(eq(members.id, memberId))
       expect(fixedMember.inviterMemberId).toBe(firstMember.inviterMemberId)
       const second = await identity.login(loginCodes[1], inviteCodes[1])
+      expect(second.member.memberNumber).not.toBe(firstMember.memberNumber)
+      const newMembers = await Promise.allSettled(Array.from({ length: 6 }, () => identity.login(randomUUID())))
+      expect(newMembers.every(result => result.status === 'fulfilled')).toBe(true)
+      const numbers = newMembers.map(result => {
+        if (result.status !== 'fulfilled') throw result.reason
+        expect(result.value.member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
+        return result.value.member.memberNumber
+      })
+      expect(new Set(numbers).size).toBe(numbers.length)
       const participantIds = [memberId, second.member.id]
       await db.update(members).set({
         boundPhone: '13800000000', avatarUrl: '/test-fixture.png',

@@ -4,6 +4,9 @@ import {
   asc,
   desc,
   eq,
+  gt,
+  inArray,
+  lte,
   sql
 } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
@@ -12,7 +15,8 @@ import { members } from '../database/schema/members.js'
 import { registrations, registrationAnswers, registrationOperations } from '../database/schema/registrations.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
-import { ActivityDto, AnswerInput, RegistrationDto, RegistrationInput } from './dto.js'
+import { ActivityDto, AnswerInput, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
+import { ActivityListQuery } from './activity-list-dto.js'
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
 
@@ -122,14 +126,59 @@ export class ActivityService {
     }
   }
 
-  async list() {
+  async list(query: ActivityListQuery = new ActivityListQuery()) {
+    const pageSize = 10
+    const keyword = query.q?.trim()
+    const where = and(
+      eq(activities.lifecycle, 'published'),
+      eq(activities.moderation, 'normal'),
+      query.sort === 'upcoming' ? gt(activities.startsAt, new Date()) : undefined,
+      keyword ? sql`(instr(${activities.title}, ${keyword}) > 0 or instr(${activities.description}, ${keyword}) > 0 or instr(${activities.location}, ${keyword}) > 0)` : undefined
+    )
     const rows = await this.database.db
       .select()
       .from(activities)
-      .where(and(eq(activities.lifecycle, 'published'), eq(activities.moderation, 'normal')))
-      .orderBy(desc(activities.publishedAt), desc(activities.createdAt))
-      .limit(100)
-    return { items: await Promise.all(rows.map(row => this.present(row))) }
+      .where(where)
+      .orderBy(...(query.sort === 'upcoming'
+        ? [asc(activities.startsAt), asc(activities.id)]
+        : [desc(activities.publishedAt), desc(activities.createdAt), desc(activities.id)]))
+      .limit(pageSize + 1)
+      .offset(query.offset)
+    const hasMore = rows.length > pageSize
+    rows.length = Math.min(rows.length, pageSize)
+    if (!rows.length) return { items: [], hasMore: false }
+    const ranked = this.database.db
+      .select({
+        activityId: registrations.activityId,
+        memberId: members.id,
+        avatarUrl: members.avatarUrl,
+        displayName: members.displayName,
+        rank: sql<number>`row_number() over (partition by ${registrations.activityId} order by ${registrations.currentRegisteredAt} desc, ${registrations.id} desc)`.as('rank')
+      })
+      .from(registrations)
+      .innerJoin(members, eq(members.id, registrations.memberId))
+      .where(and(inArray(registrations.activityId, rows.map(row => row.id)), eq(registrations.status, 'active')))
+      .as('ranked')
+    const previews = await this.database.db
+      .select({
+        activityId: ranked.activityId,
+        memberId: ranked.memberId,
+        avatarUrl: ranked.avatarUrl,
+        displayName: ranked.displayName
+      })
+      .from(ranked)
+      .where(lte(ranked.rank, 4))
+      .orderBy(asc(ranked.activityId), asc(ranked.rank))
+    const membersByActivity = new Map<string, PublicMemberDto[]>()
+    for (const { activityId, ...member } of previews) {
+      const list = membersByActivity.get(activityId) ?? []
+      list.push(member)
+      membersByActivity.set(activityId, list)
+    }
+    return { hasMore, items: await Promise.all(rows.map(async row => ({
+      ...await this.present(row),
+      registeredMembers: membersByActivity.get(row.id) ?? []
+    }))) }
   }
 
   async detail(id: string, header?: string) {

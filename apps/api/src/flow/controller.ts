@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   StreamableFile
 } from '@nestjs/common'
 import {
@@ -21,6 +22,7 @@ import {
 } from '@nestjs/swagger'
 import { IdentityService } from './identity.js'
 import { ActivityService } from './activity.js'
+import { ActivityListQuery } from './activity-list-dto.js'
 import {
   ActivityDto,
   ActivityListDto,
@@ -148,7 +150,7 @@ export class FlowController {
   @ApiOperation({ security: [] })
   @Get('activities')
   @ApiOkResponse({ type: ActivityListDto })
-  list() { return this.activity.list() }
+  list(@Query() query: ActivityListQuery) { return this.activity.list(query) }
 
   @ApiOperation({ security: [] })
   @Get('activities/:id')

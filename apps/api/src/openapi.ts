@@ -6,6 +6,7 @@ export function createOpenApiDocument(app: INestApplication) {
     .setTitle('会聚 API')
     .setVersion('1.0')
     .addBearerAuth()
+    .addCookieAuth('huiju_admin_session', { type: 'apiKey', in: 'cookie' }, 'admin_session')
     .build()
 
   return SwaggerModule.createDocument(app, config)

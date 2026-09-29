@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { and, asc, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -11,7 +11,7 @@ import { registrationState } from './activity.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar } from './identity.js'
 import { AvatarInput } from './dto.js'
-import { ActivityWriteInput, ManagedActivityDto } from './organizer-dto.js'
+import { ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
 
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
@@ -150,8 +150,9 @@ export class OrganizerService {
 
   async list(header?: string) {
     const member = (await this.identity.require(header))!
+    const [total] = await this.database.db.select({ value: count() }).from(activities).where(eq(activities.organizerMemberId, member.id))
     const rows = await this.database.db.select().from(activities).where(eq(activities.organizerMemberId, member.id)).orderBy(desc(activities.createdAt), desc(activities.id)).limit(101)
-    return { items: await Promise.all(rows.slice(0, 100).map(row => this.present(row))), hasMore: rows.length > 100 }
+    return { items: await Promise.all(rows.slice(0, 100).map(row => this.present(row))), hasMore: rows.length > 100, total: Number(total!.value) }
   }
 
   private async questions(tx: Tx, id: string, input: ActivityWriteInput) {
@@ -234,6 +235,23 @@ export class OrganizerService {
     return this.detail(id, header)
   }
 
+  async markAttendance(id: string, registrationId: string, header?: string): Promise<AttendanceDto> {
+    const member = (await this.identity.require(header))!
+    return this.database.db.transaction(async tx => {
+      const activity = await this.owner(tx, id, member.id)
+      await this.profile(tx, member.id)
+      if (activity.lifecycle !== 'published' || activity.moderation === 'removed') fail('ACTIVITY_UNAVAILABLE', '活动未发布、已取消或下架，不能标记到场', 409)
+      const where = and(eq(registrations.id, registrationId), eq(registrations.activityId, id))
+      const [registration] = await tx.select().from(registrations).where(where).for('update')
+      if (!registration) fail('NOT_FOUND', '报名记录不存在', 404)
+      if (registration.status !== 'active') fail('REGISTRATION_INACTIVE', '报名已取消，不能标记到场', 409)
+      if (registration.attended) return { registrationId, attended: true, attendedAt: registration.attendedAt!.toISOString() }
+      const attendedAt = new Date()
+      await tx.update(registrations).set({ attended: true, attendedAt, attendanceMarkedByMemberId: member.id }).where(where)
+      return { registrationId, attended: true, attendedAt: attendedAt.toISOString() }
+    })
+  }
+
   async roster(id: string, header?: string) {
     const member = (await this.identity.require(header))!
     const [activity] = await this.database.db.select().from(activities).where(eq(activities.id, id))
@@ -244,14 +262,16 @@ export class OrganizerService {
       id: row.id, activityId: row.activityId, status: row.status, contactPhone: row.contactPhone,
       currentRegisteredAt: row.currentRegisteredAt.toISOString(), cancelledAt: row.cancelledAt?.toISOString() ?? null,
       member, attended: activity.lifecycle !== 'cancelled' && row.status === 'active' && row.attended,
+      attendedAt: activity.lifecycle !== 'cancelled' && row.status === 'active' && row.attended ? row.attendedAt?.toISOString() ?? null : null,
       answers: await this.database.db.select({ questionId: registrationAnswers.questionId, value: registrationAnswers.answer }).from(registrationAnswers).where(eq(registrationAnswers.registrationId, row.id))
     }))) }
   }
 
   async notifications(header?: string) {
     const member = (await this.identity.require(header))!
+    const [unread] = await this.database.db.select({ value: count() }).from(notifications).where(and(eq(notifications.recipientMemberId, member.id), isNull(notifications.readAt)))
     const rows = await this.database.db.select().from(notifications).where(eq(notifications.recipientMemberId, member.id)).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(101)
-    return { items: rows.slice(0, 100).map(row => ({ id: row.id, activityId: row.activityId, type: row.type, title: row.title, body: row.body, readAt: row.readAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString() })), hasMore: rows.length > 100 }
+    return { items: rows.slice(0, 100).map(row => ({ id: row.id, activityId: row.activityId, type: row.type, title: row.title, body: row.body, readAt: row.readAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString() })), hasMore: rows.length > 100, unreadCount: Number(unread!.value) }
   }
 
   async readNotification(id: string, header?: string) {

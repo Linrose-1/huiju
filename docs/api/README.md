@@ -1,5 +1,13 @@
 # API 契约
 
+## AI 活动草拟
+
+`POST /api/v1/ai/activity-drafts` 使用会员 Bearer 会话，提交 `{ "idea": "活动想法" }`。服务端为调用安全限制输入为 1–5000 字，这不是产品定义的输入体验上限。服务端要求手机号、用户主动设置的头像与名称均齐备。成功返回 `draft`、`missingFields` 和 `remainingToday`；`draft` 包含 `title`、`description`、`startsAt`、`endsAt`、`location`、`capacity`、`feeType`、`feeAmountCents`、`registrationDeadline` 和 `questions`。不确定的候选字段为 `null`，问题的 `type`、`required`、`options` 也可为 `null`；`coverUrl` 与 `consultationContact` 必须由用户填写。日期候选是带时区解析后的 UTC ISO 字符串。
+
+按会员北京时间自然日最多返回 5 份有效草稿；失败不计次。`AI_DAILY_LIMIT` 为 HTTP 429，`AI_NOT_CONFIGURED` 为 503，`AI_GENERATION_FAILED` 为 502，`AI_TIMEOUT` 为 504；资料不完整为 `PROFILE_INCOMPLETE`。草拟接口不创建活动，也不保存原文或模型原始回复。部署前需配置 `AI_PROVIDER=agentishere`、`AI_BASE_URL` 与仅后端可见的 `AI_API_KEY`，并在明确授权后应用 `0006` 迁移；未应用迁移时接口不可用。
+
+本地验证更新（2026-09-30）：`0006` 已于 2026-09-29 获授权应用于本机开发库，真实模型及微信工具模拟身份的生成→编辑页回填链路已通过；未保存或发布测试活动。真实微信、真机与真实库并发限额未验收，详见[技术设计](../architecture/ai-activity-draft.md)及[实现日志](../implementation-log/2026-09.md)。此状态不代表其他环境已配置或迁移。
+
 `openapi.json` 从 NestJS 实际路由生成，`packages/api-client/src/generated.ts` 由该文件生成。执行仓库根目录的 `corepack pnpm api:generate`；不要手工修改生成文件。运行步骤与当前验证范围见[本地工程基线](../architecture/engineering-baseline.md)。
 
 日常检查使用 `corepack pnpm api:check`：构建 API 后在临时目录导出并比较两份产物，忽略 CRLF 行尾差异，有漂移或缺失时返回非零，不覆盖当前改动。确认接口变更后再执行生成命令。相关消费者边界见 [api-client 规则](../../packages/api-client/AGENTS.md)。
@@ -15,8 +23,8 @@
 | `POST /members/me/phone` | 提交微信手机号授权 `code`，不能提交手工手机号；已绑定后不可更换 |
 | `POST /members/me/profile` | 提交用户主动设置的 `displayName`；保留等价 PATCH 路由 |
 | `POST /members/me/avatar` | 提交 `mimeType` 和 `base64`，支持 2MB 内 PNG/JPEG；本地保存并更新本人头像 |
-| `GET /activities`、`GET /activities/:id` | 公开活动列表、详情；列表按发布时间及创建时间倒序 |
-| `GET /activities/:id/registrations` | 公开名单，仅返回当前头像和名称 |
+| `GET /activities`、`GET /activities/:id` | 公开活动列表、详情；列表每页10条，`offset` 翻页，`sort=upcoming` 按开始时间升序，其余按发布时间及创建时间倒序，`q` 搜索标题、介绍与地点；返回 `hasMore` |
+| `GET /activities/:id/registrations` | 公开名单，仅返回会员名片定位 ID、当前头像和名称 |
 | `POST /activities/:id/registrations` | 提交 `contactPhone`、`answers: [{ questionId, value }]`，报名或重新报名 |
 | `GET /activities/:id/registrations/me` | 查看本人报名联系方式及答案 |
 | `POST /activities/:id/registrations/me/answers` | 修改本人答案；保留等价 `PATCH /activities/:id/registrations/me` |
@@ -27,7 +35,7 @@
 
 微信小程序请求使用上表 POST 修改入口，避免依赖不受 `uni.request` 微信端支持的 PATCH 方法。两种入口使用同一 DTO、认证和业务服务，不存在宽松的专用权限通道。
 
-活动 `registrationState` 为 `open`、`closed`、`full`、`cancelled`、`removed`；本人修改答案以报名截止为界，取消报名以活动开始为界。公开 `organizer` 仅含 `avatarUrl`、`displayName`，下架活动返回 `null`。活动咨询联系方式只返回给发起人或曾成功报名的会员，包括本人取消报名后的会员。当前列表上限为 100 条，公开报名名单上限为 200 条。
+活动 `registrationState` 为 `open`、`closed`、`full`、`cancelled`、`removed`；本人修改答案以报名截止为界，取消报名以活动开始为界。公开 `organizer` 仅含 `memberId`、`avatarUrl`、`displayName`，下架活动返回 `null`。活动咨询联系方式只返回给发起人或曾成功报名的会员，包括本人取消报名后的会员。公开活动列表每页10条，公开报名名单上限为 200 条。
 
 ### 发起人与站内通知接口
 
@@ -45,7 +53,7 @@
 | `GET /members/me/notifications` | 本人最近100条站内通知，带`hasMore` |
 | `POST /members/me/notifications/:id/read` | 本人通知标记已读，重复操作保留首次已读时间 |
 
-活动写入使用`ActivityWriteInput`完整载荷。题目ID由服务端生成，新建不传ID；编辑既有题目保留ID。保存草稿同样要求完整必填字段。已发布活动开始后只允许修改咨询联系方式，结束后不允许编辑；过期草稿可重新设置未来时间后发布。取消或下架活动不可编辑。联系方式变化为当前有效报名者写入站内通知，不把联系方式直接放入通知内容。活动问题、取消与报名共用活动行锁，首笔报名后即使报名全部取消也不解锁。当前不实现后台处置、签到和统计接口。
+活动写入使用`ActivityWriteInput`完整载荷。题目ID由服务端生成，新建不传ID；编辑既有题目保留ID。保存草稿同样要求完整必填字段。已发布活动开始后只允许修改咨询联系方式，结束后不允许编辑；过期草稿可重新设置未来时间后发布。取消或下架活动不可编辑。联系方式变化为当前有效报名者写入站内通知，不把联系方式直接放入通知内容。活动问题、取消与报名共用活动行锁，首笔报名后即使报名全部取消也不解锁。签到、阅读统计和评论审核接口见下文；后台活动上下架尚未实现。
 
 ### 活动封面上传
 
@@ -69,7 +77,7 @@
 ## 阅读留痕与统计
 
 - `POST /activities/:id/views`：可选会话；UUID v4 `eventId`、`visitorId`。只在详情成功打开后调用，重试与身份就绪沿用 eventId。同事件幂等；已绑定其他身份时返回 `VISITOR_CHANGED`，换新访客/事件后重试一次。
-- `GET /activities/:id/readers?offset=0`：公开，40条分页 `{items,total,hasMore}`；items 仅当前 `avatarUrl` 与 `displayName`，同会员一次、最近阅读优先，不包含阅读时间或联系方式。
+- `GET /activities/:id/readers?offset=0`：公开，40条分页 `{items,total,hasMore}`；items 仅 `memberId`、当前 `avatarUrl` 与 `displayName`，同会员一次、最近阅读优先，不包含阅读时间或联系方式。
 - `GET /activities/:id/view-stats`：发起人专属 `{views,visitors,conversionRate}`，转化率为百分数，无浏览时 null。
 - 依赖 `0003_activity_reading.sql`；2026-09-27已授权应用于本机开发库，真实回滚测试和微信工具本地模拟身份验收完成；真实微信及真机未验收，证据见实现日志。
 
@@ -81,3 +89,44 @@
 - `GET /members/:id/card`：登录且资料完整才可访问，头像/名称固定返回，未开启的字段完全不出现在响应中。本人访问同样按展示设置组装；本人私密资料从前两接口读取。平台根和不存在会员返回404。
 - 公开活动发起人、报名名单、阅读名单增加`memberId`供名片路由定位；名单本身仍不返回私密资料、阅读时间或报名答案。
 - 名片预览在页面内存按未保存开关过滤，不把私密值放入路由或持久缓存。关闭字段不会删除本人原始资料。
+
+## F06 开发接口（2026-09-28）
+
+- POST /activities/:id/registrations/:registrationId/attendance：仅发起人，幂等标记有效报名到场。
+- GET/POST /activities/:id/comments；GET /activities/:id/comments/mine；GET/POST /activities/:id/reviews。正文content 1–2000字，点评score为1–5整数。
+- POST /comments/:id/edit、/delete；POST /reviews/:id/edit、/delete：仅本人；编辑不解除隐藏，删除为软删除。
+- GET /activities/:id/feedback-context：公开资格提示及当前会员自己的点评；GET /activities/:id/reviews/stats仅发起人。
+- 公共列表offset分页40条，返回items/total/hasMore。名片字段不随评论泄露。管理员隐藏使用下述独立后台接口。
+- 0004已于2026-09-28获单独授权并应用，真实数据库回滚测试与微信工具本地模拟主流程证据见实现日志12:34；不计真实微信或真机通过。
+
+## 后台登录、运营账号和评价审核
+
+以下均位于 `/api/v1/admin`，只接受独立 HttpOnly Cookie 后台会话，不接受会员 Bearer 令牌。写接口校验配置的 Origin；登录之外的写接口还要求 `X-CSRF-Token`，令牌从登录或当前会话响应读取。首次登录或重置密码后可直接使用后台，不强制改密。
+
+| 方法与路径 | 用途 / 权限 |
+| --- | --- |
+| `POST /auth/login` | 账号密码登录，返回 account 与 csrfToken，Cookie 交付会话 |
+| `GET /auth/session` | 当前账号及 CSRF，不返回密码或会话令牌原文 |
+| `POST /auth/password` | currentPassword/newPassword，自改成功后全部会话失效，必须重新登录 |
+| `POST /auth/logout` | 撤销当前会话并清 Cookie |
+| `GET /accounts` | 超管读取账号列表，仅返回安全字段 |
+| `POST /accounts` | 超管开通运营，username/displayName/temporaryPassword，不接受角色参数 |
+| `POST /accounts/:id/reset-password` | 超管重置运营临时密码，撤销旧会话，不强制改密 |
+| `POST /accounts/:id/status` | 超管按 active 启停运营，撤销旧会话，不删除审计 |
+| `GET /feedback` | 两角色可读，kind=comment/review、status=visible/hidden/all、offset，40条分页 |
+| `POST /feedback/:kind/:id/hide` | 两角色可直接隐藏，reason 必填1–500字，原子记录操作人/原因/正文快照 |
+
+审核列表返回活动标题、作者名称、正文、可空分数及隐藏时间/原因/操作人，不额外加载会员私密信息。本人删除的内容不在待审核列表出现。重复隐藏幂等，不能覆盖首次原因，也无恢复隐藏接口。
+
+生产 `ADMIN_ORIGIN` 为后台 HTTPS origin；本地开发需显式 `ADMIN_ALLOW_LOCAL_HTTP=true` 且 origin 为回环 HTTP。浏览器与 API 同源（本地通过 Vite `/api` 代理）；不放开通配 CORS。0005已于2026-09-28获授权应用于127.0.0.1:3306/huiju，两套真实库回滚测试通过且无残留。随后已创建超管与验收运营，完成浏览器登录及普通运营隐藏评论/点评的本地验收；账号停用浏览器验收仍暂缓，后台会员页面完整交互未验收，详细边界见当月实现日志。
+
+
+### 后台会员查询
+
+- `GET /api/v1/admin/members`：两类后台角色均可查询，q 按编号／用户名称／真实姓名／绑定手机号作字面包含搜索；profile=all/complete/incomplete，inviterId 按直接邀请人筛选，offset 为 0–100000 整数，每页 40 条。平台根节点不在会员列表。
+- `GET /api/v1/admin/members/:id`：完整资料、邀请码、直接邀请人和直接受邀人数；无修改入口，不受普通会员名片公开开关限制。缺失会员或平台根节点详情返回 404。响应不含微信标识、会话或凭据，使用 no-store。
+- 当前切片不含活跃度、行为时间线和导出；不代表 F08 全部完成。
+
+2026-09-28：本人发起活动列表 GET /members/me/activities 增加 total，统计该会员全部活动（含草稿等状态）；items仍最多100条，供我的页展示准确总数。
+
+2026-09-28：站内通知列表增加 unreadCount，统计当前会员全部 readAt 为空的通知，不受列表最多100条限制。我的页进入或返回时刷新该值，正数显示红色数量角标（超过99显示99+），零时隐藏。

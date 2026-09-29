@@ -39,12 +39,19 @@ export class ManagedActivityDto extends ActivityDto {
   @ApiProperty() declare consultationContact: string
 }
 export class ManagedActivityListDto {
+  @ApiProperty() total!: number
   @ApiProperty({ type: [ManagedActivityDto] }) items!: ManagedActivityDto[]
   @ApiProperty() hasMore!: boolean
 }
 export class OrganizerRegistrationDto extends RegistrationDto {
   @ApiProperty({ type: PublicMemberDto }) member!: PublicMemberDto
   @ApiProperty() attended!: boolean
+  @ApiProperty({ type: String, nullable: true }) attendedAt!: string | null
+}
+export class AttendanceDto {
+  @ApiProperty() registrationId!: string
+  @ApiProperty() attended!: boolean
+  @ApiProperty() attendedAt!: string
 }
 export class OrganizerRosterDto { @ApiProperty({ type: [OrganizerRegistrationDto] }) items!: OrganizerRegistrationDto[] }
 export class NotificationDto {
@@ -57,6 +64,7 @@ export class NotificationDto {
   @ApiProperty() createdAt!: string
 }
 export class NotificationListDto {
+  @ApiProperty() unreadCount!: number
   @ApiProperty({ type: [NotificationDto] }) items!: NotificationDto[]
   @ApiProperty() hasMore!: boolean
 }

@@ -179,6 +179,9 @@ export class ActivityDto {
   })
   organizer!: PublicMemberDto | null
 
+  @ApiPropertyOptional({ type: [PublicMemberDto] })
+  registeredMembers?: PublicMemberDto[]
+
   @ApiProperty()
   id!: string
 
@@ -249,6 +252,9 @@ export class ActivityDto {
 export class ActivityListDto {
   @ApiProperty({ type: [ActivityDto] })
   items!: ActivityDto[]
+
+  @ApiProperty()
+  hasMore!: boolean
 }
 
 export class RegistrationDto {

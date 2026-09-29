@@ -29,7 +29,7 @@ function harness(scanner) {
   let unload
   const source = readFileSync(new URL('../src/pages/activity/index.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const page = execute(source + '\nexport { scanActivity, scanning };', {
-    '@dcloudio/uni-app': { onShow() {}, onPullDownRefresh() {}, onLoad() {}, onUnload: f => { unload = f } },
+    '@dcloudio/uni-app': { onShow() {}, onHide() {}, onPullDownRefresh() {}, onReachBottom() {}, onLoad() {}, onUnload: f => { unload = f } },
     '@/services/api': { api: {}, errorMessage: e => e.message },
     '@/services/api/environment': {}, '@/services/presentation': {},
     '@/services/navigation': { routes: { detail: '/pages/activity/detail' }, navigate: url => navigations.push(url) },
