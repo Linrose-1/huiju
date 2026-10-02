@@ -5,7 +5,7 @@ import { api, errorMessage } from '@/services/api'
 import type { Activity } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
 import { activityTimeRangeWeekday, fee } from '@/services/presentation'
-import { navigate, routes, unavailable } from '@/services/navigation'
+import { navigate, routes } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { scanActivityCode } from '@/services/wechat'
 import { activityCodeTarget } from '@/services/activity-code'
@@ -78,7 +78,7 @@ async function more() {
 }
 function retryMore() { moreError.value = ''; void more() }
 function chooseTab(value: string) { if (value === '推荐') {
-    unavailable('智能推荐暂未开放')
+    navigate(routes.activitySearch)
     return
 } if (tab.value !== value) { tab.value = value; globalThis.clearTimeout(searchTimer); void load() } }
 watch(search, () => {

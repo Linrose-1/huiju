@@ -14,12 +14,12 @@ class ApiError extends Error {
 function harness(t, token = '', reading = {}, navigation = {}) {
   const session = reactive({ token, epoch: 0 })
   const calls = { activity: [], roster: [], myRegistration: [] }
-  const api = Object.fromEntries(Object.keys(calls).map(method => [method, () => new Promise((resolve, reject) => {
-    calls[method].push({ token: session.token, resolve, reject })
+  const api = Object.fromEntries(Object.keys(calls).map(method => [method, (...args) => new Promise((resolve, reject) => {
+    calls[method].push({ token: session.token, args, resolve, reject })
   })]))
   let unload, show
   const dependencies = {
-    '@dcloudio/uni-app': { onLoad() {}, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {} },
+    '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad() {}, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {} },
     '@/services/reading': { createReadingVisit: reading.createVisit || (() => ({ record: async () => {} })) },
     '@/services/api': { api: { ...api, activityReaders: reading.list || (async () => ({items:[], total:0, hasMore:false})) }, ApiError, errorMessage: e => e.message },
     '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': navigation,
@@ -27,11 +27,11 @@ function harness(t, token = '', reading = {}, navigation = {}) {
   }
   const source = readFileSync(new URL('../src/pages/activity/detail.vue', import.meta.url), 'utf8')
     .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source + '\nexport {load,id,activity,registration,loading,error,readers,readersError,loadReaders,openMember};', {
+  const code = ts.transpileModule(source + '\nexport {load,id,activity,registration,loading,error,readers,readersError,loadReaders,retryReaders,openMember,loadRegistration,registrationError,registrationKnown,registrationLoading,register,loadRoster,roster,rosterHasMore,rosterMoreError,retryRosterMore};', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}, scope = effectScope()
-  scope.run(() => new Function('require', 'exports', code)(name => dependencies[name] || require(name), page))
+  scope.run(() => new Function('require', 'exports', 'uni', code)(name => dependencies[name] || require(name), page, { stopPullDownRefresh() {} }))
   t.after(() => scope.stop())
   page.id.value = 'activity-a'
   async function publicResponse(title = 'Activity') {
@@ -120,7 +120,9 @@ test('missing registration is allowed, while a real lookup failure remains visib
   void h.page.load()
   h.calls.myRegistration.shift().reject(new ApiError('NETWORK_ERROR', 'Network unavailable'))
   await setImmediate()
-  assert.equal(h.page.error.value, 'Network unavailable')
+  assert.equal(h.page.error.value, '')
+  assert.equal(h.page.registrationError.value, 'Network unavailable')
+  assert.equal(h.page.registrationKnown.value, false)
 })
 
 test('unloaded details ignore pending private and public responses', async t => {
@@ -178,7 +180,7 @@ test('reading pagination fetches the next offset without recording another view'
     createVisit: () => ({ record: async () => { records++ } }),
     list: async (_id, offset) => {
       offsets.push(offset)
-      return { items:[{avatarUrl:null, displayName:offset ? 'second' : 'first'}], total:2, hasMore:!offset }
+      return { items:[{memberId: String(offset), avatarUrl:null, displayName:offset ? 'second' : 'first'}], total:2, hasMore:!offset }
     }
   })
   void h.page.load(); await h.publicResponse()
@@ -212,4 +214,71 @@ test('member card entry preserves target and coalesces taps until profile gate r
   finishGate(true)
   await late
   assert.equal(navigated.length, 1, 'unloaded page cannot navigate from late gate')
+})
+
+test('private lookup failure keeps public activity visible, blocks unknown registration, and retries independently', async t => {
+  const navigated = []
+  const h = harness(t, 'member', {}, { navigate: target => navigated.push(target), routes: { result: '/registration' } })
+  const initial = h.page.load()
+  h.calls.myRegistration.shift().reject(new ApiError('NETWORK_ERROR', 'offline'))
+  await h.publicResponse('Public activity'); await initial
+  assert.equal(h.page.activity.value.title, 'Public activity')
+  assert.equal(h.page.error.value, '')
+  assert.equal(h.page.registrationError.value, 'offline')
+  await h.page.register()
+  assert.deepEqual(navigated, [], 'unknown private state cannot start or reopen a registration')
+  const retry = h.page.loadRegistration()
+  h.page.loadRegistration()
+  assert.equal(h.calls.myRegistration.length, 1)
+  assert.equal(h.calls.activity.length, 0, 'retry does not reload the public page')
+  h.calls.myRegistration.shift().resolve({ status: 'active' }); await retry
+  assert.equal(h.page.registrationKnown.value, true)
+  assert.equal(h.page.registrationError.value, '')
+  await h.page.register()
+  assert.deepEqual(navigated, ['/registration?id=activity-a'])
+})
+
+test('public roster appends, preserves loaded rows on failure, retries raw offset and ignores old refresh', async t => {
+  const h = harness(t)
+  const initial = h.page.load()
+  h.calls.activity.shift().resolve({ title: 'Activity', registrationState: 'open' }); await setImmediate()
+  h.calls.roster.shift().resolve({ items: [{ memberId: 'a' }], hasMore: true }); await initial
+  const more = h.page.loadRoster(true)
+  h.page.loadRoster(true)
+  assert.equal(h.calls.roster.length, 1)
+  assert.equal(h.calls.roster[0].args[1].offset, 1)
+  h.calls.roster.shift().reject(new Error('offline')); await more
+  assert.deepEqual(h.page.roster.value.map(item => item.memberId), ['a'])
+  await h.page.loadRoster(true)
+  assert.equal(h.calls.roster.length, 0)
+  h.page.retryRosterMore()
+  assert.equal(h.calls.roster[0].args[1].offset, 1)
+  h.calls.roster.shift().resolve({ items: [{ memberId: 'a' }, { memberId: 'b' }], hasMore: true }); await setImmediate()
+  assert.deepEqual(h.page.roster.value.map(item => item.memberId), ['a', 'b'])
+  const old = h.page.loadRoster(true), pending = h.calls.roster.shift()
+  assert.equal(pending.args[1].offset, 3)
+  const refresh = h.page.load()
+  await h.publicResponse('Refreshed'); await refresh
+  pending.resolve({ items: [{ memberId: 'old' }], hasMore: false }); await old
+  assert.deepEqual(h.page.roster.value, [])
+})
+
+test('reader pagination failure keeps earlier page and explicit retry resumes without recording another view', async t => {
+  let records = 0
+  const requests = []
+  const h = harness(t, '', {
+    createVisit: () => ({ record: async () => { records++ } }),
+    list: (_id, offset) => new Promise((resolve, reject) => requests.push({ offset, resolve, reject }))
+  })
+  const initial = h.page.load(); await h.publicResponse(); await initial
+  requests[0].resolve({ items: [{ memberId: 'a' }], total: 2, hasMore: true }); await setImmediate()
+  const more = h.page.loadReaders(true)
+  requests[1].reject(new Error('offline')); await more
+  assert.deepEqual(h.page.readers.value.items.map(item => item.memberId), ['a'])
+  assert.equal(h.page.readersError.value, 'offline')
+  h.page.retryReaders()
+  assert.equal(requests[2].offset, 1)
+  requests[2].resolve({ items: [{ memberId: 'b' }], total: 2, hasMore: false }); await setImmediate()
+  assert.deepEqual(h.page.readers.value.items.map(item => item.memberId), ['a', 'b'])
+  assert.equal(records, 1)
 })

@@ -12,7 +12,7 @@ function harness(t, notification = false) {
   let hide, unload
   const pending = kind => new Promise((resolve, reject) => requests.push({ kind, resolve, reject }))
   const deps = {
-    '@dcloudio/uni-app': { onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn }, onShareAppMessage() {} },
+    '@dcloudio/uni-app': { onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn }, onShareAppMessage() {} },
     '@/services/api': { api: {
       managedActivity: () => pending('activity'), organizerRoster: () => pending('roster'), activityViewStats: () => pending('stats'),
       publishActivity: id => { mutations.push(['publish', id]); return pending('publish') },
@@ -28,7 +28,7 @@ function harness(t, notification = false) {
   const source = readFileSync(new URL('../src/pages/'+file+'.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const code = ts.transpileModule(source+'\nexport {'+names+'};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const page = {}, scope = effectScope()
-  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showModal: () => new Promise(resolve => modals.push(resolve)) }))
+  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { stopPullDownRefresh() {}, showModal: () => new Promise(resolve => modals.push(resolve)) }))
   t.after(() => scope.stop())
   const latest = kind => requests.filter(item => item.kind === kind).at(-1)
   const loaded = async (lifecycle = 'draft') => {

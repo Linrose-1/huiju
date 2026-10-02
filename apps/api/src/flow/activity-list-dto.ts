@@ -5,7 +5,7 @@ import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-va
 export class ActivityListQuery {
   @ApiPropertyOptional({ default: 0, minimum: 0, maximum: 1000000 })
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(1000000)
-  offset = 0
+  offset: number = 0
 
   @ApiPropertyOptional({ enum: ['latest', 'upcoming'], default: 'latest' })
   @IsOptional() @IsIn(['latest', 'upcoming'])

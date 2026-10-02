@@ -1,30 +1,16 @@
-import { OrganizerController } from './flow/organizer-controller.js'
-import { OrganizerService } from './flow/organizer.js'
 import { Module } from '@nestjs/common'
 import { APP_FILTER, APP_PIPE } from '@nestjs/core'
 import { ValidationPipe } from '@nestjs/common'
 import { HealthController } from './health.controller.js'
-import { FlowController } from './flow/controller.js'
-import { FlowDatabase, SafeExceptionFilter } from './flow/common.js'
-import { WechatAdapter } from './flow/wechat.js'
-import { IdentityService } from './flow/identity.js'
-import { ActivityService } from './flow/activity.js'
-import { ReadingController } from './flow/reading-controller.js'
-import { ReadingService } from './flow/reading.js'
-import { MemberCardController } from './flow/member-card-controller.js'
-import { MemberCardService } from './flow/member-card.js'
-import { FeedbackController } from './flow/feedback-controller.js'
-import { FeedbackService } from './flow/feedback.js'
-import { AdminController } from './admin/controller.js'
-import { AdminService } from './admin/service.js'
-import { AdminModerationController } from './admin/moderation-controller.js'
-import { AdminMemberController } from './admin/member-controller.js'
-import { AdminMemberService } from './admin/member-service.js'
-import { ActivityDraftController } from './ai/controller.js'
-import { ActivityDraftService } from './ai/service.js'
-import { AgentIsHereDraftProvider } from './ai/provider.js'
+import { SafeExceptionFilter } from './common/errors.js'
+import { ActivitiesModule } from './flow/activities.module.js'
+import { FeedbackModule } from './flow/feedback.module.js'
+import { AdminModule } from './admin/admin.module.js'
+import { AiModule } from './ai/ai.module.js'
+import { CircleModule } from './circle/circle.module.js'
 @Module({
-  controllers: [HealthController, FlowController, OrganizerController, ReadingController, MemberCardController, FeedbackController, AdminController, AdminModerationController, AdminMemberController, ActivityDraftController],
-  providers: [AdminMemberService,AdminService,FeedbackService,MemberCardService,ReadingService,OrganizerService,FlowDatabase,WechatAdapter,IdentityService,ActivityService,ActivityDraftService,AgentIsHereDraftProvider,{provide:APP_FILTER,useClass:SafeExceptionFilter},{provide:APP_PIPE,useValue:new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true})}],
+  imports: [ActivitiesModule, FeedbackModule, AdminModule, AiModule, CircleModule],
+  controllers: [HealthController],
+  providers: [{provide:APP_FILTER,useClass:SafeExceptionFilter},{provide:APP_PIPE,useValue:new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true})}],
 })
 export class AppModule {}

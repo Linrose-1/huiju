@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common'
-import { and, asc, count, desc, eq, isNull } from 'drizzle-orm'
+import { and, asc, count, desc, eq, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { activities, activityOperations, registrationQuestions } from '../database/schema/activities.js'
 import { members } from '../database/schema/members.js'
-import { notifications } from '../database/schema/notifications.js'
-import { registrationAnswers, registrations } from '../database/schema/registrations.js'
+import { NotificationService } from '../notifications/service.js'
+import { NotificationDelivery } from '../notifications/delivery.js'
+import { registrations } from '../database/schema/registrations.js'
 import { registrationState } from './activity.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar } from './identity.js'
 import { AvatarInput } from './dto.js'
 import { ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
+import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
@@ -85,7 +87,9 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
 
 @Injectable()
 export class OrganizerService {
-  constructor(private readonly database: FlowDatabase, private readonly identity: IdentityService) {}
+  constructor(private readonly database: FlowDatabase, private readonly identity: IdentityService,
+    private readonly delivery: NotificationDelivery = new NotificationDelivery(),
+    private readonly notificationQueries: NotificationService = new NotificationService(database, identity)) {}
 
   private coverDirectory() { return resolve(process.env.LOCAL_COVER_DIRECTORY || '.local-uploads/covers') }
 
@@ -148,11 +152,16 @@ export class OrganizerService {
     return this.present(activity)
   }
 
-  async list(header?: string) {
+  async list(header?: string, query: MyActivityQuery = new MyActivityQuery()) {
     const member = (await this.identity.require(header))!
-    const [total] = await this.database.db.select({ value: count() }).from(activities).where(eq(activities.organizerMemberId, member.id))
-    const rows = await this.database.db.select().from(activities).where(eq(activities.organizerMemberId, member.id)).orderBy(desc(activities.createdAt), desc(activities.id)).limit(101)
-    return { items: await Promise.all(rows.slice(0, 100).map(row => this.present(row))), hasMore: rows.length > 100, total: Number(total!.value) }
+    const where = eq(activities.organizerMemberId, member.id)
+    const status = activityStatusSql()
+    const totals = await this.database.db.select({ status, value: count() }).from(activities).where(where).groupBy(status)
+    const counts = activityCounts(totals)
+    const rows = await this.database.db.select().from(activities)
+      .where(and(where, query.status !== 'all' ? sql`${status} = ${query.status}` : undefined))
+      .orderBy(desc(activities.createdAt), desc(activities.id)).limit(query.limit + 1).offset(query.offset)
+    return { items: await Promise.all(rows.slice(0, query.limit).map(row => this.present(row))), hasMore: rows.length > query.limit, total: counts.all, counts }
   }
 
   private async questions(tx: Tx, id: string, input: ActivityWriteInput) {
@@ -178,14 +187,9 @@ export class OrganizerService {
     return this.detail(id, header)
   }
 
-  private async notify(tx: Tx, activity: Activity, type: 'activity_cancelled' | 'consultation_contact_updated', body: string) {
-    const recipients = await tx.select({ memberId: registrations.memberId }).from(registrations)
-      .where(and(eq(registrations.activityId, activity.id), eq(registrations.status, 'active')))
-    // Chunk inserts to keep statements bounded without truncating the recipient list.
-    for (let i = 0; i < recipients.length; i += 200) await tx.insert(notifications).values(recipients.slice(i, i + 200).map(row => ({
-      id: randomUUID(), recipientMemberId: row.memberId, activityId: activity.id, type,
-      title: type === 'activity_cancelled' ? '活动已取消' : '活动咨询联系方式已更新', body
-    })))
+  private notify(tx: Tx, activity: Activity, type: 'activity_cancelled' | 'consultation_contact_updated', body: string) {
+    return this.delivery.activityChanged(tx, activity.id, type,
+      type === 'activity_cancelled' ? '活动已取消' : '活动咨询联系方式已更新', body)
   }
 
   async edit(id: string, input: ActivityWriteInput, header?: string) {
@@ -252,34 +256,38 @@ export class OrganizerService {
     })
   }
 
-  async roster(id: string, header?: string) {
+  async roster(id: string, header?: string, query: RosterQuery = new RosterQuery()) {
     const member = (await this.identity.require(header))!
     const [activity] = await this.database.db.select().from(activities).where(eq(activities.id, id))
     requireOrganizer(activity, member.id)
+    const where = eq(registrations.activityId, id)
+    const [totals] = await this.database.db.select({ total: count(),
+      activeCount: sql<number>`coalesce(sum(${registrations.status} = 'active'), 0)`,
+      cancelledCount: sql<number>`coalesce(sum(${registrations.status} = 'cancelled'), 0)`,
+      attendedCount: sql<number>`coalesce(sum(${registrations.status} = 'active' and ${registrations.attended} = true), 0)`
+    }).from(registrations).where(where)
     const rows = await this.database.db.select({ registration: registrations, member: { memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName } })
-      .from(registrations).innerJoin(members, eq(members.id, registrations.memberId)).where(eq(registrations.activityId, id)).orderBy(desc(registrations.currentRegisteredAt))
-    return { items: await Promise.all(rows.map(async ({ registration: row, member }) => ({
+      .from(registrations).innerJoin(members, eq(members.id, registrations.memberId))
+      .where(and(where, query.status !== 'all' ? eq(registrations.status, query.status) : undefined))
+      .orderBy(desc(registrations.currentRegisteredAt), desc(registrations.id)).limit(query.limit + 1).offset(query.offset)
+    const page = rows.slice(0, query.limit)
+    const answers = await answersForRegistrations(this.database.db, page.map(row => row.registration.id))
+    return { total: Number(totals!.total), activeCount: Number(totals!.activeCount), cancelledCount: Number(totals!.cancelledCount),
+      attendedCount: activity.lifecycle === 'cancelled' ? 0 : Number(totals!.attendedCount), hasMore: rows.length > query.limit,
+      items: page.map(({ registration: row, member }) => ({
       id: row.id, activityId: row.activityId, status: row.status, contactPhone: row.contactPhone,
       currentRegisteredAt: row.currentRegisteredAt.toISOString(), cancelledAt: row.cancelledAt?.toISOString() ?? null,
       member, attended: activity.lifecycle !== 'cancelled' && row.status === 'active' && row.attended,
       attendedAt: activity.lifecycle !== 'cancelled' && row.status === 'active' && row.attended ? row.attendedAt?.toISOString() ?? null : null,
-      answers: await this.database.db.select({ questionId: registrationAnswers.questionId, value: registrationAnswers.answer }).from(registrationAnswers).where(eq(registrationAnswers.registrationId, row.id))
-    }))) }
+      answers: answers.get(row.id) ?? []
+    })) }
   }
 
-  async notifications(header?: string) {
-    const member = (await this.identity.require(header))!
-    const [unread] = await this.database.db.select({ value: count() }).from(notifications).where(and(eq(notifications.recipientMemberId, member.id), isNull(notifications.readAt)))
-    const rows = await this.database.db.select().from(notifications).where(eq(notifications.recipientMemberId, member.id)).orderBy(desc(notifications.createdAt), desc(notifications.id)).limit(101)
-    return { items: rows.slice(0, 100).map(row => ({ id: row.id, activityId: row.activityId, type: row.type, title: row.title, body: row.body, readAt: row.readAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString() })), hasMore: rows.length > 100, unreadCount: Number(unread!.value) }
+  notifications(header?: string, query: PageQuery = new PageQuery()) {
+    return this.notificationQueries.list(header, query)
   }
 
-  async readNotification(id: string, header?: string) {
-    const member = (await this.identity.require(header))!
-    const where = and(eq(notifications.id, id), eq(notifications.recipientMemberId, member.id))
-    const [row] = await this.database.db.select({ id: notifications.id }).from(notifications).where(where)
-    if (!row) fail('NOT_FOUND', '通知不存在', 404)
-    await this.database.db.update(notifications).set({ readAt: new Date() }).where(and(where, isNull(notifications.readAt)))
-    return { ok: true }
+  readNotification(id: string, header?: string) {
+    return this.notificationQueries.read(id, header)
   }
 }

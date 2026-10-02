@@ -1,47 +1,11 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Header,
-  Headers,
-  HttpCode,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
-  StreamableFile
-} from '@nestjs/common'
-import {
-  ApiBearerAuth,
-  ApiOkResponse,
-  ApiOperation,
-  ApiResponse,
-  ApiTags
-} from '@nestjs/swagger'
-import { IdentityService } from './identity.js'
+import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common'
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { ActivityService } from './activity.js'
 import { ActivityListQuery } from './activity-list-dto.js'
-import {
-  ActivityDto,
-  ActivityListDto,
-  ErrorDto,
-  AnswersInput,
-  AvatarInput,
-  LoginInput,
-  MemberDto,
-  OkDto,
-  PhoneInput,
-  ProfileInput,
-  PublicRosterDto,
-  RegistrationDto,
-  RegistrationInput,
-  RegistrationListDto,
-  SessionDto
-} from './dto.js'
+import { MyRegistrationQuery, PageQuery } from './pagination.js'
+import { ActivityDto, ActivityListDto, AnswersInput, ErrorDto, PublicRosterDto, RegistrationDto, RegistrationInput, RegistrationListDto } from './dto.js'
 
-@ApiTags('最小业务链路')
+@ApiTags('activities')
 @ApiResponse({
   status: 400,
   type: ErrorDto
@@ -73,79 +37,7 @@ import {
 @ApiBearerAuth()
 @Controller()
 export class FlowController {
-  constructor(
-    private readonly identity: IdentityService,
-    private readonly activity: ActivityService
-  ) {}
-
-  @ApiOperation({ security: [] })
-  @HttpCode(200)
-  @Post('auth/wechat/session')
-  @ApiOkResponse({ type: SessionDto })
-  login(
-    @Body()
-    body: LoginInput) { return this.identity.login(body.code, body.inviteCode) }
-
-  @Get('auth/session')
-  @ApiOkResponse({ type: MemberDto })
-  me(
-    @Headers('authorization')
-    header?: string) { return this.identity.me(header) }
-
-  @Delete('auth/session')
-  @ApiOkResponse({ type: OkDto })
-  logout(
-    @Headers('authorization')
-    header?: string) { return this.identity.logout(header) }
-
-  @HttpCode(200)
-  @Post('members/me/phone')
-  @ApiOkResponse({ type: MemberDto })
-  phone(
-    @Body()
-    body: PhoneInput,
-    @Headers('authorization')
-    header?: string) { return this.identity.phone(header, body.code) }
-
-  @Patch('members/me/profile')
-  @ApiOkResponse({ type: MemberDto })
-  profile(
-    @Body()
-    body: ProfileInput,
-    @Headers('authorization')
-    header?: string) { return this.identity.profile(header, body.displayName) }
-
-  @HttpCode(200)
-  @Post('members/me/profile')
-  @ApiOkResponse({ type: MemberDto })
-  profileFromMiniapp(
-    @Body()
-    body: ProfileInput,
-    @Headers('authorization')
-    header?: string) { return this.identity.profile(header, body.displayName) }
-
-  @HttpCode(200)
-  @Post('members/me/avatar')
-  @ApiOkResponse({ type: MemberDto })
-  avatar(
-    @Body()
-    body: AvatarInput,
-    @Headers('authorization')
-    header?: string) { return this.identity.avatar(header, body) }
-
-  @ApiOperation({ security: [] })
-  @Header('X-Content-Type-Options', 'nosniff')
-  @Get('media/avatars/:name')
-  async image(
-    @Param('name')
-    name: string) {
-    const bytes = await this.identity.image(name)
-    return new StreamableFile(bytes, {
-      type: name.endsWith('.png') ? 'image/png' : 'image/jpeg',
-      disposition: 'inline',
-      length: bytes.length
-    })
-  }
+  constructor(private readonly activity: ActivityService) {}
 
   @ApiOperation({ security: [] })
   @Get('activities')
@@ -166,7 +58,7 @@ export class FlowController {
   @ApiOkResponse({ type: PublicRosterDto })
   roster(
     @Param('id', ParseUUIDPipe)
-    id: string) { return this.activity.roster(id) }
+    id: string, @Query() query: PageQuery) { return this.activity.roster(id, query) }
 
   @Get('activities/:id/registrations/me')
   @ApiOkResponse({ type: RegistrationDto })
@@ -179,8 +71,9 @@ export class FlowController {
   @Get('members/me/registrations')
   @ApiOkResponse({ type: RegistrationListDto })
   allMine(
+    @Query() query: MyRegistrationQuery,
     @Headers('authorization')
-    header?: string) { return this.activity.allMine(header) }
+    header?: string) { return this.activity.allMine(header, query) }
 
   @HttpCode(200)
   @Post('activities/:id/registrations')

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { onLoad, onShow, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, PublicMember, Registration, ReadingList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -9,11 +9,15 @@ import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { createReadingVisit } from '@/services/reading'
 import RequestState from '@/components/base/RequestState.vue'
+import ListMore from '@/components/base/ListMore.vue'
 const id = ref(''), activity = ref<Activity | null>(null), roster = ref<PublicMember[]>([]), registration = ref<Registration | null>(null), loading = ref(true), busy = ref(false), error = ref(''), rosterError = ref(''), expanded = ref(false)
-const rosterExpanded = ref(false)
+const rosterExpanded = ref(false), rosterLoading = ref(false), rosterHasMore = ref(false), rosterMoreError = ref('')
+const registrationLoading = ref(false), registrationError = ref(''), registrationKnown = ref(false)
+const searchId = ref(''), recommendationToken = ref('')
+let rosterOffset = 0, readersOffset = 0, registrationGeneration = 0
 const session = useSessionStore()
 let generation = 0
-let alive = true
+let alive = true, shown = true
 const openingMember = ref(false)
 async function openMember(memberId: string) {
     if (openingMember.value || !memberId) return
@@ -28,10 +32,14 @@ async function openMember(memberId: string) {
 let visit: ReturnType<typeof createReadingVisit> | null = null
 const readers = ref<ReadingList>({ items: [], total: 0, hasMore: false })
 const readersExpanded = ref(false), readersLoading = ref(false), readersError = ref('')
-async function loadReaders(more = false) {
+function currentRequest() {
     const current = generation, token = session.token, epoch = session.epoch
-    const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
-    if (!activity.value || (more && readersLoading.value)) return
+    return () => alive && shown && current === generation && token === session.token && epoch === session.epoch
+}
+async function loadReaders(more = false) {
+    const isCurrent = currentRequest()
+    if (!activity.value || readersLoading.value || (more && (!readers.value.hasMore || readersError.value))) return
+    if (!more) readersOffset = 0
     readersLoading.value = true; readersError.value = ''
     try {
         if (!more && activity.value.registrationState !== 'removed') {
@@ -39,29 +47,55 @@ async function loadReaders(more = false) {
             await visit.record(id.value, isCurrent)
         }
         if (!isCurrent()) return
-        const result = await api.activityReaders(id.value, more ? readers.value.items.length : 0)
-        if (isCurrent()) readers.value = { ...result, items: more ? [...readers.value.items, ...result.items] : result.items }
+        const result = await api.activityReaders(id.value, readersOffset)
+        if (isCurrent()) {
+            readersOffset += result.items.length
+            const known = new Set((more ? readers.value.items : []).map(item => item.memberId))
+            readers.value = { ...result, items: [...(more ? readers.value.items : []), ...result.items.filter(item => !known.has(item.memberId))] }
+        }
     } catch (e) { if (isCurrent()) readersError.value = errorMessage(e) }
     finally { if (isCurrent()) readersLoading.value = false }
 }
-async function loadRegistration(isCurrent: () => boolean) {
-    if (!session.token)
-        return
+function retryReaders() { const more = readersOffset > 0; readersError.value = ''; void loadReaders(more) }
+async function loadRoster(more = false) {
+    if (!activity.value || rosterLoading.value || (more && (!rosterHasMore.value || rosterMoreError.value || rosterError.value))) return
+    const isCurrent = currentRequest()
+    if (!more) { rosterOffset = 0; rosterError.value = ''; rosterMoreError.value = ''; roster.value = [] }
+    rosterLoading.value = true
+    try {
+        const result = await api.roster(id.value, { offset: rosterOffset })
+        if (!isCurrent()) return
+        rosterOffset += result.items.length
+        const known = new Set(roster.value.map(item => item.memberId))
+        roster.value.push(...result.items.filter(item => !known.has(item.memberId)))
+        rosterHasMore.value = result.hasMore
+    } catch (e) { if (isCurrent()) { if (more) rosterMoreError.value = errorMessage(e); else rosterError.value = errorMessage(e) } }
+    finally { if (isCurrent()) rosterLoading.value = false }
+}
+function retryRosterMore() { rosterMoreError.value = ''; void loadRoster(true) }
+async function loadRegistration(isCurrent = currentRequest()) {
+    if (registrationLoading.value) return
+    if (!session.token) { registrationKnown.value = true; return }
+    const request = ++registrationGeneration
+    const current = () => isCurrent() && request === registrationGeneration
+    registrationLoading.value = true; registrationError.value = ''; registrationKnown.value = false
     try {
         const result = await api.myRegistration(id.value)
-        if (isCurrent())
-            registration.value = result
-    }
-    catch (e) {
-        if (isCurrent() && !(e instanceof ApiError && e.status === 404))
-            error.value = errorMessage(e)
-    }
+        if (current()) { registration.value = result; registrationKnown.value = true }
+    } catch (e) {
+        if (current()) {
+            if (e instanceof ApiError && e.status === 404) { registration.value = null; registrationKnown.value = true }
+            else registrationError.value = errorMessage(e)
+        }
+    } finally { if (current()) registrationLoading.value = false }
 }
 async function load() { if (!id.value)
     return
     const current = ++generation, token = session.token, epoch = session.epoch
     const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
-    loading.value = true; error.value = ''; registration.value = null
+    loading.value = true; error.value = ''; activity.value = null; registration.value = null
+    registrationGeneration++; registrationLoading.value = false; registrationError.value = ''; registrationKnown.value = !token
+    roster.value = []; rosterOffset = 0; rosterHasMore.value = false; rosterError.value = ''; rosterMoreError.value = ''; rosterLoading.value = false; readersOffset = 0
     readers.value = { items: [], total: 0, hasMore: false }; readersError.value = ''; readersLoading.value = false
     void loadRegistration(isCurrent)
     try {
@@ -69,18 +103,13 @@ async function load() { if (!id.value)
     if (!isCurrent())
         return
     activity.value = result
+    if (searchId.value && session.token && !recommendationToken.value && result.registrationState !== 'removed') {
+        try { const source = await api.searchView(searchId.value, id.value); if (isCurrent()) recommendationToken.value = source.sourceToken || '' }
+        catch { /* Attribution failure does not prevent browsing or registration. */ }
+        if (!isCurrent()) return
+    }
     void loadReaders()
-    try {
-        const people = await api.roster(id.value)
-        if (isCurrent()) {
-            roster.value = people.items
-            rosterError.value = ''
-        }
-    }
-    catch (e) {
-        if (isCurrent())
-            rosterError.value = errorMessage(e)
-    }
+    await loadRoster()
 }
 catch (e) {
     if (isCurrent())
@@ -88,17 +117,17 @@ catch (e) {
 }
 finally {
     if (isCurrent())
-        loading.value = false
+        { loading.value = false; uni.stopPullDownRefresh() }
 } }
-const stopWatchingSession = watch(() => [session.token, session.epoch], () => { void load() })
+const stopWatchingSession = watch(() => [session.token, session.epoch], () => { searchId.value = ''; recommendationToken.value = ''; if (shown) void load() })
 onUnload(() => { alive = false; generation += 1; stopWatchingSession() })
-async function register() { if (busy.value)
+async function register() { if (busy.value || registrationLoading.value || (session.token && !registrationKnown.value))
     return; busy.value = true; try {
     if (registration.value?.status === 'active') {
         navigate(routes.result + '?id=' + id.value)
         return
     }
-    const target = routes.form + '?id=' + id.value
+    const target = routes.form + '?id=' + id.value + (recommendationToken.value ? '&recommendationToken=' + encodeURIComponent(recommendationToken.value) : '')
     if (await requireProfile(target))
         navigate(target)
 }
@@ -108,12 +137,19 @@ catch (e) {
 finally {
     busy.value = false
 } }
-onLoad(options => { id.value = String(options?.id || ''); if (options?.inviteCode)
+onLoad(options => { id.value = String(options?.id || ''); searchId.value = String(options?.searchId || ''); if (options?.inviteCode)
     session.pendingInvite = String(options.inviteCode).slice(0, 32); if (!id.value) {
     loading.value = false
     error.value = '活动链接不完整，请从活动列表重新进入'
 } })
-onShow(() => { visit = null; readersExpanded.value = false; void load() })
+onShow(() => { shown = true; visit = null; readersExpanded.value = false; rosterExpanded.value = false; void load() })
+onHide(() => { shown = false; generation++; registrationGeneration++; registration.value = null; registrationKnown.value = false; registrationError.value = ''; registrationLoading.value = false; loading.value = false })
+onPullDownRefresh(load)
+onReachBottom(() => {
+    if (loading.value || error.value) return
+    if (rosterExpanded.value) void loadRoster(true)
+    if (readersExpanded.value) void loadReaders(true)
+})
 onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path: routes.detail + '?id=' + id.value + (session.member?.inviteCode ? '&inviteCode=' + encodeURIComponent(session.member.inviteCode) : '') }))
 </script>
 <template>
@@ -230,7 +266,7 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
         <view class="section-heading">
           <view class="section-title mark">已报名（{{ activity.activeRegistrationCount }}）</view>
           <button
-            v-if="roster.length > 8"
+            v-if="roster.length > 8 || rosterHasMore"
             class="view-all"
             @click="rosterExpanded=!rosterExpanded"
           >
@@ -244,9 +280,14 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
           v-if="rosterError"
           class="muted small"
         >
-          {{ rosterError }}
+          {{ rosterError }}<button
+            class="text-button"
+            @click="loadRoster()"
+          >
+            重试
+          </button>
         </text><view
-          v-else-if="!roster.length"
+          v-else-if="!rosterLoading && !roster.length"
           class="muted small"
         >
           还没有人报名
@@ -274,6 +315,14 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
             </view><text>{{ person.displayName || '会聚会员' }}</text>
           </view>
         </view>
+        <ListMore
+          v-if="rosterExpanded"
+          :loading="rosterLoading"
+          :error="rosterMoreError"
+          :has-more="rosterHasMore"
+          :has-items="!!roster.length"
+          @retry="retryRosterMore"
+        />
       </view>
       <view class="card">
         <view class="section-heading">
@@ -323,7 +372,7 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
         >
           {{ readersError }}<button
             class="text-button"
-            @click="loadReaders()"
+            @click="retryReaders"
           >
             重试
           </button>
@@ -334,20 +383,32 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
         >
           暂无会员阅读记录
         </text>
-        <button
-          v-if="readersExpanded && readers.hasMore && !readersError"
-          class="text-button"
-          :disabled="readersLoading"
-          @click="loadReaders(true)"
-        >
-          加载更多
-        </button>
+        <ListMore
+          v-if="readersExpanded && !readersError"
+          :loading="readersLoading"
+          error=""
+          :has-more="readers.hasMore"
+          :has-items="!!readers.items.length"
+        />
       </view><view class="card">
         <view class="section-title mark">评论与点评</view><text class="muted small">交流活动想法，分享参与感受。</text><button
           class="view-all"
           @click="navigate(routes.feedback + '?id=' + encodeURIComponent(id))"
         >
           查看评论与点评 →
+        </button>
+      </view>
+      <view
+        v-if="registrationError"
+        class="card muted small"
+      >
+        暂时无法确认你的报名状态：{{ registrationError }}
+        <button
+          class="text-button"
+          :disabled="registrationLoading"
+          @click="loadRegistration()"
+        >
+          重新查询报名状态
         </button>
       </view>
       <view class="fixed-footer">
@@ -361,11 +422,11 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
           /> 分享
         </button><button
           class="primary"
-          :disabled="busy || (registration?.status!=='active' && activity.registrationState!=='open')"
+          :disabled="busy || registrationLoading || (!!session.token && !registrationKnown) || (registration?.status!=='active' && activity.registrationState!=='open')"
           :loading="busy"
           @click="register"
         >
-          {{ registration?.status==='active'?'查看我的报名':activity.registrationState==='open'?'立即报名':stateText(activity.registrationState) }}
+          {{ registrationLoading ? '正在确认报名…' : (session.token && !registrationKnown) ? '报名状态待确认' : registration?.status==='active'?'查看我的报名':activity.registrationState==='open'?'立即报名':stateText(activity.registrationState) }}
         </button>
       </view>
     </template>

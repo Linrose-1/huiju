@@ -22,6 +22,12 @@
 
 `api:check` 从当前源码先构建，避免直接比对陈旧 dist；完整 `verify` 已构建 API，内部直接调用比较脚本以避免重复构建。契约导出组装 Nest 应用但不监听端口，模块初始化必须保持无数据库写入和外部调用副作用。
 
+## 推荐数据清理（执行需单独授权）
+
+`apps/api/scripts/recommendation-cleanup.mjs` 调用推荐记录模块的清理方法，清除超过30分钟的结果载荷及超过90天的效果明细。它不会加载环境文件，不由服务启动或普通测试调用。先构建 API 并确认推荐迁移已应用，再在获授权的环境中显式提供 `DATABASE_URL`，执行 `node apps/api/scripts/recommendation-cleanup.mjs --apply --database-target=<主机:端口/库名>`；如需环境文件，由操作者显式使用 Node `--env-file`。目标必须与连接严格一致，不接受URL查询参数。禁止把连接串或密码放入命令参数。
+
+此入口不自带调度，也不代表已在任何数据库执行；未安排维护调用时，读取仍按30分钟过期拒绝访问，但物理清理尚未发生。普通 `test:scripts` 只校验参数与拒绝执行路径，不连接数据库。真实清理频率和运行安排应在目标环境启用时明确。
+
 ## 后台账号维护（执行需单独授权）
 
 `apps/api/scripts/admin-account.mjs` 是部署维护入口，不由应用启动、迁移或普通测试调用。0005必须先应用。初始超管用 `--mode=bootstrap`，已有超管找回用 `--mode=recover`；都需 `--apply`、`--username=<登录名>`、`--database-target=<主机:端口/库名>`，初始化另需 `--display-name=<显示名称>`。目标须与进程中的 DATABASE_URL 严格匹配，不接受额外URI查询参数。

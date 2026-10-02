@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { navigate, routes } from '@/services/navigation'
-function browse() { uni.switchTab({ url: routes.activity }); }
+function browse() { navigate(routes.activitySearch) }
 function draftActivity() { navigate(routes.activityDraft) }
 </script>
 <template>
@@ -68,7 +68,7 @@ function draftActivity() { navigate(routes.activityDraft) }
             class="primary task-button"
             @click="browse"
           >
-            浏览活动 <uni-icons
+            开始找活动 <uni-icons
               type="arrow-right"
               size="22"
               color="white"
@@ -76,7 +76,7 @@ function draftActivity() { navigate(routes.activityDraft) }
           </button>
         </view>
       </view>
-      <view class="interest card"><view class="section-title serif">你可能感兴趣</view><text class="muted small">智能推荐暂未开放，可到活动页浏览真实活动。</text></view>
+      <view class="interest card"><view class="section-title serif">你可能感兴趣</view><text class="muted small">说说时间、地点和兴趣，寻找适合你的活动。</text></view>
     </view>
   </view>
 </template>

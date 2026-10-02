@@ -1,14 +1,28 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { api, errorMessage, refreshMember } from '@/services/api'
 import { mediaUrl, LOCAL_TEST } from '@/services/api/environment'
 import { loginWithWechat, uploadAvatar } from '@/services/wechat'
-import { finishProfile } from '@/services/navigation'
+import { finishProfile, routes } from '@/services/navigation'
 const session = useSessionStore(), name = ref(''), invite = ref(''), returnTo = ref(''), busy = ref(false), error = ref('')
+const loginOnly = ref(false)
+const cancelTarget = computed(() => {
+  const target = returnTo.value, path = target.split('?')[0]
+  if (!Object.values(routes).includes(path) || path === routes.login) return ''
+  if (path === routes.circleEditor) return routes.circle
+  if (path === routes.editor) return routes.activity
+  if (path === routes.activityDraft) return routes.assistant
+  if (path === routes.activitySearch && loginOnly.value) return routes.assistant
+  if (path === routes.form) return target.replace(routes.form, routes.detail)
+  return target
+})
+const cancelText = computed(() => !cancelTarget.value ? '暂不登录，先看看活动' : cancelTarget.value === routes.circle ? '暂不继续，返回学友圈' : cancelTarget.value === routes.activity ? '暂不继续，返回活动' : cancelTarget.value === routes.assistant ? '暂不继续，返回助手' : cancelTarget.value.startsWith(routes.circleDetail + '?') ? '暂不继续，返回帖子' : '暂不继续，返回原页面')
+function cancel() { if (!busy.value) finishProfile(cancelTarget.value) }
 onLoad(async (options) => {
     returnTo.value = String(options?.returnTo || '')
+    loginOnly.value = options?.mode === 'login' && returnTo.value === routes.activitySearch
     invite.value = session.pendingInvite
     name.value = session.member?.displayName || ''
     if (session.token) {
@@ -37,10 +51,11 @@ async function submit() {
             session.pendingInvite = invite.value.trim()
             await loginWithWechat()
             name.value = session.member?.displayName || name.value
-            if (session.member?.profileComplete)
+            if (loginOnly.value || session.member?.profileComplete)
                 finishProfile(returnTo.value)
             return
         }
+        if (loginOnly.value) { await refreshMember(); finishProfile(returnTo.value); return }
         if (!name.value.trim())
             throw new Error('请填写用户名称')
         await api.profile(name.value.trim())
@@ -83,13 +98,16 @@ function phone(event: {
       src="/static/huiju/campus.jpg"
       mode="aspectFill"
     /><view class="login-body">
-      <view class="brand serif">会聚</view><view class="gold-line" /><view class="welcome">完善资料，加入会聚</view><view class="subtitle">认识更多伙伴，从一张真实的名片开始</view><view
+      <view class="brand serif">会聚</view><view class="gold-line" /><view class="welcome">{{ loginOnly ? "登录后找活动" : "完善资料，加入会聚" }}</view><view class="subtitle">认识更多伙伴，从一张真实的名片开始</view><view
         v-if="invite && !session.token"
         class="invitation"
       >
         已识别邀请来源，将由登录时确认
       </view>
-      <view class="profile-form">
+      <view
+        v-if="!loginOnly"
+        class="profile-form"
+      >
         <view class="form-row">
           <text>用户头像</text><view class="row">
             <view class="avatar">
@@ -195,12 +213,13 @@ function phone(event: {
         :disabled="busy"
         @click="submit"
       >
-        {{ session.token?'保存资料并继续':LOCAL_TEST?'进入本地测试':'微信登录' }}
+        {{ session.token?(loginOnly?'继续找活动':'保存资料并继续'):LOCAL_TEST?'进入本地测试':'微信登录' }}
       </button><view class="legal">登录与授权用于建立会员身份和报名联系。<text @click="legal('用户协议')">用户协议</text> · <text @click="legal('隐私政策')">隐私政策</text></view><button
         class="text-button"
-        @click="finishProfile('')"
+        :disabled="busy"
+        @click="cancel"
       >
-        暂不登录，先看看活动
+        {{ cancelText }}
       </button>
     </view>
   </view>

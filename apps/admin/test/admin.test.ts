@@ -22,6 +22,31 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('admin session and transport', () => {
+  it('pages activity moderation and history with encoded filters', async () => {
+    authenticated()
+    network.mockImplementation(async () => response({ items: [], total: 0, hasMore: false }))
+    await admin.adminApi.activities({ status: 'removed', q: '活动 & 学友', offset: 20 })
+    const request = network.mock.calls[0]![0] as Request
+    const url = new URL(request.url)
+    expect(url.pathname).toBe('/api/v1/admin/activities')
+    expect(url.searchParams.get('q')).toBe('活动 & 学友')
+    expect(url.searchParams.get('status')).toBe('removed')
+    expect(url.searchParams.get('offset')).toBe('20')
+    expect(request.credentials).toBe('include')
+    await admin.adminApi.activityOperations('activity-id', 40)
+    expect((network.mock.calls[1]![0] as Request).url).toContain('/activity-id/operations?offset=40')
+  })
+  it.each(['removeActivity', 'restoreActivity'] as const)('sends only reason with cookie and CSRF for %s', async action => {
+    authenticated()
+    network.mockResolvedValue(response({ ok: true }))
+    await admin.adminApi[action]('activity-id', '审核原因')
+    const request = network.mock.calls[0]![0] as Request
+    expect(request.method).toBe('POST')
+    expect(request.credentials).toBe('include')
+    expect(request.headers.get('X-CSRF-Token')).toBe('test-csrf')
+    expect(new URL(request.url).pathname).toBe(`/api/v1/admin/activities/activity-id/${action === 'removeActivity' ? 'remove' : 'restore'}`)
+    expect(await request.json()).toEqual({ reason: '审核原因' })
+  })
   it('sends member filters and paging with cookies and discards late private details after logout', async () => {
     authenticated()
     network.mockResolvedValueOnce(response({ items: [], total: 0, hasMore: false }))

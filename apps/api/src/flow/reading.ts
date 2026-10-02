@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { count, countDistinct, desc, eq, sql } from 'drizzle-orm'
+import { and, count, countDistinct, desc, eq, gte, sql } from 'drizzle-orm'
 import { createHash } from 'node:crypto'
 import { activities } from '../database/schema/activities.js'
 import { readingEvents, readingVisitors } from '../database/schema/interactions.js'
@@ -21,6 +21,15 @@ export function viewStats(views: number, visitors: number, registrations: number
 @Injectable()
 export class ReadingService {
   constructor(private readonly database: FlowDatabase, private readonly identity: IdentityService) {}
+
+  async recommendationHistory(memberId: string) {
+    return this.database.db.select({ title: activities.title, location: activities.location }).from(readingEvents)
+      .innerJoin(readingVisitors, eq(readingVisitors.visitorHash, readingEvents.visitorHash))
+      .innerJoin(activities, eq(activities.id, readingEvents.activityId))
+      .where(and(eq(readingVisitors.memberId, memberId), gte(readingEvents.recordedAt, new Date(Date.now() - 30 * 86400000)),
+        eq(activities.lifecycle, 'published'), eq(activities.moderation, 'normal')))
+      .groupBy(activities.id).orderBy(desc(sql`max(${readingEvents.recordedAt})`)).limit(20)
+  }
 
   async record(id: string, input: RecordViewInput, header?: string) {
     id = id.toLowerCase()

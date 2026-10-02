@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, RegistrationInput } from '@/services/api/types'
@@ -9,12 +9,16 @@ import { useSessionStore } from '@/stores/session'
 import ActivitySummary from '@/components/business/ActivitySummary.vue'
 import RequestState from '@/components/base/RequestState.vue'
 const id = ref(''), editing = ref(false), activity = ref<Activity | null>(null), phone = ref(''), answers = ref<Record<string, string | string[]>>({}), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref(''), allowed = ref(false)
+const recommendationToken = ref('')
+const session = useSessionStore()
+watch(() => [session.token, session.epoch], () => { recommendationToken.value = '' }, { flush: 'sync' })
+function returnTarget() { return routes.form + '?id=' + id.value + (editing.value ? '&edit=1' : '') + (recommendationToken.value ? '&recommendationToken=' + encodeURIComponent(recommendationToken.value) : '') }
 let initialized = false
 let formOwner = ''
 const questions = computed(() => activity.value?.questions || [])
 async function load() { if (!id.value)
     return; loading.value = true; error.value = ''; allowed.value = false; try {
-    const target = routes.form + '?id=' + id.value + (editing.value ? '&edit=1' : '')
+    const target = returnTarget()
     if (!await requireProfile(target)) {
         error.value = '请登录并完善资料后继续'
         return
@@ -90,6 +94,7 @@ async function submit() {
         }
     }
     const payload: RegistrationInput = { contactPhone: phone.value.trim(), answers: questions.value.map(question => ({ questionId: question.id, value: answers.value[question.id] || (question.type === 'multiple' ? [] : '') })) }
+    if (!editing.value && recommendationToken.value) payload.recommendationToken = recommendationToken.value
     busy.value = true
     try {
         if (editing.value)
@@ -101,7 +106,7 @@ async function submit() {
     catch (e) {
         submitError.value = errorMessage(e)
         if (e instanceof ApiError && (e.status === 401 || e.code === 'PROFILE_INCOMPLETE'))
-            loginPage(routes.form + '?id=' + id.value + (editing.value ? '&edit=1' : ''))
+            loginPage(returnTarget())
         else
             await load()
     }
@@ -109,7 +114,7 @@ async function submit() {
         busy.value = false
     }
 }
-onLoad(options => { id.value = String(options?.id || ''); editing.value = options?.edit === '1'; if (!id.value) {
+onLoad(options => { id.value = String(options?.id || ''); editing.value = options?.edit === '1'; recommendationToken.value = editing.value ? '' : String(options?.recommendationToken || ''); if (!id.value) {
     loading.value = false
     error.value = '报名链接不完整，请从活动详情重新进入'
 } })

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { fail } from '../flow/common.js'
 
+export const AI_DRAFT_TIMEOUT_MS = 90000
+
 @Injectable()
 export class AgentIsHereDraftProvider {
   async generate(idea: string): Promise<unknown> {
@@ -10,7 +12,7 @@ export class AgentIsHereDraftProvider {
       fail('AI_NOT_CONFIGURED', 'AI 草拟暂不可用，请稍后再试', 503)
     }
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 90000)
+    const timeout = setTimeout(() => controller.abort(), AI_DRAFT_TIMEOUT_MS)
     try {
       const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',

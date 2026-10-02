@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator'
-import { ActivityDto, PublicMemberDto, RegistrationDto } from './dto.js'
+import { ActivityDto, ActivityCountsDto, PublicMemberDto, RegistrationDto } from './dto.js'
 
 export class CoverUploadDto {
   @ApiProperty() coverUrl!: string
@@ -39,6 +39,7 @@ export class ManagedActivityDto extends ActivityDto {
   @ApiProperty() declare consultationContact: string
 }
 export class ManagedActivityListDto {
+  @ApiProperty({ type: ActivityCountsDto }) counts!: ActivityCountsDto
   @ApiProperty() total!: number
   @ApiProperty({ type: [ManagedActivityDto] }) items!: ManagedActivityDto[]
   @ApiProperty() hasMore!: boolean
@@ -53,7 +54,14 @@ export class AttendanceDto {
   @ApiProperty() attended!: boolean
   @ApiProperty() attendedAt!: string
 }
-export class OrganizerRosterDto { @ApiProperty({ type: [OrganizerRegistrationDto] }) items!: OrganizerRegistrationDto[] }
+export class OrganizerRosterDto {
+  @ApiProperty({ type: [OrganizerRegistrationDto] }) items!: OrganizerRegistrationDto[]
+  @ApiProperty() hasMore!: boolean
+  @ApiProperty() total!: number
+  @ApiProperty() activeCount!: number
+  @ApiProperty() cancelledCount!: number
+  @ApiProperty() attendedCount!: number
+}
 export class NotificationDto {
   @ApiProperty() id!: string
   @ApiProperty({ type: String, nullable: true }) activityId!: string | null
@@ -64,6 +72,7 @@ export class NotificationDto {
   @ApiProperty() createdAt!: string
 }
 export class NotificationListDto {
+  @ApiProperty() total!: number
   @ApiProperty() unreadCount!: number
   @ApiProperty({ type: [NotificationDto] }) items!: NotificationDto[]
   @ApiProperty() hasMore!: boolean

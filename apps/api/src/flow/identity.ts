@@ -199,6 +199,12 @@ export class IdentityService {
 
   async me(header?: string) { return memberDto((await this.require(header))!) }
 
+  async recommendationProfile(memberId: string) {
+    const [profile] = await this.database.db.select({ resources: members.resources, needs: members.needs, hometown: members.hometown, bio: members.bio })
+      .from(members).where(eq(members.id, memberId))
+    return profile ?? { resources: null, needs: null, hometown: null, bio: null }
+  }
+
   async logout(header?: string) {
     await this.require(header)
     await this.database.db

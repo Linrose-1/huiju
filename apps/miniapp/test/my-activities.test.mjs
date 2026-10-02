@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url)
 const {reactive,effectScope} = require('vue')
 function compile(source,deps={},extra='') {
   const code=ts.transpileModule(source+extra,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText
-  const result={};new Function('require','exports',code)(name=>deps[name]||require(name),result);return result
+  const result={};new Function('require','exports','uni',code)(name=>deps[name]||require(name),result,{stopPullDownRefresh(){}});return result
 }
 const states=compile(readFileSync(new URL('../src/services/my-activities.ts',import.meta.url),'utf8'))
 const base={startsAt:'2026-10-01T00:00:00Z',endsAt:'2026-10-01T02:00:00Z',registrationState:'open'}
@@ -25,7 +25,7 @@ for(const pagePath of ['activity/organized','registration/index']) {
   test(pagePath+' clears account data and ignores late requests after account change or unload',async t=>{
     const session=reactive({token:'a',epoch:0}),pending=[];let unload
     const deps={
-      '@dcloudio/uni-app':{onShow(){},onUnload(fn){unload=fn}},
+      '@dcloudio/uni-app':{onShow(fn){Promise.resolve().then(fn)},onHide(){},onReachBottom(){},onPullDownRefresh(){},onUnload(fn){unload=fn}},
       '@/services/api':{api:{organizedActivities:request,registrations:request},errorMessage:e=>e.message},
       '@/services/my-activities':states,
       '@/services/navigation':{},'@/stores/session':{useSessionStore:()=>session},
@@ -35,9 +35,9 @@ for(const pagePath of ['activity/organized','registration/index']) {
     const source=readFileSync(new URL('../src/pages/'+pagePath+'.vue',import.meta.url),'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
     const scope=effectScope();t.after(()=>scope.stop())
     const page=scope.run(()=>compile(source,deps,'\nexport {load,items,error,loading,visibleItems,selected};'))
-    const old=page.load();session.token='b'
+    await Promise.resolve(); const oldRequest=pending[0]; session.token='b'
     pending[1].resolve({items:[{id:'b',...base,activity:base}],hasMore:false});await Promise.resolve();await Promise.resolve()
-    pending[0].resolve({items:[{id:'a'}],hasMore:false});await old
+    oldRequest.resolve({items:[{id:'a'}],hasMore:false});await Promise.resolve();await Promise.resolve()
     assert.equal(page.items.value[0].id,'b')
     session.token='';assert.deepEqual(page.items.value,[]);assert.equal(page.loading.value,false)
     session.token='c';const last=pending.at(-1);unload();last.reject(new Error('late failure'));await Promise.resolve();await Promise.resolve()
@@ -52,7 +52,7 @@ test('mine uses the organized total, keeps active registration count and ignores
   const deps={
     '@dcloudio/uni-app':{onShow(){},onHide(fn){hide=fn},onUnload(){}},
     '@/services/api':{refreshMember:async()=>{},errorMessage:e=>e.message,api:{
-      registrations:async()=>({items:[{status:'active'},{status:'cancelled'}]}),
+      registrations:async()=>({items:[{status:'active'},{status:'cancelled'}],activeCount:75}),
       notifications:async()=>({items:[],unreadCount:pending?0:103}),
       organizedActivities:()=>pending?new Promise(resolve=>{finish=resolve}):Promise.resolve({items:[],total:125,hasMore:true})
     }},
@@ -61,7 +61,7 @@ test('mine uses the organized total, keeps active registration count and ignores
   const source=readFileSync(new URL('../src/pages/mine/index.vue',import.meta.url),'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const scope=effectScope();t.after(()=>scope.stop())
   const page=scope.run(()=>compile(source,deps,';export {load,count,organizedCount,unreadCount};'))
-  await page.load();assert.equal(page.count.value,1);assert.equal(page.organizedCount.value,125);assert.equal(page.unreadCount.value,103)
+  await page.load();assert.equal(page.count.value,75);assert.equal(page.organizedCount.value,125);assert.equal(page.unreadCount.value,103)
   pending=true;const loading=page.load();await Promise.resolve();await Promise.resolve();hide();finish({items:[],total:200});await loading
   assert.equal(page.organizedCount.value,null);assert.equal(page.unreadCount.value,0)
   const returning=page.load();await Promise.resolve();await Promise.resolve();finish({items:[],total:125});await returning

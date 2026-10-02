@@ -14,6 +14,20 @@ const date = (value: unknown) => {
 }
 const positiveInt = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 4294967295 ? value : null
 
+function pendingFacts(idea: string) {
+  // A bounded guard for explicit undecided fields, not a general fact extractor.
+  const field = '报名截止(?:时间|日期)?|开始时间|结束时间|活动时间|活动日期|时间|日期|人数上限|人数|名额|免费(?:还是|或|/)收费|收费(?:还是|或|/)免费|是否收费|收费模式|费用|金额|价格'
+  const undecided = '(?:待定|待确认|待确定|未定|未确定|未确认|不确定|没确定|没有确定)'
+  const list = `(?:${field})(?:[\\s、和及与]+(?:${field}))*`
+  const phrases = new RegExp(`${list}(?:[\\s：:]|都|均|还|尚|暂|仍|是|为)*${undecided}|${undecided}\\s*${list}`, 'g')
+  const fields = [...idea.matchAll(phrases)].flatMap(match => match[0].match(new RegExp(field, 'g')) ?? [])
+  const has = (pattern: RegExp) => fields.some(value => pattern.test(value))
+  return {
+    time: has(/^(?:活动)?(?:时间|日期)$/), start: has(/^开始/), end: has(/^结束/), deadline: has(/^报名截止/),
+    capacity: has(/人数|名额/), feeMode: has(/收费/), fee: has(/^费用$/), amount: has(/金额|价格/),
+  }
+}
+
 function explicitChineseTimes(idea: string) {
   const dates = [...idea.matchAll(/((?:19|20)\d{2})年(\d{1,2})月(\d{1,2})日/g)]
   const eventTimes: string[] = []
@@ -57,19 +71,23 @@ export function parseActivityDraft(value: unknown, idea: string): ActivityDraftD
     return [{ prompt, type, required: typeof row.required === 'boolean' ? row.required : null,
       options: type === 'single' || type === 'multiple' ? options : null }]
   })
-  // Without an explicit year the API cannot safely turn relative or partial dates into facts.
-  const dated = /(?:19|20)\d{2}(?:年|[-/.])/.test(idea)
+  // A year alone cannot authorize model-invented month/day values.
+  const dated = /(?:19|20)\d{2}(?:年\d{1,2}月\d{1,2}日|([-/.])\d{1,2}\1\d{1,2}(?!\d))/.test(idea)
+  const pending = pendingFacts(idea)
   const explicit = dated ? explicitChineseTimes(idea) : null
-  const startsAt = dated ? date(value.startsAt) ?? explicit?.startsAt ?? null : null
-  let endsAt = dated ? date(value.endsAt) ?? explicit?.endsAt ?? null : null
-  let registrationDeadline = dated ? date(value.registrationDeadline) ?? explicit?.registrationDeadline ?? null : null
+  const startsAt = dated && !pending.time && !pending.start ? date(value.startsAt) ?? explicit?.startsAt ?? null : null
+  let endsAt = dated && !pending.time && !pending.end ? date(value.endsAt) ?? explicit?.endsAt ?? null : null
+  let registrationDeadline = dated && !pending.deadline && (!pending.time || explicit?.registrationDeadline)
+    ? date(value.registrationDeadline) ?? explicit?.registrationDeadline ?? null : null
   if (startsAt && endsAt && endsAt <= startsAt) endsAt = null
   if (startsAt && registrationDeadline && registrationDeadline > startsAt) registrationDeadline = null
-  const feeType = value.feeType === 'free' || value.feeType === 'paid' ? value.feeType : null
+  const explicitlyPaid = /(?:^|[，,。；;])\s*(?:确定|需要|活动)?收费(?:活动)?\s*(?=[，,。；;]|$)/.test(idea)
+  const feeType = pending.feeMode ? null : pending.fee ? (explicitlyPaid ? 'paid' : null)
+    : value.feeType === 'free' || value.feeType === 'paid' ? value.feeType : null
   return {
     title: string(value.title, 50), description: string(value.description, 1000),
-    startsAt, endsAt, location: string(value.location, 500), capacity: positiveInt(value.capacity),
-    feeType, feeAmountCents: feeType === 'paid' ? positiveInt(value.feeAmountCents) : null,
+    startsAt, endsAt, location: string(value.location, 500), capacity: pending.capacity ? null : positiveInt(value.capacity),
+    feeType, feeAmountCents: feeType === 'paid' && !pending.fee && !pending.amount ? positiveInt(value.feeAmountCents) : null,
     registrationDeadline, questions,
   }
 }

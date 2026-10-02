@@ -113,6 +113,9 @@ export class AnswerInput {
 }
 
 export class RegistrationInput {
+  @ApiPropertyOptional() @IsOptional() @IsString() @Length(1, 256)
+  recommendationToken?: string
+
   @ApiProperty()
   @IsString()
   @Matches(/^\+?[0-9]{6,20}$/)
@@ -288,15 +291,33 @@ export class MyRegistrationDto extends RegistrationDto {
   activity!: ActivityDto
 }
 
+export class ActivityCountsDto {
+  @ApiProperty() all!: number
+  @ApiProperty() ongoing!: number
+  @ApiProperty() upcoming!: number
+  @ApiProperty() ended!: number
+  @ApiProperty() cancelled!: number
+  @ApiProperty() draft!: number
+  @ApiProperty() removed!: number
+}
+
 export class RegistrationListDto {
+  @ApiProperty() hasMore!: boolean
+  @ApiProperty() total!: number
+  @ApiProperty() activeCount!: number
+  @ApiProperty({ type: () => ActivityCountsDto }) counts!: ActivityCountsDto
   @ApiProperty({ type: [MyRegistrationDto] })
   items!: MyRegistrationDto[]
 }
 
 export class PublicRosterDto {
+  @ApiProperty() hasMore!: boolean
+  @ApiProperty() total!: number
   @ApiProperty({ type: [PublicMemberDto] })
   items!: PublicMemberDto[]
 }
+
+
 
 export class OkDto {
   @ApiProperty()

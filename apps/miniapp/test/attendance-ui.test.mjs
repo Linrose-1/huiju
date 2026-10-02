@@ -13,7 +13,7 @@ function harness(t) {
   let hide, unload
   const pending = kind => new Promise((resolve, reject) => requests.push({ kind, resolve, reject }))
   const deps = {
-    '@dcloudio/uni-app': { onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn }, onShareAppMessage() {} },
+    '@dcloudio/uni-app': { onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn }, onShareAppMessage() {} },
     '@/services/api': { api: {
       managedActivity: () => pending('activity'), organizerRoster: () => pending('roster'), activityViewStats: async () => ({}),
       markAttendance: (activityId, registrationId) => { mutations.push([activityId, registrationId]); return pending('attendance') }
@@ -24,12 +24,12 @@ function harness(t) {
   const source = readFileSync(new URL('../src/pages/activity/manage.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const code = ts.transpileModule(source+'\nexport {load,markAttendance,activity,roster,busy,attendanceBusy,attendanceCount,actionError};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const page = {}, scope = effectScope()
-  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showModal: () => new Promise(resolve => modals.push(resolve)) }))
+  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { stopPullDownRefresh() {}, showModal: () => new Promise(resolve => modals.push(resolve)) }))
   t.after(() => scope.stop())
   const latest = kind => requests.filter(item => item.kind === kind).at(-1)
   const resolveLoad = (attended = false) => {
     latest('activity').resolve({ lifecycle: 'published', moderation: 'normal' })
-    latest('roster').resolve({ items: [{ id: 'signup-a', status: 'active', attended }, { id: 'signup-b', status: 'active', attended: false }] })
+    latest('roster').resolve({ hasMore: false, activeCount: 2, attendedCount: attended ? 1 : 0, items: [{ id: 'signup-a', status: 'active', attended }, { id: 'signup-b', status: 'active', attended: false }] })
   }
   const loaded = async () => { const task = page.load(); resolveLoad(); await task }
   return { page, session, requests, latest, loaded, resolveLoad, modals, mutations, hide: () => hide(), unload: () => unload() }

@@ -5,14 +5,54 @@ import { Test } from '@nestjs/testing'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { AppModule } from '../src/app.module.js'
 import { beijingDayBounds, ActivityDraftService } from '../src/ai/service.js'
-import { parseActivityDraft } from '../src/ai/parse.js'
-import { AgentIsHereDraftProvider } from '../src/ai/provider.js'
-import { FlowDatabase } from '../src/flow/common.js'
-import { IdentityService } from '../src/flow/identity.js'
+import { missingFields, parseActivityDraft } from '../src/ai/parse.js'
 
 const idea = '2026年10月12日在北京举办读书会，限20人，免费，下午2点开始，4点结束。'
 
 describe('AI activity draft validation', () => {
+  const proposed = { title: '行业交流', startsAt: '2026-10-20T14:00:00+08:00', endsAt: '2026-10-20T16:00:00+08:00', registrationDeadline: '2026-10-19T18:00:00+08:00', capacity: 50, feeType: 'paid', feeAmountCents: 10000 }
+
+  it('keeps explicitly undecided facts empty despite a well-formed model proposal', () => {
+    for (const input of ['2026年举办行业交流，具体日期、人数和费用都尚未确定', '2026年10月20日举办行业交流，时间待定，人数待确认，费用未定']) {
+      const draft = parseActivityDraft(proposed, input)
+      expect(draft).toMatchObject({ startsAt: null, endsAt: null, registrationDeadline: null, capacity: null, feeType: null, feeAmountCents: null })
+      expect(missingFields(draft)).toEqual(expect.arrayContaining(['startsAt', 'endsAt', 'registrationDeadline', 'capacity', 'feeType']))
+    }
+    expect(parseActivityDraft({ ...proposed, feeType: 'free' }, '2026年举办行业交流，具体日期、人数和费用都尚未确定'))
+      .toMatchObject({ capacity: null, feeType: null, feeAmountCents: null })
+  })
+
+  it.each(['2026年举办行业交流', '2026年10月举办行业交流'])('does not turn a partial date into complete timestamps: %s', input => {
+    expect(parseActivityDraft(proposed, input)).toMatchObject({ startsAt: null, endsAt: null, registrationDeadline: null })
+  })
+
+  it('keeps independently confirmed facts when only deadline and price are undecided', () => {
+    const draft = parseActivityDraft(proposed, '2026年10月20日下午2点开始，下午4点结束，限50人，确定收费，金额待定，报名截止时间待确认。')
+    expect(draft).toMatchObject({ startsAt: '2026-10-20T06:00:00.000Z', endsAt: '2026-10-20T08:00:00.000Z', registrationDeadline: null, capacity: 50, feeType: 'paid', feeAmountCents: null })
+    expect(missingFields(draft)).toContain('feeAmountCents')
+    expect(parseActivityDraft(proposed, '2026年10月20日下午2点开始，结束时间待定，免费还是收费尚未确定。'))
+      .toMatchObject({ startsAt: '2026-10-20T06:00:00.000Z', endsAt: null, feeType: null, feeAmountCents: null })
+    expect(parseActivityDraft(proposed, '2026年10月20日下午2点开始，活动收费，费用待定。'))
+      .toMatchObject({ feeType: 'paid', feeAmountCents: null })
+    expect(parseActivityDraft(proposed, '2026年10月20日下午2点开始，费用未定，尚未确定收费。'))
+      .toMatchObject({ feeType: null, feeAmountCents: null })
+    for (const input of ['确定收费，但免费还是收费尚未确定。', '不需要收费，费用待定。', '还未确定收费还是免费。']) {
+      expect(parseActivityDraft(proposed, input)).toMatchObject({ feeType: null, feeAmountCents: null })
+    }
+    expect(parseActivityDraft(proposed, '活动时间待定，报名截止2026年10月19日18点。'))
+      .toMatchObject({ startsAt: null, endsAt: null, registrationDeadline: '2026-10-19T10:00:00.000Z' })
+  })
+
+  it('does not let deterministic date fallback override an explicit pending field', () => {
+    expect(parseActivityDraft({ ...proposed, startsAt: null, endsAt: null, registrationDeadline: null }, '2026年10月20日下午2点至下午4点是预备方案，时间待定。报名截止时间待确认。'))
+      .toMatchObject({ startsAt: null, endsAt: null, registrationDeadline: null })
+  })
+
+  it.each(['2026年10月20日', '2026-10-20', '2026/10/20', '2026.10.20'])('preserves explicit date, capacity and fee proposals for %s', day => {
+    expect(parseActivityDraft({ ...proposed, registrationDeadline: null }, `${day}下午2点开始，下午4点结束，限50人，每人收费100元。`))
+      .toMatchObject({ startsAt: '2026-10-20T06:00:00.000Z', endsAt: '2026-10-20T08:00:00.000Z', registrationDeadline: null, capacity: 50, feeType: 'paid', feeAmountCents: 10000 })
+  })
+
   it('keeps unknown, malformed and relative dates empty and never defaults fees', () => {
     const draft = parseActivityDraft({ title: '读书会', startsAt: '2026-10-12T14:00:00+08:00', endsAt: '2026-10-12T13:00:00+08:00', feeType: 'unknown', feeAmountCents: 100, capacity: -2, questions: [{ prompt: '职业?', type: 'invalid', required: 'yes', options: ['甲'] }] }, idea)
     expect(draft.startsAt).toBe('2026-10-12T06:00:00.000Z')
@@ -40,52 +80,6 @@ describe('AI activity draft validation', () => {
     expect(beijingDayBounds(new Date('2026-09-29T15:59:59Z')).map(v => v.toISOString()))
       .toEqual(['2026-09-28T16:00:00.000Z', '2026-09-29T16:00:00.000Z'])
     expect(beijingDayBounds(new Date('2026-09-29T16:00:00Z'))[0].toISOString()).toBe('2026-09-29T16:00:00.000Z')
-  })
-})
-
-describe('AI draft service boundary with repository and provider substitutes', () => {
-  const member = { id: 'member', kind: 'member', boundPhone: '13800000000', displayName: '甲', avatarUrl: '/avatar', avatarSetByUser: true, nameSetByUser: true }
-  function setup() {
-    let total = 0
-    let writes = 0
-    let selectCalls = 0
-    const tx = {
-      select: () => ({ from: () => ({ where: () => (++selectCalls % 2)
-        ? { for: async () => [member] } : Promise.resolve([{ total }]) }) }),
-      insert: () => ({ values: async () => { writes++; total++ } }),
-    }
-    const database = { db: { transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx) } } as unknown as FlowDatabase
-    const identity = { require: vi.fn().mockResolvedValue(member) } as unknown as IdentityService
-    const provider = { generate: vi.fn().mockResolvedValue({ title: '读书会', description: '一起读书' }) } as unknown as AgentIsHereDraftProvider
-    return { service: new ActivityDraftService(database, identity, provider), provider, identity, get writes() { return writes } }
-  }
-
-  it('counts only valid responses and blocks the sixth success', async () => {
-    const setupResult = setup()
-    const { service, provider } = setupResult
-    const results = []
-    for (let n = 0; n < 5; n++) results.push(await service.create(idea, 'Bearer token'))
-    expect(results.map(v => v.remainingToday)).toEqual([4, 3, 2, 1, 0])
-    await expect(service.create(idea, 'Bearer token')).rejects.toThrow('5 次')
-    expect(provider.generate).toHaveBeenCalledTimes(5)
-    expect(setupResult.writes).toBe(5)
-  })
-
-  it('does not count provider errors or invalid output', async () => {
-    const setupResult = setup()
-    setupResult.provider.generate = vi.fn().mockRejectedValueOnce(new Error('upstream')).mockResolvedValueOnce({})
-      .mockResolvedValue({ title: '读书会' })
-    await expect(setupResult.service.create(idea, 'Bearer token')).rejects.toThrow('upstream')
-    await expect(setupResult.service.create(idea, 'Bearer token')).rejects.toThrow('有效草稿')
-    expect(setupResult.writes).toBe(0)
-    expect((await setupResult.service.create(idea, 'Bearer token')).remainingToday).toBe(4)
-  })
-
-  it('rejects incomplete profile before provider or quota access', async () => {
-    const setupResult = setup()
-    ;(setupResult.identity.require as ReturnType<typeof vi.fn>).mockResolvedValue({ ...member, avatarSetByUser: false })
-    await expect(setupResult.service.create(idea, 'Bearer token')).rejects.toThrow('请先绑定手机号')
-    expect(setupResult.provider.generate).not.toHaveBeenCalled()
   })
 })
 

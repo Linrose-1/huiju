@@ -2,10 +2,12 @@ import { refreshMember, ApiError } from '@/services/api'
 import { bootstrapIdentity } from '@/services/wechat'
 import { useSessionStore } from '@/stores/session'
 export const routes = {
+  circle: '/pages/circle/index', circleDetail: '/pages/circle/detail', circleEditor: '/pages/circle/editor', circleMine: '/pages/circle/mine', circleIntents: '/pages/circle/intents',
   feedback: '/pages/activity/feedback',
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',
   invitation: '/pages/invitation/index',
   activityDraft: '/pages/assistant/activity-draft',
+  activitySearch: '/pages/assistant/activity-search',
   editor: '/pages/activity/editor', manage: '/pages/activity/manage', organizedActivities: '/pages/activity/organized', notifications: '/pages/notification/index',
   activity: '/pages/activity/index', assistant: '/pages/assistant/index', mine: '/pages/mine/index',
   login: '/pages/login/index', detail: '/pages/activity/detail', form: '/pages/registration/form', result: '/pages/registration/detail', registrations: '/pages/registration/index'
@@ -21,6 +23,11 @@ export function navigate(url: string, replace = false) {
 export function loginPage(returnTo = '') {
   navigate(routes.login + (returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''))
 }
+export async function requireLogin(): Promise<boolean> {
+  try { await bootstrapIdentity(); return !!useSessionStore().token }
+  catch { return false }
+}
+export function searchLogin() { navigate(routes.login + '?mode=login&returnTo=' + encodeURIComponent(routes.activitySearch)) }
 export async function requireProfile(returnTo: string): Promise<boolean> {
   const store = useSessionStore()
   if (!store.token) {
@@ -47,9 +54,9 @@ export function finishProfile(returnTo: string) {
       return [key, value.join('=')]
     }))
     const sameContext = previous && '/' + previous.route === path
-      && ['id', 'edit'].every(key => (previous.options?.[key] || '') === (expected[key] || ''))
+      && ['id', 'edit', 'searchId', 'recommendationToken'].every(key => encodeURIComponent(previous.options?.[key] || '') === (expected[key] || ''))
     if (sameContext) { uni.navigateBack(); return }
-    if ([routes.activity, routes.assistant, routes.mine].includes(path)) uni.switchTab({ url: path })
+    if ([routes.activity, routes.circle, routes.assistant, routes.mine].includes(path)) uni.switchTab({ url: path })
     else navigate(returnTo, true)
   } else uni.switchTab({ url: routes.activity })
 }

@@ -1,11 +1,22 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL } from './environment'
-import type { Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
-import type { Member, Activity, Session, Registration, MyRegistration, RegistrationInput, PublicMember, ActivityWriteInput, ManagedActivity, OrganizerRegistration, ActivityNotification, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard } from './types'
+import type { ActivitySearchResult } from './types'
+import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
+import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 0) { super(message) }
 }
 export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : '暂时无法完成，请稍后重试' }
+const safeMessages: Record<string, string> = {
+  AI_GENERATION_IN_PROGRESS: '正在生成草稿，请等待本次生成完成',
+  AI_GENERATION_EXPIRED: '本次生成已超时，请手动重试',
+  AI_BUSY: '生成请求较多，请稍后手动重试'
+}
+export type { ActivityCounts } from './types'
+export type ListQuery = { offset?: number; limit?: number; status?: string }
+function listQuery(query: ListQuery = {}) {
+  return `offset=${query.offset ?? 0}&limit=${query.limit ?? 20}${query.status ? `&status=${encodeURIComponent(query.status)}` : ''}`
+}
 async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', data?: object, auth: boolean | 'none' = false, timeout = 15000): Promise<T> {
   const session = useSessionStore()
   if (session.token && Date.parse(session.expiresAt) <= Date.now()) session.clear()
@@ -23,7 +34,7 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET
           if (auth === false && token) { request<T>(path, method, data, false).then(resolve, reject); return }
         }
         if (response.statusCode >= 200 && response.statusCode < 300) resolve(response.data as T)
-        else reject(new ApiError(body.code || 'REQUEST_FAILED', typeof body.message === 'string' ? body.message : '请求未能完成，请稍后重试', response.statusCode))
+        else reject(new ApiError(body.code || 'REQUEST_FAILED', safeMessages[body.code || ''] || (typeof body.message === 'string' ? body.message : '请求未能完成，请稍后重试'), response.statusCode))
       }, fail() { reject(new ApiError('NETWORK_ERROR', '网络连接失败，请检查网络后重试')) }
     })
   })
@@ -49,6 +60,17 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  searchActivities: (input: { requestId: string; messages: string[] }) => request<ActivitySearchResult>('/ai/activity-searches', 'POST', input, true, 100000),
+  moreActivitySearch: (id: string, cursor: string) => request<ActivitySearchResult>(`/ai/activity-searches/${encodeURIComponent(id)}?cursor=${encodeURIComponent(cursor)}`, 'GET', undefined, true),
+  searchImpressions: (id: string, activityIds: string[]) => request<{ ok: boolean }>(`/ai/activity-searches/${encodeURIComponent(id)}/impressions`, 'POST', { activityIds }, true),
+  searchView: (id: string, activityId: string) => request<{ sourceToken: string | null }>(`/ai/activity-searches/${encodeURIComponent(id)}/views`, 'POST', { activityId }, true),
+  circlePosts: (query: { offset?: number; category?: string } = {}, mine = false) => request<CircleList>(`/circle/${mine ? 'mine' : 'posts'}?offset=${query.offset ?? 0}&limit=20&category=${encodeURIComponent(query.category || 'all')}`, 'GET', undefined, mine ? true : 'none'),
+  circlePost: (id: string, manage = false) => request<CirclePost>(`/circle/posts/${encodeURIComponent(id)}${manage ? '/manage' : ''}`, 'GET', undefined, manage ? true : false),
+  saveCirclePost: (input: CircleWriteInput, id = '') => request<CirclePost>(`/circle/posts${id ? '/' + encodeURIComponent(id) + '/edit' : ''}`, 'POST', input, true),
+  endCirclePost: (id: string) => request<{ ok: boolean }>(`/circle/posts/${encodeURIComponent(id)}/end`, 'POST', {}, true),
+  circleIntents: (id: string, offset = 0) => request<CircleIntentList>(`/circle/posts/${encodeURIComponent(id)}/intents?offset=${offset}&limit=20`, 'GET', undefined, true),
+  submitCircleIntent: (id: string, phone: string, requestId: string) => request<{ ok: boolean }>(`/circle/posts/${encodeURIComponent(id)}/intents`, 'POST', { phone, requestId }, true),
+  uploadCircleImage: (base64: string, mimeType: 'image/png' | 'image/jpeg') => request<CircleImage>('/circle/images', 'POST', { base64, mimeType }, true),
   generateActivityDraft: (idea: string) => request<AiActivityDraftResult>('/ai/activity-drafts', 'POST', { idea }, true, 100000),
   markAttendance: (id: string, registrationId: string) => request<Attendance>(`/activities/${encodeURIComponent(id)}/registrations/${encodeURIComponent(registrationId)}/attendance`, 'POST', {}, true),
   feedbackComments: (id: string, offset = 0, mine = false) => request<CommentList>(`/activities/${encodeURIComponent(id)}/comments${mine ? '/mine' : ''}?offset=${offset}`, 'GET', undefined, mine ? true : 'none'),
@@ -74,10 +96,10 @@ export const api = {
   updateActivity: (id: string, input: ActivityWriteInput) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/edit`, 'POST', input, true),
   publishActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/publish`, 'POST', {}, true),
   managedActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/manage`, 'GET', undefined, true),
-  organizedActivities: () => request<{items: ManagedActivity[]; hasMore: boolean; total: number}>('/members/me/activities', 'GET', undefined, true),
-  organizerRoster: (id: string) => request<{items: OrganizerRegistration[]}>(`/activities/${encodeURIComponent(id)}/registrations/manage`, 'GET', undefined, true),
+  organizedActivities: (query: ListQuery = {}) => request<ManagedActivityList>(`/members/me/activities?${listQuery(query)}`, 'GET', undefined, true),
+  organizerRoster: (id: string, query: ListQuery = {}) => request<OrganizerRoster>(`/activities/${encodeURIComponent(id)}/registrations/manage?${listQuery(query)}`, 'GET', undefined, true),
   cancelActivity: (id: string, reason: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/cancel`, 'POST', { reason }, true),
-  notifications: () => request<{items: ActivityNotification[]; hasMore: boolean; unreadCount: number}>('/members/me/notifications', 'GET', undefined, true),
+  notifications: (query: ListQuery = {}) => request<NotificationList>(`/members/me/notifications?${listQuery(query)}`, 'GET', undefined, true),
   readNotification: (id: string) => request<{ok: boolean}>(`/members/me/notifications/${encodeURIComponent(id)}/read`, 'POST', {}, true),
   login: (code: string, inviteCode?: string) => request<Session>('/auth/wechat/session', 'POST', { code, ...(inviteCode ? { inviteCode } : {}) }, 'none'),
   logout: () => request<{ ok: boolean }>('/auth/session', 'DELETE', undefined, true),
@@ -91,10 +113,10 @@ export const api = {
     return request<{items: Activity[]; hasMore: boolean}>(`/activities?${params.join('&')}`)
   },
   activity: (id: string) => request<Activity>(`/activities/${encodeURIComponent(id)}`),
-  roster: (id: string) => request<{items: PublicMember[]}>(`/activities/${encodeURIComponent(id)}/registrations`),
+  roster: (id: string, query: ListQuery = {}) => request<PublicRoster>(`/activities/${encodeURIComponent(id)}/registrations?${listQuery(query)}`),
   register: (id: string, input: RegistrationInput) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations`, 'POST', input, true),
   myRegistration: (id: string) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations/me`, 'GET', undefined, true),
   editRegistration: (id: string, answers: RegistrationInput['answers']) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations/me/answers`, 'POST', { answers }, true),
   cancel: (id: string) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations/me/cancel`, 'POST', {}, true),
-  registrations: () => request<{items: MyRegistration[]}>('/members/me/registrations', 'GET', undefined, true)
+  registrations: (query: ListQuery = {}) => request<RegistrationList>(`/members/me/registrations?${listQuery(query)}`, 'GET', undefined, true)
 }

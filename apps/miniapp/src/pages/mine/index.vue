@@ -19,7 +19,7 @@ async function load() {
     if (!isCurrent()) return
     const [registered, organized, notifications] = await Promise.all([api.registrations(), api.organizedActivities(), api.notifications()])
     if (!isCurrent()) return
-    count.value = registered.items.filter(item => item.status === 'active').length
+    count.value = registered.activeCount
     organizedCount.value = organized.total
     unreadCount.value = notifications.unreadCount
   } catch (e) { if (isCurrent()) error.value = errorMessage(e) }

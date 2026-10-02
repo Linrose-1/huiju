@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload, onShareAppMessage } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { ManagedActivity, OrganizerRegistration, ReadingStats } from '@/services/api/types'
 import { dateTime, fee, feeDisclaimer } from '@/services/presentation'
@@ -8,10 +8,14 @@ import { mediaUrl } from '@/services/api/environment'
 import { navigate, routes, loginPage } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
+import ListMore from '@/components/base/ListMore.vue'
 const session = useSessionStore()
 const id = ref(''), activity = ref<ManagedActivity | null>(null), roster = ref<OrganizerRegistration[]>([])
 const loading = ref(false), error = ref(''), actionError = ref(''), busy = ref(false), cancelling = ref(false), reason = ref(''), filter = ref('active'), expanded = ref('')
 const attendanceBusy = ref('')
+const rosterLoading = ref(false), rosterError = ref(''), rosterHasMore = ref(false), rosterMoreError = ref('')
+const attendanceCount = ref(0), activeCount = ref(0)
+let rosterOffset = 0, rosterGeneration = 0
 let generation = 0
 let shown = false
 const readingStats = ref<ReadingStats | null>(null), statsError = ref('')
@@ -25,6 +29,8 @@ function clear() {
   error.value = ''; actionError.value = ''; statsError.value = ''; reason.value = ''
   loading.value = false; busy.value = false; cancelling.value = false; expanded.value = ''
   attendanceBusy.value = ''
+  rosterGeneration++; rosterOffset = 0; rosterLoading.value = false; rosterError.value = ''; rosterMoreError.value = ''; rosterHasMore.value = false
+  attendanceCount.value = 0; activeCount.value = 0
 }
 async function loadStats() {
   if (!activity.value || !session.token) return
@@ -33,9 +39,8 @@ async function loadStats() {
   try { const result = await api.activityViewStats(activityId); if (active()) readingStats.value = result }
   catch (e) { if (active()) statsError.value = errorMessage(e) }
 }
-const visible = computed(() => roster.value.filter(item => filter.value === 'all' || item.status === filter.value))
+const visible = computed(() => roster.value)
 const attendanceAllowed = computed(() => activity.value?.lifecycle === 'published' && activity.value.moderation === 'normal')
-const attendanceCount = computed(() => roster.value.filter(item => item.status === 'active' && item.attended).length)
 const editable = computed(() => activity.value && activity.value.moderation === 'normal' && (activity.value.lifecycle === 'draft' || (activity.value.lifecycle === 'published' && Date.parse(activity.value.endsAt) > Date.now())))
 const cancellable = computed(() => activity.value?.lifecycle === 'published' && Date.parse(activity.value.startsAt) > Date.now())
 const state = computed(() => {
@@ -48,15 +53,40 @@ const state = computed(() => {
 async function load() {
   clear()
   const active = currentRequest(), activityId = id.value
-  if (!id.value) { error.value = '活动链接不完整'; return }
-  if (!session.token) { loading.value = false; return }
+  if (!id.value) { error.value = '活动链接不完整'; uni.stopPullDownRefresh(); return }
+  if (!session.token) { loading.value = false; uni.stopPullDownRefresh(); return }
   loading.value = true
   try {
-    const [detail, registrations] = await Promise.all([api.managedActivity(activityId), api.organizerRoster(activityId)])
-    if (active()) { activity.value = detail; roster.value = registrations.items; void loadStats() }
+    const [detail, registrations] = await Promise.all([api.managedActivity(activityId), api.organizerRoster(activityId, { offset: 0, status: filter.value })])
+    if (active()) {
+      activity.value = detail; roster.value = registrations.items; rosterOffset = registrations.items.length
+      rosterHasMore.value = registrations.hasMore; attendanceCount.value = registrations.attendedCount; activeCount.value = registrations.activeCount
+      void loadStats()
+    }
   } catch (e) { if (active()) error.value = errorMessage(e) }
-  finally { if (active()) loading.value = false }
+  finally { if (active()) { loading.value = false; uni.stopPullDownRefresh() } }
 }
+async function loadRoster(more = false) {
+  if (!activity.value || !session.token || loading.value || busy.value) return
+  if (more && (rosterLoading.value || !rosterHasMore.value || rosterMoreError.value || rosterError.value)) return
+  if (!more) { rosterGeneration++; rosterOffset = 0; roster.value = []; rosterHasMore.value = false; rosterError.value = ''; rosterMoreError.value = ''; expanded.value = '' }
+  const active = currentRequest(), request = rosterGeneration, activityId = id.value
+  const current = () => active() && request === rosterGeneration
+  rosterLoading.value = true
+  try {
+    const result = await api.organizerRoster(activityId, { offset: rosterOffset, status: filter.value })
+    if (!current()) return
+    rosterOffset += result.items.length
+    const known = new Set(roster.value.map(item => item.id))
+    roster.value.push(...result.items.filter(item => !known.has(item.id)))
+    rosterHasMore.value = result.hasMore; attendanceCount.value = result.attendedCount; activeCount.value = result.activeCount
+  } catch (e) { if (current()) { if (more) rosterMoreError.value = errorMessage(e); else rosterError.value = errorMessage(e) } }
+  finally { if (current()) rosterLoading.value = false }
+}
+function selectFilter(value: string) {
+  if (filter.value !== value && !busy.value && !loading.value) { filter.value = value; void loadRoster() }
+}
+function retryRosterMore() { rosterMoreError.value = ''; void loadRoster(true) }
 async function publish() {
   if (busy.value || !session.token || activity.value?.lifecycle !== 'draft') return
   const active = currentRequest(), activityId = id.value
@@ -103,6 +133,8 @@ onLoad(options => { id.value = String(options?.id || '') })
 onShow(() => { shown = true; void load() })
 onHide(() => { shown = false; clear() })
 onUnload(() => { shown = false; clear(); stop() })
+onReachBottom(() => loadRoster(true))
+onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void load() })
 onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path: routes.detail+'?id='+encodeURIComponent(id.value)+(session.member?.inviteCode?'&inviteCode='+encodeURIComponent(session.member.inviteCode):'') }))
 </script>
 <template>
@@ -211,7 +243,7 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
           </view>
         </view>
         <view class="card">
-          <view class="row between"><view class="section-title">报名名单</view><text class="muted small">{{ activity.lifecycle==='cancelled'?'取消前报名':'当前有效' }} {{ activity.cancellationRegistrationCount ?? activity.activeRegistrationCount }} 人</text></view>
+          <view class="row between"><view class="section-title">报名名单</view><text class="muted small">{{ activity.lifecycle==='cancelled'?'取消前报名':'当前有效' }} {{ activity.lifecycle==='cancelled' ? activity.cancellationRegistrationCount : activeCount }} 人</text></view>
           <view class="muted small">已到场 {{ attendanceCount }} 人</view>
           <view class="notice">联系手机号和回答仅用于本次活动组织，请妥善保管。</view>
           <view class="filters">
@@ -219,13 +251,19 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
               v-for="option in [{value:'active',label:'有效报名'},{value:'cancelled',label:'已取消报名'},{value:'all',label:'全部'}]"
               :key="option.value"
               :class="filter===option.value?'primary':'secondary'"
-              @click="filter=option.value"
+              :disabled="busy || loading"
+              @click="selectFilter(option.value)"
             >
               {{ option.label }}
             </button>
           </view>
+          <RequestState
+            :loading="rosterLoading && !roster.length"
+            :error="rosterError"
+            @retry="loadRoster()"
+          />
           <view
-            v-if="!visible.length"
+            v-if="!rosterLoading && !rosterError && !visible.length"
             class="empty"
           >
             暂无对应报名记录
@@ -287,6 +325,14 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
               </view>
             </view>
           </view>
+          <ListMore
+            v-if="!rosterError"
+            :loading="rosterLoading && !!roster.length"
+            :error="rosterMoreError"
+            :has-more="rosterHasMore"
+            :has-items="!!roster.length"
+            @retry="retryRosterMore"
+          />
         </view>
         <view
           v-if="cancellable"

@@ -4,6 +4,14 @@
 
 ## 最小验证矩阵
 
+2026-10-02智能活动推荐新增 `recommendation-provider.spec.ts`（模型载荷白名单与输出校验）、`recommendation-contract.spec.ts`（HTTP DTO／应用装配）、`recommendation-records.spec.ts`（额度、幂等、跨日、来源及清理）、`recommendation-service.spec.ts`（编排、隐私和分页）与 `recommendation-registration.spec.ts`（既有报名事务接入）。小程序 `activity-search.test.mjs` 覆盖登录、会话、展示、分页、重试与来源传递；`scripts/recommendation-cleanup.test.mjs` 覆盖维护命令的拒绝执行边界。全部使用替身或纯逻辑，不加载开发数据库凭据、不调用真实模型；实际运行结果见[10月实现记录](../implementation-log/2026-10.md)。
+
+推荐 `0009` 迁移仅生成，后续L2需要单独授权的隔离MySQL验证：多连接抢占／完成额度、跨日边界、事件与报名并发锁序、转换失败回滚、过期清理及普通报名兼容；真实模型质量、微信曝光回调与资料返回、真机及部署分别验收。不得将上述替身测试当成MySQL锁行为或推荐质量证明。
+
+2026-09-30 收口验证：`pagination.spec.ts` 覆盖五类列表的分页、完整范围筛选与全量统计；`activity-moderation.spec.ts` 以真实服务/HTTP 装配和数据库替身覆盖后台角色、CSRF、原因校验、下架/恢复幂等、通知失败传播和分页。`modules.spec.ts` 不监听端口、不访问数据库，检查模块单实例、路由以及 local-test override。小程序 `remaining-pagination.test.mjs`（及既有页面测试）覆盖多页、失败保留/重试、筛选重置、全量统计、换身份与迟到响应；以上均属 L1。
+
+AI `ai-draft-reservation.spec.ts` 验证调用模型时没有活动事务、跨服务实例竞争、五次成功上限、失败释放、租期与跨日。`ai-draft-database.spec.ts` 默认跳过；只有单独授权的已迁移隔离库 `127.0.0.1:3306/huiju_ai_test` 才接受 `HUIJU_DB_TEST=ai-concurrency` 与显式 `TEST_DATABASE_URL`，不读取开发 `.env`、不建库或迁移、不调用真实模型。2026-09-30 已获授权创建该隔离库并应用 `0000–0007`，显式运行此多连接测试 1 项通过，夹具无残留；不代表真实模型或其他环境通过。后台活动下架/恢复已在该库完成本地浏览器、API 与数据库链路验收；小程序多页/弱网和旧分享页面仍需微信工具验收。
+
 | 改动 | 推荐检查 | 不能据此证明 |
 | --- | --- | --- |
 | 纯文档、规则 | 引用路径与事实核对、`git diff --check` | 实现、接口、部署已完成 |
@@ -110,3 +118,10 @@
 2026-09-28 后续验收：超管已初始化并经用户实际改密进入后台；随后按用户要求取消强制改密，保留主动修改。普通运营已在浏览器隐藏测试评论与点评，数据库核对隐藏状态、原因及审计快照一致。账号停用浏览器验收仍暂缓；后台会员查询实际只读服务验证通过，页面完整浏览器交互与视觉未验收，详见当月实现日志。
 
 - `apps/api/test/admin-members.spec.ts`：后台两角色查看权限、匿名／会员身份拒绝、只读响应白名单、分页搜索过滤与输入校验；数据库替身不计真实 SQL 证据。
+
+## 学友圈验证
+
+- circle.spec.ts/circle-http.spec.ts：普通29项，覆盖字段、资料门槛、作者权限、电话白名单、图片ID、分页、状态、幂等和HTTP DTO/后台匿名拒绝；数据库替身不证明SQL。
+- circle-database.spec.ts：仅 HUIJU_DB_TEST=circle-isolated 且 TEST_DATABASE_URL 严格为本机127.0.0.1:3306/huiju_circle_test_20260930时运行。使用真实会话夹具和数据库，临时回环HTTP实例，无微信/模型外部调用；测试清理仅本次UUID记录与本次临时图片目录，不建库或迁移。普通test跳过，跳过不计通过。
+- apps/api/scripts/circle-isolated-test.mjs --prepare-and-run：仅在明确授权下从核对过的本机开发库凭据新建上述不存在的隔离库并迁移，然后显式运行测试。已有同名库时拒绝自动替换或复用；开发库只读比较表数量/校验和，不执行0008。2026-09-30运行1项通过，夹具清理后学友圈业务记录0，隔离库保留。
+- 页面、微信分享/资料返回、选图、键盘、安全区和真机尚未验收；随前端接入后更新实际证据。

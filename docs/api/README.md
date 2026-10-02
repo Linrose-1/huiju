@@ -1,10 +1,24 @@
 # API 契约
 
+## 智能活动推荐
+
+有效会员会话即可使用，无需完整资料；推荐成功每天10次与草拟分账，按完成时北京时间计次。规则见[专项需求](../product/智能活动推荐.md)，事务、隐私、过期及归因见[技术方案](../architecture/activity-recommendation.md)。实现与环境启用分开记录；本轮不执行迁移或真实付费模型调用。
+
+| 方法与路径（均带 `/api/v1`） | 输入与用途 |
+| --- | --- |
+| `POST /ai/activity-searches` | `{ requestId: UUID, messages: string[] }`，1–12条用户输入，每条1–2000字符、总计最多8000字符；同标识同内容回读完成结果，不重复计次 |
+| `GET /ai/activity-searches/:id?cursor=…` | 本人30分钟内的结果，每批最多3条；不调用模型、不计次 |
+| `POST /ai/activity-searches/:id/impressions` | `{ activityIds: UUID[] }`，1–3个已下发且客户端实际展示的活动；重复上报幂等 |
+| `POST /ai/activity-searches/:id/views` | `{ activityId: UUID }`，直接进入且成功加载详情后调用；返回 `{ sourceToken: string \| null }` |
+| `POST /activities/:id/registrations` | 原报名输入新增可选 `recommendationToken`；有效来源在真实报名事务内记录转化，无效来源不改变报名资格 |
+
+检索／续页返回 `status: results \| clarify`、`searchId`、`conditions`、`question`、`items`、`cursor`、`hasMore`、`remainingToday` 和 `expiresAt`。无匹配的正常 `results` 计一次；澄清、失败与翻页不计。结果和直接来源30分钟有效，效果明细保留90天；原始对话不落库。归因不接受客户端提供会员ID、剩余额度或活动排序。
+
 ## AI 活动草拟
 
 `POST /api/v1/ai/activity-drafts` 使用会员 Bearer 会话，提交 `{ "idea": "活动想法" }`。服务端为调用安全限制输入为 1–5000 字，这不是产品定义的输入体验上限。服务端要求手机号、用户主动设置的头像与名称均齐备。成功返回 `draft`、`missingFields` 和 `remainingToday`；`draft` 包含 `title`、`description`、`startsAt`、`endsAt`、`location`、`capacity`、`feeType`、`feeAmountCents`、`registrationDeadline` 和 `questions`。不确定的候选字段为 `null`，问题的 `type`、`required`、`options` 也可为 `null`；`coverUrl` 与 `consultationContact` 必须由用户填写。日期候选是带时区解析后的 UTC ISO 字符串。
 
-按会员北京时间自然日最多返回 5 份有效草稿；失败不计次。`AI_DAILY_LIMIT` 为 HTTP 429，`AI_NOT_CONFIGURED` 为 503，`AI_GENERATION_FAILED` 为 502，`AI_TIMEOUT` 为 504；资料不完整为 `PROFILE_INCOMPLETE`。草拟接口不创建活动，也不保存原文或模型原始回复。部署前需配置 `AI_PROVIDER=agentishere`、`AI_BASE_URL` 与仅后端可见的 `AI_API_KEY`，并在明确授权后应用 `0006` 迁移；未应用迁移时接口不可用。
+按会员北京时间自然日最多返回 5 份有效草稿；失败不计次。`AI_DAILY_LIMIT` 为 HTTP 429，`AI_NOT_CONFIGURED` 为 503，`AI_GENERATION_FAILED` 为 502，`AI_TIMEOUT` 为 504；资料不完整为 `PROFILE_INCOMPLETE`。草拟接口不创建活动，也不保存原文或模型原始回复。部署前需配置 `AI_PROVIDER=agentishere`、`AI_BASE_URL` 与仅后端可见的 `AI_API_KEY`，并在目标环境应用 `0006` 与 `0007` 迁移；未应用所需迁移时新接口实现不可用。`0007` 已在本机开发库获授权执行，其他环境须分别确认。新增 `AI_GENERATION_IN_PROGRESS`（409，已有生成）、`AI_GENERATION_EXPIRED`（409，预留过期）、`AI_BUSY`（429，当前生成并发已满）。次数按成功确认日统计，外部调用位于事务外，详见技术设计。
 
 本地验证更新（2026-09-30）：`0006` 已于 2026-09-29 获授权应用于本机开发库，真实模型及微信工具模拟身份的生成→编辑页回填链路已通过；未保存或发布测试活动。真实微信、真机与真实库并发限额未验收，详见[技术设计](../architecture/ai-activity-draft.md)及[实现日志](../implementation-log/2026-09.md)。此状态不代表其他环境已配置或迁移。
 
@@ -35,7 +49,7 @@
 
 微信小程序请求使用上表 POST 修改入口，避免依赖不受 `uni.request` 微信端支持的 PATCH 方法。两种入口使用同一 DTO、认证和业务服务，不存在宽松的专用权限通道。
 
-活动 `registrationState` 为 `open`、`closed`、`full`、`cancelled`、`removed`；本人修改答案以报名截止为界，取消报名以活动开始为界。公开 `organizer` 仅含 `memberId`、`avatarUrl`、`displayName`，下架活动返回 `null`。活动咨询联系方式只返回给发起人或曾成功报名的会员，包括本人取消报名后的会员。公开活动列表每页10条，公开报名名单上限为 200 条。
+活动 `registrationState` 为 `open`、`closed`、`full`、`cancelled`、`removed`；本人修改答案以报名截止为界，取消报名以活动开始为界。公开 `organizer` 仅含 `memberId`、`avatarUrl`、`displayName`，下架活动返回 `null`。活动咨询联系方式只返回给发起人或曾成功报名的会员，包括本人取消报名后的会员。公开活动列表每页10条；公开报名名单已支持 `offset/limit`，不再截断于前 200 条。
 
 ### 发起人与站内通知接口
 
@@ -46,14 +60,24 @@
 | `POST /activities` | 完整填写必填字段及问题后保存草稿，需完整资料 |
 | `POST /activities/:id/edit` | 发起人保存编辑；已有报名后题目和收费永久锁定 |
 | `POST /activities/:id/publish` | 发布草稿，再次校验资料、时间和必填信息；重复发布幂等 |
-| `GET /members/me/activities` | 本人最近创建的100场活动，`hasMore`说明是否还有更早记录 |
+| `GET /members/me/activities` | 本人活动分页，支持服务端状态筛选和全量分类数量 |
 | `GET /activities/:id/manage` | 本人活动完整管理信息，包括草稿、生命周期和锁定状态 |
 | `GET /activities/:id/registrations/manage` | 发起人查看报名记录、当次联系方式及自定义答案；含已取消报名 |
 | `POST /activities/:id/cancel` | 开始前取消并提交reason；快照、操作记录、当前报名者通知同事务 |
-| `GET /members/me/notifications` | 本人最近100条站内通知，带`hasMore` |
+| `GET /members/me/notifications` | 本人站内通知分页，`unreadCount`统计全部未读，带`hasMore/total` |
 | `POST /members/me/notifications/:id/read` | 本人通知标记已读，重复操作保留首次已读时间 |
 
-活动写入使用`ActivityWriteInput`完整载荷。题目ID由服务端生成，新建不传ID；编辑既有题目保留ID。保存草稿同样要求完整必填字段。已发布活动开始后只允许修改咨询联系方式，结束后不允许编辑；过期草稿可重新设置未来时间后发布。取消或下架活动不可编辑。联系方式变化为当前有效报名者写入站内通知，不把联系方式直接放入通知内容。活动问题、取消与报名共用活动行锁，首笔报名后即使报名全部取消也不解锁。签到、阅读统计和评论审核接口见下文；后台活动上下架尚未实现。
+活动写入使用`ActivityWriteInput`完整载荷。题目ID由服务端生成，新建不传ID；编辑既有题目保留ID。保存草稿同样要求完整必填字段。已发布活动开始后只允许修改咨询联系方式，结束后不允许编辑；过期草稿可重新设置未来时间后发布。取消或下架活动不可编辑。联系方式变化为当前有效报名者写入站内通知，不把联系方式直接放入通知内容。活动问题、取消与报名共用活动行锁，首笔报名后即使报名全部取消也不解锁。签到、阅读统计和评论审核接口见下文；后台活动下架/恢复入口与分层验证见下节。
+
+### 本轮列表分页
+
+公开报名名单、我的报名、我发起的、发起人私密名单、通知均支持 `offset`（默认 0）和 `limit`（默认 20、最大 100），返回 `items/hasMore/total`。使用时间和唯一 ID 稳定排序。我的报名和我发起的支持 `status` 分类，返回未受分页/筛选截断的 `counts`；`total` 表示所有分类总数，当前分类总数读 `counts[status]`。报名列表另返全量 `activeCount`。私密名单支持 `all/active/cancelled`，另返全量有效、取消、到场数，取消活动到场数为 0；问题答案按当前页批量查询。小程序触底追加，刷新或切换筛选重置第一页，追加失败保留内容，需显式重试。后台表格继续使用明确翻页。
+
+### 后台活动下架与恢复
+
+两类后台角色均可调用，会员会话不可替代后台 Cookie。`GET /admin/activities?status=all|normal|removed&q=标题&offset=0` 每页 20 条，返回非草稿活动的内容、状态、总数和后续页标识。`GET /admin/activities/:id/operations?offset=0` 每页 20 条返回下架/恢复原因、操作者和时间。查询不写数据库。
+
+`POST /admin/activities/:id/remove` 与 `/restore` 均提交 `{reason}`（去空白后 1–1000 字），要求 Cookie、正确 Origin 和 `X-CSRF-Token`。后台服务核对账号与会话，活动模块锁活动行后只修改 moderation 轴，同事务写操作记录及当前有效报名者的站内通知。重复目标状态不重复留痕/通知；草稿拒绝；恢复不修改生命周期、时间、名额或报名记录。后台不增加签到或代取消权限。接口/替身测试属于 L1，真实数据库及浏览器验收另行记录。
 
 ### 活动封面上传
 
@@ -130,3 +154,11 @@
 2026-09-28：本人发起活动列表 GET /members/me/activities 增加 total，统计该会员全部活动（含草稿等状态）；items仍最多100条，供我的页展示准确总数。
 
 2026-09-28：站内通知列表增加 unreadCount，统计当前会员全部 readAt 为空的通知，不受列表最多100条限制。我的页进入或返回时刷新该值，正数显示红色数量角标（超过99显示99+），零时隐藏。
+
+## 学友圈核心接口（2026-09-30 后端阶段）
+
+前缀 /api/v1：GET /circle/posts（category/offset/limit，匿名）、GET /circle/posts/:id（匿名/可选会话）、GET /circle/mine、GET /circle/posts/:id/manage、POST /circle/posts、POST /circle/posts/:id/edit、POST /circle/posts/:id/end、POST /circle/posts/:id/intents、GET /circle/posts/:id/intents、POST /circle/images、GET /circle/images/:id。
+
+写入帖子使用 CircleWriteInput，意向须明确 phone + requestId。公开接口不返回联系电话；意向列表仅作者可读。图片上传复用 AvatarInput 解码约束，发帖仅接受0–6个本人 imageIds。
+
+后台 GET /admin/circle/posts、GET /admin/circle/posts/:id/operations，以及 POST /admin/circle/posts/:id/remove|restore。处置须 reason、既有后台会话、精确 Origin 和 CSRF，操作与记录同事务；通知、举报未实现。OpenAPI 和 api-client 已生成并比较一致。开发库尚未执行0008，因此页面接入前不能视为当前3001服务已支持这些表。

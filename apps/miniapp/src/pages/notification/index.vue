@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
 import type { ActivityNotification } from '@/services/api/types'
 import { dateTime } from '@/services/presentation'
 import { navigate, routes, loginPage } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
+import ListMore from '@/components/base/ListMore.vue'
 const session = useSessionStore()
 const items = ref<ActivityNotification[]>([]), loading = ref(false), error = ref(''), actionError = ref(''), busy = ref(false), hasMore = ref(false)
+const loadingMore = ref(false), moreError = ref('')
+let offset = 0
 let generation = 0
 let shown = false
 function currentRequest() {
@@ -18,19 +21,34 @@ function currentRequest() {
 function clear() {
   generation++
   items.value = []; error.value = ''; actionError.value = ''; hasMore.value = false
-  loading.value = false; busy.value = false
+  loading.value = false; busy.value = false; loadingMore.value = false; moreError.value = ''; offset = 0
 }
 async function load() {
   clear()
   const active = currentRequest()
-  if (!session.token) { loading.value = false; return }
+  if (!session.token) { loading.value = false; uni.stopPullDownRefresh(); return }
   loading.value = true
   try {
-    const result = await api.notifications()
-    if (active()) { items.value = result.items; hasMore.value = result.hasMore }
+    const result = await api.notifications({ offset: 0 })
+    if (active()) { items.value = result.items; hasMore.value = result.hasMore; offset = result.items.length }
   } catch (e) { if (active()) error.value = errorMessage(e) }
-  finally { if (active()) loading.value = false }
+  finally { if (active()) { loading.value = false; uni.stopPullDownRefresh() } }
 }
+async function more() {
+  if (loading.value || loadingMore.value || error.value || moreError.value || !hasMore.value || !session.token) return
+  const active = currentRequest()
+  loadingMore.value = true
+  try {
+    const result = await api.notifications({ offset })
+    if (!active()) return
+    offset += result.items.length
+    const known = new Set(items.value.map(item => item.id))
+    items.value.push(...result.items.filter(item => !known.has(item.id)))
+    hasMore.value = result.hasMore
+  } catch (e) { if (active()) moreError.value = errorMessage(e) }
+  finally { if (active()) loadingMore.value = false }
+}
+function retryMore() { moreError.value = ''; void more() }
 async function open(item: ActivityNotification) {
   if (busy.value || !session.token || !items.value.includes(item)) return
   const active = currentRequest(), activityId = item.activityId
@@ -49,6 +67,8 @@ const stop = watch(() => [session.token, session.epoch], () => { clear(); if (sh
 onShow(() => { shown = true; void load() })
 onHide(() => { shown = false; clear() })
 onUnload(() => { shown = false; clear(); stop() })
+onReachBottom(more)
+onPullDownRefresh(load)
 </script>
 <template>
   <view class="page-pad notifications-page">
@@ -119,12 +139,13 @@ onUnload(() => { shown = false; clear(); stop() })
             </view>
           </view>
         </view>
-        <view
-          v-if="hasMore"
-          class="muted small"
-        >
-          当前显示最近 100 条通知。
-        </view>
+        <ListMore
+          :loading="loadingMore"
+          :error="moreError"
+          :has-more="hasMore"
+          :has-items="!!items.length"
+          @retry="retryMore"
+        />
       </template>
     </template>
   </view>

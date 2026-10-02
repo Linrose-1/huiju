@@ -8,3 +8,11 @@ export const aiActivityDraftUsages = mysqlTable('ai_activity_draft_usages', {
   memberId: char('member_id', { length: 36 }).notNull().references(() => members.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
   createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
 }, table => [index('ai_activity_draft_usages_member_created_idx').on(table.memberId, table.createdAt)])
+
+// One short-lived reservation per member; tokens fence off expired provider calls.
+export const aiActivityDraftReservations = mysqlTable('ai_activity_draft_reservations', {
+  memberId: char('member_id', { length: 36 }).primaryKey().references(() => members.id, { onDelete: 'restrict', onUpdate: 'restrict' }),
+  reservationId: char('reservation_id', { length: 36 }).notNull(),
+  createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+  expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
+})

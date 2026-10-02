@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   gt,
@@ -17,6 +18,8 @@ import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
 import { ActivityDto, AnswerInput, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
 import { ActivityListQuery } from './activity-list-dto.js'
+import { PageQuery, MyRegistrationQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
+import { RecommendationRecordsService } from '../recommendations/records.js'
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
 
@@ -74,7 +77,8 @@ export function validateAnswers(questions: Question[], answers: AnswerInput[]) {
 export class ActivityService {
   constructor(
     private readonly database: FlowDatabase,
-    private readonly identity: IdentityService
+    private readonly identity: IdentityService,
+    private readonly recommendations: RecommendationRecordsService = new RecommendationRecordsService(database)
   ) {}
 
   private async present(activity: Activity, memberId?: string): Promise<ActivityDto> {
@@ -194,7 +198,7 @@ export class ActivityService {
     return this.present(activity, member?.id)
   }
 
-  async roster(id: string) {
+  async roster(id: string, query: PageQuery = new PageQuery()) {
     await this.detail(id)
     const [activity] = await this.database.db
       .select()
@@ -202,7 +206,7 @@ export class ActivityService {
       .where(eq(activities.id, id))
       .limit(1)
     if (activity.moderation === 'removed') {
-      return { items: [] }
+      return { items: [], total: 0, hasMore: false }
     }
     const rows = await this.database.db
       .select({
@@ -212,12 +216,15 @@ export class ActivityService {
       .from(registrations)
       .innerJoin(members, eq(members.id, registrations.memberId))
       .where(and(eq(registrations.activityId, id), eq(registrations.status, 'active')))
-      .limit(200)
-    return { items: rows }
+      .orderBy(desc(registrations.currentRegisteredAt), desc(registrations.id))
+      .limit(query.limit + 1).offset(query.offset)
+    const [total] = await this.database.db.select({ value: count() }).from(registrations)
+      .where(and(eq(registrations.activityId, id), eq(registrations.status, 'active')))
+    return { items: rows.slice(0, query.limit), total: Number(total!.value), hasMore: rows.length > query.limit }
   }
 
-  private async registrationDto(row: typeof registrations.$inferSelect): Promise<RegistrationDto> {
-    const answers = await this.database.db
+  private async registrationDto(row: typeof registrations.$inferSelect, knownAnswers?: RegistrationDto['answers']): Promise<RegistrationDto> {
+    const answers = knownAnswers ?? await this.database.db
       .select({
         questionId: registrationAnswers.questionId,
         value: registrationAnswers.answer
@@ -248,8 +255,15 @@ export class ActivityService {
     return this.registrationDto(row)
   }
 
-  async allMine(header?: string) {
+  async allMine(header?: string, query: MyRegistrationQuery = new MyRegistrationQuery()) {
     const member = (await this.identity.require(header))!
+    const status = activityStatusSql(true)
+    const where = eq(registrations.memberId, member.id)
+    const totals = await this.database.db.select({ status, value: count() }).from(registrations)
+      .innerJoin(activities, eq(activities.id, registrations.activityId)).where(where).groupBy(status)
+    const counts = activityCounts(totals)
+    const [active] = await this.database.db.select({ value: count() }).from(registrations)
+      .where(and(where, eq(registrations.status, 'active')))
     const rows = await this.database.db
       .select({
         registration: registrations,
@@ -257,12 +271,15 @@ export class ActivityService {
       })
       .from(registrations)
       .innerJoin(activities, eq(activities.id, registrations.activityId))
-      .where(eq(registrations.memberId, member.id))
-      .orderBy(desc(registrations.currentRegisteredAt))
-      .limit(100)
+      .where(and(where, query.status !== 'all' ? sql`${status} = ${query.status}` : undefined))
+      .orderBy(desc(registrations.currentRegisteredAt), desc(registrations.id))
+      .limit(query.limit + 1).offset(query.offset)
+    const page = rows.slice(0, query.limit)
+    const answers = await answersForRegistrations(this.database.db, page.map(row => row.registration.id))
     return {
-      items: await Promise.all(rows.map(async (row) => ({
-        ...await this.registrationDto(row.registration),
+      hasMore: rows.length > query.limit, total: counts.all, counts, activeCount: Number(active!.value),
+      items: await Promise.all(page.map(async (row) => ({
+        ...await this.registrationDto(row.registration, answers.get(row.registration.id) ?? []),
         activity: await this.present(row.activity, member.id)
       })))
     }
@@ -387,14 +404,17 @@ export class ActivityService {
             hasRegistrationEver: true
           })
           .where(eq(activities.id, id))
+        const operationId = randomUUID()
         await tx
           .insert(registrationOperations)
           .values({
-            id: randomUUID(),
+            id: operationId,
             registrationId,
             actorMemberId: member.id,
             action: existing ? 'reregistered' : 'registered'
           })
+        const sourceToken = (input as RegistrationInput).recommendationToken
+        if (sourceToken) await this.recommendations.conversion(tx, sourceToken, member.id, activity.id, operationId)
       }
       await tx
         .delete(registrationAnswers)

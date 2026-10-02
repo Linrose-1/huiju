@@ -6,10 +6,12 @@ export type AdminAccount = components['schemas']['AdminAccountDto']
 export type MemberSummary = components['schemas']['AdminMemberSummaryDto']
 export type MemberDetail = components['schemas']['AdminMemberDetailDto']
 export type FeedbackItem = components['schemas']['ModerationItemDto']
+export type AdminActivity = components['schemas']['AdminActivityDto']
+export type ActivityOperation = components['schemas']['ActivityModerationOperationDto']
 type AdminSession = components['schemas']['AdminSessionDto']
 
 const client = createApiClient('')
-export const session = reactive({ account: null as AdminAccount | null, csrfToken: '', epoch: 0 })
+export const session = reactive({ account: null as AdminAccount | null, csrfToken: '', epoch: 0, initialized: false })
 export const isSuperAdmin = computed(() => session.account?.role === 'super_admin')
 export function clearSession() {
   session.epoch += 1
@@ -74,6 +76,14 @@ export const adminApi = {
   },
   members: (query: { q?: string; profile?: 'all' | 'complete' | 'incomplete'; inviterId?: string; offset: number }) => unwrap(client.GET('/api/v1/admin/members', { ...options(), params: { query } })),
   member: (id: string) => unwrap(client.GET('/api/v1/admin/members/{id}', { ...options(), params: { path: { id } } })),
+  activities: (query: { status: 'all' | 'normal' | 'removed'; q?: string; offset: number }) => unwrap(client.GET('/api/v1/admin/activities', { ...options(), params: { query } })),
+  activityOperations: (id: string, offset: number) => unwrap(client.GET('/api/v1/admin/activities/{id}/operations', { ...options(), params: { path: { id }, query: { offset } } })),
+  removeActivity: (id: string, reason: string) => unwrap(client.POST('/api/v1/admin/activities/{id}/remove', {
+    ...options(), params: { path: { id }, header: csrfHeader() }, body: { reason },
+  })),
+  restoreActivity: (id: string, reason: string) => unwrap(client.POST('/api/v1/admin/activities/{id}/restore', {
+    ...options(), params: { path: { id }, header: csrfHeader() }, body: { reason },
+  })),
   accounts: () => unwrap(client.GET('/api/v1/admin/accounts', options())),
   createAccount: (username: string, displayName: string, temporaryPassword: string) => unwrap(client.POST('/api/v1/admin/accounts', {
     ...options(), params: { header: csrfHeader() }, body: { username, displayName, temporaryPassword },

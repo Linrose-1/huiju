@@ -19,6 +19,8 @@ async function restore() {
     if (!(error instanceof AdminRequestError && error.status === 401)) startupError.value = errorMessage(error)
   }
   if (!startupError.value) {
+    await router.isReady()
+    session.initialized = true
     await router.replace(allowedRoute(route.path) ?? route.path)
     ready.value = true
   }
@@ -101,6 +103,9 @@ onMounted(restore)
         </router-link>
         <router-link to="/feedback">
           评论与点评
+        </router-link>
+        <router-link to="/activities">
+          活动管理
         </router-link>
         <router-link
           v-if="isSuperAdmin"

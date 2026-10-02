@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
 import type { Activity, Comment, Review, FeedbackContext, ReviewStats } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -8,6 +8,7 @@ import { dateTime, activityTimeRangeWeekday } from '@/services/presentation'
 import { routes, loginPage } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
+import ListMore from '@/components/base/ListMore.vue'
 const session = useSessionStore()
 const id = ref(''), activity = ref<Activity | null>(null), context = ref<FeedbackContext | null>(null), stats = ref<ReviewStats | null>(null)
 const tab = ref<'comment' | 'review'>('comment'), mine = ref(false), items = ref<(Comment | Review)[]>([])
@@ -33,7 +34,7 @@ function clear() {
 }
 async function load() {
     clear()
-    if (!id.value) { error.value = '活动链接不完整'; return }
+    if (!id.value) { error.value = '活动链接不完整'; uni.stopPullDownRefresh(); return }
     const active = currentRequest(); loading.value = true
     try {
         const [nextActivity, nextContext, comments, reviews] = await Promise.all([
@@ -46,7 +47,7 @@ async function load() {
         items.value = list.items; offset = list.items.length; hasMore.value = list.hasMore
         if (nextContext.isOrganizer) void loadStats()
     } catch (e) { if (active()) error.value = errorMessage(e) }
-    finally { if (active()) loading.value = false }
+    finally { if (active()) { loading.value = false; uni.stopPullDownRefresh() } }
 }
 async function loadStats() {
     if (!context.value?.isOrganizer || statsLoading.value) return
@@ -56,7 +57,7 @@ async function loadStats() {
     finally { if (active()) statsLoading.value = false }
 }
 async function more() {
-    if (loading.value || loadingMore.value || !hasMore.value) return
+    if (loading.value || loadingMore.value || error.value || listError.value || !hasMore.value) return
     const active = currentRequest(), selected = tab.value; loadingMore.value = true; listError.value = ''
     try {
         const result = selected === 'comment' ? await api.feedbackComments(id.value, offset, mine.value) : await api.feedbackReviews(id.value, offset)
@@ -67,6 +68,7 @@ async function more() {
     } catch (e) { if (active()) listError.value = errorMessage(e) }
     finally { if (active()) loadingMore.value = false }
 }
+function retryMore() { listError.value = ''; void more() }
 function selectTab(value: 'comment' | 'review') { if (tab.value !== value && !busy.value) { tab.value = value; void load() } }
 function toggleMine() { if (!busy.value) { mine.value = !mine.value; void load() } }
 function openEditor(value: 'comment' | 'review', item?: Comment | Review) {
@@ -114,6 +116,8 @@ onLoad(options => { id.value = String(options?.id || '') })
 onShow(() => { visible = true; void load() })
 onHide(() => { visible = false; clear() })
 onUnload(() => { visible = false; clear(); stop() })
+onReachBottom(more)
+onPullDownRefresh(() => { if (busy.value || editor.value) uni.stopPullDownRefresh(); else void load() })
 </script>
 <template>
   <view class="feedback-page">
@@ -264,20 +268,13 @@ onUnload(() => { visible = false; clear(); stop() })
           {{ tab==='comment'?(mine?'还没有发表过评论':'暂无评论，来聊聊这场活动吧'):'暂无活动点评' }}
         </view>
       </view>
-      <view
-        v-if="listError"
-        class="error-text"
-      >
-        {{ listError }}
-      </view><button
-        v-if="hasMore"
-        class="more"
+      <ListMore
         :loading="loadingMore"
-        :disabled="loadingMore"
-        @click="more"
-      >
-        {{ listError?'重试加载':'加载更多' }}
-      </button>
+        :error="listError"
+        :has-more="hasMore"
+        :has-items="!!items.length"
+        @retry="retryMore"
+      />
       <view
         v-if="tab==='review' && context?.reviewReason && !ownReview"
         class="hint"

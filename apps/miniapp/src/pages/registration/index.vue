@@ -1,38 +1,63 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onShow, onUnload } from '@dcloudio/uni-app'
+import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
+import type { ActivityCounts } from '@/services/api'
 import type { MyRegistration } from '@/services/api/types'
-import { activityFilters, myActivityState } from '@/services/my-activities'
+import { activityFilters } from '@/services/my-activities'
 import { navigate, routes, loginPage } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
+import ListMore from '@/components/base/ListMore.vue'
 import MyActivityCard from '@/components/business/MyActivityCard.vue'
 const session = useSessionStore()
-const items = ref<MyRegistration[]>([]), loading = ref(false), error = ref('')
+const items = ref<MyRegistration[]>([]), loading = ref(false), error = ref(''), hasMore = ref(false)
+const loadingMore = ref(false), moreError = ref(''), counts = ref<ActivityCounts | null>(null)
 const selected = ref('all'), now = ref(Date.now()), showTip = ref(true)
-let generation = 0
-const filters = computed(() => activityFilters.filter(filter => filter.key !== 'draft').map(filter => ({
-  ...filter, count: filter.key === 'all' ? items.value.length : items.value.filter(item => myActivityState(item.activity, item.status, now.value) === filter.key).length
-})))
-const visibleItems = computed(() => selected.value === 'all' ? items.value : items.value.filter(item => myActivityState(item.activity, item.status, now.value) === selected.value))
+let generation = 0, offset = 0, shown = false
+const filters = computed(() => activityFilters.filter(filter => filter.key !== 'draft').map(filter => ({ ...filter, count: counts.value?.[filter.key] ?? 0 })))
+const visibleItems = computed(() => items.value)
+function clear() {
+  generation++; offset = 0; items.value = []; counts.value = null; error.value = ''; moreError.value = ''
+  loading.value = false; loadingMore.value = false; hasMore.value = false
+}
 async function load() {
-  const current = ++generation, token = session.token, epoch = session.epoch
+  clear(); now.value = Date.now()
+  const current = generation, token = session.token, epoch = session.epoch
   const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
-  items.value = []; error.value = ''; now.value = Date.now()
-  if (!token) { loading.value = false; return }
+  if (!token) { uni.stopPullDownRefresh(); return }
   loading.value = true
   try {
-    const result = await api.registrations()
-    if (isCurrent()) items.value = result.items
+    const result = await api.registrations({ offset: 0, status: selected.value })
+    if (isCurrent()) { items.value = result.items; offset = result.items.length; hasMore.value = result.hasMore; counts.value = result.counts }
   } catch (e) { if (isCurrent()) error.value = errorMessage(e) }
-  finally { if (isCurrent()) loading.value = false }
+  finally { if (isCurrent()) { loading.value = false; uni.stopPullDownRefresh() } }
 }
+async function more() {
+  if (loading.value || loadingMore.value || moreError.value || error.value || !hasMore.value || !session.token) return
+  const current = generation, token = session.token, epoch = session.epoch
+  const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
+  loadingMore.value = true
+  try {
+    const result = await api.registrations({ offset, status: selected.value })
+    if (!isCurrent()) return
+    offset += result.items.length
+    const known = new Set(items.value.map(item => item.id))
+    items.value.push(...result.items.filter(item => !known.has(item.id)))
+    hasMore.value = result.hasMore; counts.value = result.counts
+  } catch (e) { if (isCurrent()) moreError.value = errorMessage(e) }
+  finally { if (isCurrent()) loadingMore.value = false }
+}
+function retryMore() { moreError.value = ''; void more() }
+function selectFilter(value: string) { if (selected.value !== value) { selected.value = value; void load() } }
 function open(item: MyRegistration) { navigate(routes.result + '?id=' + item.activityId) }
 function browse() { uni.switchTab({ url: routes.activity }) }
-const stop = watch(() => [session.token, session.epoch], () => { selected.value = 'all'; void load() }, { flush: 'sync' })
-onShow(load)
-onUnload(() => { generation++; stop() })
+const stop = watch(() => [session.token, session.epoch], () => { selected.value = 'all'; clear(); if (shown) void load() }, { flush: 'sync' })
+onShow(() => { shown = true; void load() })
+onHide(() => { shown = false; clear() })
+onUnload(() => { shown = false; clear(); stop() })
+onReachBottom(more)
+onPullDownRefresh(load)
 </script>
 <template>
   <view class="activities-page">
@@ -45,7 +70,7 @@ onUnload(() => { generation++; stop() })
       </view>
       <view
         class="tab active"
-        @click="selected='all'"
+        @click="selectFilter('all')"
       >
         我报名的
       </view>
@@ -67,7 +92,7 @@ onUnload(() => { generation++; stop() })
           :key="filter.key"
           class="filter"
           :class="{selected:selected===filter.key}"
-          @click="selected=filter.key"
+          @click="selectFilter(filter.key)"
         >
           {{ filter.label }}<text v-if="!loading && !error"> ({{ filter.count }})</text>
         </view>
@@ -100,6 +125,14 @@ onUnload(() => { generation++; stop() })
           :now="now"
           :registration-status="item.status"
           @open="open(item)"
+        />
+
+        <ListMore
+          :loading="loadingMore"
+          :error="moreError"
+          :has-more="hasMore"
+          :has-items="!!items.length"
+          @retry="retryMore"
         />
 
         <button

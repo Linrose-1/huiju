@@ -14,14 +14,14 @@ function harness(t) {
   const api = Object.fromEntries(['activity', 'feedbackContext', 'feedbackComments', 'feedbackReviews', 'reviewStats'].map(name => [name, () => pending(name)]))
   for (const name of ['createComment', 'editComment', 'deleteComment', 'createReview', 'editReview', 'deleteReview']) api[name] = (...args) => { mutations.push([name, ...args]); return pending(name) }
   const deps = {
-    '@dcloudio/uni-app': { onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn } },
+    '@dcloudio/uni-app': { onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn } },
     '@/services/api': { api, errorMessage: e => e.message }, '@/services/api/environment': {}, '@/services/presentation': {},
     '@/services/navigation': { routes: { feedback: '/feedback' }, loginPage() {} }, '@/stores/session': { useSessionStore: () => session }, '@/components/base/RequestState.vue': {}
   }
   const source = readFileSync(new URL('../src/pages/activity/feedback.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source+'\nexport {load,items,activity,context,loading,editor,content,openEditor,submit,remove,busy,actionError,more,hasMore,loadStats,stats,statsError,statsLoading};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const code = ts.transpileModule(source+'\nexport {load,items,activity,context,loading,editor,content,openEditor,submit,remove,busy,actionError,more,hasMore,loadStats,stats,statsError,statsLoading,listError,retryMore};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const page = {}, scope = effectScope()
-  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showModal: () => new Promise(resolve => modals.push(resolve)) }))
+  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { stopPullDownRefresh() {}, showModal: () => new Promise(resolve => modals.push(resolve)) }))
   t.after(() => scope.stop())
   const latest = name => requests.filter(item => item.kind === name).at(-1)
   const item = { id: 'comment-a', member: { memberId: 'member-a' }, content: 'hello' }
@@ -67,4 +67,20 @@ test('stats failure is independently retryable and late stats cannot restore ano
   assert.equal(h.page.statsError.value, ''); assert.equal(h.page.stats.value.averageScore, 4.5)
   const stale = h.page.loadStats(); h.hide(); h.latest('reviewStats').resolve({ count: 7, averageScore: 5 }); await stale
   assert.equal(h.page.stats.value, null); assert.equal(h.page.statsLoading.value, false)
+})
+
+
+test('feedback append failure keeps comments and only an explicit retry resumes loading', async t => {
+  const h = harness(t); await h.loaded(); h.page.hasMore.value = true
+  const more = h.page.more()
+  h.latest('feedbackComments').reject(new Error('offline')); await more
+  assert.equal(h.page.items.value[0].id, 'comment-a')
+  assert.equal(h.page.listError.value, 'offline')
+  const failed = h.latest('feedbackComments')
+  await h.page.more()
+  assert.equal(h.latest('feedbackComments'), failed)
+  h.page.retryMore()
+  h.latest('feedbackComments').resolve({ items: [h.item, { ...h.item, id: 'comment-b' }], hasMore: false }); await setImmediate()
+  assert.deepEqual(h.page.items.value.map(item => item.id), ['comment-a', 'comment-b'])
+  assert.equal(h.page.hasMore.value, false)
 })
