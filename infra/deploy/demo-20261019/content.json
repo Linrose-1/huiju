@@ -1,0 +1,99 @@
+{
+  "batchId": "huiju-demo-20261019-v1",
+  "timezone": "Asia/Shanghai",
+  "activityNotice": "本内容仅供小程序功能体验，时间、场地和费用为演示安排，并非已确认的线下活动。请勿据此到场或付款。可体验报名流程，提交的信息会保存至本小程序。",
+  "postNotice": "本内容仅供功能体验，不代表真实在租房源、已开业门店或已承诺的服务。配图为真实场景参考图，非本资源实拍；请勿据此交易或付款。",
+  "consultationContact": "功能体验内容，暂不接受线下咨询或付款；请向邀请你体验小程序的人员反馈。",
+  "assets": [
+    {"key":"meeting","file":"assets/meeting.jpg","photographer":"Headway","source":"https://unsplash.com/photos/person-gesturing-during-meeting-with-laptop-5QgIuuBxKwM","download":"https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?fm=jpg&fit=max&w=1400&q=82","license":"https://unsplash.com/license"},
+    {"key":"cafe","file":"assets/cafe.jpg","photographer":"Clifford","source":"https://unsplash.com/photos/cafe-interior-with-hanging-bulbs-and-table-VobvKmG-StA","download":"https://images.unsplash.com/photo-1511081692775-05d0f180a065?fm=jpg&fit=max&w=1400&q=82","license":"https://unsplash.com/license"},
+    {"key":"badminton","file":"assets/badminton.jpg","photographer":"Irish83","source":"https://unsplash.com/photos/badminton-racket-and-shuttlecocks-scattered-on-green-surface-G16OMIY8h08","download":"https://images.unsplash.com/photo-1773790786855-f279a5239d97?fm=jpg&fit=max&w=1400&q=82","license":"https://unsplash.com/license"},
+    {"key":"office","file":"assets/office.jpg","photographer":"E Vos","source":"https://unsplash.com/photos/modern-office-interior-with-glass-walls-and-walkways-V_yQ8IyCmYY","download":"https://images.unsplash.com/photo-1770425616829-61d6912705ad?fm=jpg&fit=max&w=1400&q=82","license":"https://unsplash.com/license"},
+    {"key":"park","file":"assets/park.jpg","photographer":"arh Lee","source":"https://unsplash.com/photos/sunlight-filters-through-trees-onto-a-park-path-E7ERJBpyEfA","download":"https://images.unsplash.com/photo-1771077508509-e0438db6a26b?fm=jpg&fit=max&w=1400&q=82","license":"https://unsplash.com/license"},
+    {"key":"workshop","file":"assets/workshop.jpg","photographer":"Dele Oke","source":"https://unsplash.com/photos/black-laptop-computer-on-white-table-2RwmlfuuiwY","download":"https://images.unsplash.com/photo-1601381610976-3c02d7213624?fm=jpg&fit=max&w=1400&q=82","license":"https://unsplash.com/license"}
+  ],
+  "activities": [
+    {
+      "key":"ai-office-lab","title":"把 AI 用进日常工作：园区实用共学沙龙","image":"workshop","dayOffset":2,"time":"19:00","durationMinutes":120,"capacity":30,"feeAmountCents":null,
+      "location":"园区 A 栋 1 层共享教室（演示场地）",
+      "sections":[["这次一起做什么","从整理会议纪要、生成活动初稿和梳理表格三个高频场景入手，练习怎样把一句模糊需求拆成可执行的步骤。活动以现场练习为主，适合第一次尝试 AI 办公的学友。"],["共学安排","19:00—19:15 互相认识并选择练习任务；19:15—19:45 演示需求拆解；19:45—20:30 分组完成一份实际工作草稿；20:30—21:00 分享结果、指出需要人工核对的部分。"],["参加准备","建议自带电脑和充电器，准备一段已经脱敏的工作素材。不要上传客户联系方式、合同、账号密码或公司保密资料；现场不要求购买任何工具。"]],
+      "questions":[{"type":"single","prompt":"你目前使用 AI 办公的频率？","required":true,"options":["尚未尝试","偶尔使用","每周多次","每天使用"]},{"type":"long_text","prompt":"你最想改善的一项重复工作是什么？请勿填写敏感资料。","required":false}]
+    },
+    {
+      "key":"park-operations-roundtable","title":"园区运营圆桌：把一场活动变成持续连接","image":"meeting","dayOffset":3,"time":"14:30","durationMinutes":150,"capacity":24,"feeAmountCents":null,
+      "location":"园区 B 栋 2 层圆桌会议室（演示场地）",
+      "sections":[["讨论主题","围绕活动招募、到场体验、会后跟进三件事，交换园区运营中的具体做法。每位参与者带来一个小问题，用真实工作方法讨论，不做项目推销和效果承诺。"],["圆桌流程","14:30—14:50 破冰与问题收集；14:50—15:30 三个运营案例拆解；15:30—16:20 小组讨论一条可尝试的改进；16:20—17:00 汇总行动清单与自由交流。"],["适合谁来","适合园区运营、社群运营、活动执行及对连接学友感兴趣的伙伴。分享涉及第三方案例时，请先隐去客户、企业及个人可识别信息。"]],
+      "questions":[{"type":"single","prompt":"你最关注哪一个环节？","required":true,"options":["活动招募","现场体验","会后跟进","数据复盘"]},{"type":"short_text","prompt":"希望带来讨论的一个问题","required":false}]
+    },
+    {
+      "key":"badminton-beginners","title":"下班来一局：羽毛球新手友好双打","image":"badminton","dayOffset":5,"time":"19:30","durationMinutes":120,"capacity":16,"feeAmountCents":3900,
+      "location":"园区综合运动馆 2—3 号场（演示场地）",
+      "sections":[["活动方式","以轻松交流和基础练习为主，按经验分组轮换双打。新手可以先练习发球和接球，再进入友好对局，不以输赢排名，也不设置商业培训环节。"],["时间安排","19:30—19:45 集合、热身和安全提醒；19:45—20:15 基础动作练习；20:15—21:15 分组轮换；21:15—21:30 放松整理与交流。"],["装备与费用","建议穿防滑运动鞋，自带球拍、饮用水和毛巾。39 元为场地及用球分摊的演示金额，小程序内不收款。身体不适应停止运动，不建议带伤参加。"]],
+      "questions":[{"type":"single","prompt":"你的羽毛球经验","required":true,"options":["第一次尝试","了解基本规则","偶尔打球","经常打球"]},{"type":"single","prompt":"是否自带球拍？","required":true,"options":["自带球拍","需要了解借拍安排"]}]
+    },
+    {
+      "key":"coffee-new-friends","title":"一杯咖啡认识新学友：午间轻社交","image":"cafe","dayOffset":6,"time":"12:15","durationMinutes":75,"capacity":12,"feeAmountCents":2900,
+      "location":"园区 A 栋首层咖啡交流角（演示场地）",
+      "sections":[["轻松认识彼此","用一次午休的时间，聊聊正在做的事情、愿意分享的一项经验，以及最近想解决的一个小问题。无需准备演讲，也不要求交换私人联系方式。"],["交流节奏","12:15—12:25 到场与自我介绍；12:25—12:50 两轮主题交流；12:50—13:20 自由讨论；13:20—13:30 整理离场。每轮保留换桌机会，让新来的伙伴也能加入。"],["饮品说明","29 元为一杯基础咖啡的演示金额，不在线收款。可选择无咖啡因饮品；对牛奶或其他成分过敏的伙伴请提前说明，不强制饮用任何饮品。"]],
+      "questions":[{"type":"single","prompt":"你更偏好的饮品","required":false,"options":["美式咖啡","拿铁","无咖啡因饮品","暂不选择"]},{"type":"short_text","prompt":"这次想交流的话题","required":false}]
+    },
+    {
+      "key":"presentation-workshop","title":"把项目讲清楚：工作汇报 PPT 共创夜","image":"workshop","dayOffset":8,"time":"19:00","durationMinutes":150,"capacity":24,"feeAmountCents":null,
+      "location":"园区 A 栋 1 层共享教室（演示场地）",
+      "sections":[["共创目标","从听众最关心的结论出发，把一份材料整理成问题、证据、方案和下一步。重点是内容逻辑和口头表达，不比拼复杂动画或模板数量。"],["现场练习","19:00—19:25 拆解一个项目介绍结构；19:25—20:15 分组整理三页核心内容；20:15—21:00 每组五分钟讲述与反馈；21:00—21:30 根据反馈完成一轮修改。"],["携带材料","请自带电脑和可公开或已脱敏的练习内容。没有现成材料也可以使用现场通用案例；不收集商业机密、不承诺融资或销售结果。"]],
+      "questions":[{"type":"single","prompt":"你主要想练习的表达场景","required":true,"options":["工作汇报","项目介绍","活动分享","求职或个人介绍"]}]
+    },
+    {
+      "key":"park-photo-walk","title":"用镜头发现园区：手机摄影漫步","image":"park","dayOffset":9,"time":"16:00","durationMinutes":120,"capacity":18,"feeAmountCents":null,
+      "location":"园区中央花园入口集合（演示场地）",
+      "sections":[["观察身边的细节","从光线、线条和取景三个角度练习手机摄影，边走边交流。线路以园区步道和公共空间为主，不进入施工区或办公限制区域。"],["漫步安排","16:00—16:15 集合与拍摄礼仪；16:15—17:00 两段主题练习；17:00—17:30 每人挑选三张照片；17:30—18:00 交流构图与观察方法。"],["参加提醒","手机充满电，穿适合步行的鞋。拍摄可识别的人物应先获得同意，不拍摄车牌、门禁凭证和敏感文件。若遇恶劣天气，应另行确认活动安排。"]],
+      "questions":[{"type":"multiple","prompt":"你感兴趣的拍摄主题","required":false,"options":["建筑线条","绿植与光影","生活细节","人物交流"]}]
+    },
+    {
+      "key":"commercial-space-walk","title":"商业空间观察：从动线到停留体验","image":"office","dayOffset":11,"time":"14:00","durationMinutes":150,"capacity":20,"feeAmountCents":null,
+      "location":"园区 B 栋共享大厅及公共连廊（演示场地）",
+      "sections":[["一起观察什么","从入口识别、行走动线、等候休息和服务提示四个角度，练习观察公共空间。活动讨论用户体验，不涉及房产交易、投资推荐或实际项目尽调。"],["观察与讨论","14:00—14:20 说明观察清单；14:20—15:20 两组步行记录；15:20—16:00 汇总可改进的细节；16:00—16:30 每组给出一项低成本建议。"],["边界与准备","带好记录工具，不擅自进入商户后台或限制区域。拍摄前遵守场地管理要求，不公开未经许可的访客和商户经营资料。"]],
+      "questions":[{"type":"single","prompt":"你更关注的空间问题","required":true,"options":["入口识别","动线组织","停留体验","服务信息"]}]
+    },
+    {
+      "key":"reading-and-action","title":"读完之后做什么：学友共读与行动分享","image":"meeting","dayOffset":12,"time":"19:00","durationMinutes":120,"capacity":18,"feeAmountCents":null,
+      "location":"园区 A 栋 2 层阅读交流室（演示场地）",
+      "sections":[["不是读书打卡","每人带来最近读到的一条观点，用自己的话说明它解决了什么问题，再讨论怎样在一周内做一个小尝试。不要求读同一本书，也不评价阅读数量。"],["交流流程","19:00—19:15 认识彼此；19:15—20:00 每人三分钟分享；20:00—20:40 分组讨论可尝试的行动；20:40—21:00 写下一条个人行动计划。"],["分享要求","可以带纸质书或电子笔记。使用引用时说明书名及作者，避免大段复制受版权保护的内容；不以本活动推广课程或投资产品。"]],
+      "questions":[{"type":"short_text","prompt":"你想分享的书名或主题","required":false}]
+    },
+    {
+      "key":"community-growth-lab","title":"小社群也能做复盘：运营指标工作坊","image":"workshop","dayOffset":14,"time":"14:00","durationMinutes":180,"capacity":20,"feeAmountCents":5900,
+      "location":"园区 A 栋 1 层共享教室（演示场地）",
+      "sections":[["把指标用在决策上","从一次活动的招募、报名、到场与反馈出发，练习区分现象和原因。用匿名样例做计算，不以虚构增长结果承诺任何运营收益。"],["工作坊安排","14:00—14:30 定义复盘问题；14:30—15:20 整理样例漏斗；15:20—16:20 小组提出可验证的改进；16:20—17:00 写出下一轮观察计划。"],["准备与费用","可携带电脑，无需提供真实用户手机号或完整业务表。59 元为场地及练习材料演示金额，不在线收款；样例数据仅用于课堂练习。"]],
+      "questions":[{"type":"single","prompt":"你现在主要运营哪类社群？","required":false,"options":["园区或企业","学习交流","兴趣活动","暂未运营"]}]
+    },
+    {
+      "key":"morning-run","title":"从三公里开始：园区周末轻松跑","image":"park","dayOffset":16,"time":"08:00","durationMinutes":90,"capacity":20,"feeAmountCents":null,
+      "location":"园区中央花园北侧步道入口（演示场地）",
+      "sections":[["按自己的节奏跑","这是一场不竞速的轻松运动交流，提供快走和慢跑两种节奏。以三公里左右的体验为目标，可随时调整或退出，不要求完成距离。"],["晨跑安排","08:00—08:15 集合、热身与路线说明；08:15—09:00 分组快走或慢跑；09:00—09:15 拉伸；09:15—09:30 补水与交流。"],["安全提醒","自带饮水，穿适合运动的鞋，留意身体状态和现场天气。活动不替代专业训练或医疗建议；身体不适、天气恶劣时不勉强参与。"]],
+      "questions":[{"type":"single","prompt":"你希望选择的运动节奏","required":true,"options":["快走交流","轻松慢跑","到场后再决定"]}]
+    },
+    {
+      "key":"resource-afternoon-tea","title":"带着一个问题来：学友资源对接下午茶","image":"cafe","dayOffset":19,"time":"15:00","durationMinutes":120,"capacity":24,"feeAmountCents":4900,
+      "location":"园区 A 栋首层咖啡交流角（演示场地）",
+      "sections":[["先把需求说具体","围绕一项资源、一项需求和一个可尝试的小合作，做有边界的交流。没有项目也可以旁听和提问，不强制留下电话或承诺合作。"],["下午茶流程","15:00—15:20 简短自我介绍；15:20—16:00 每人两分钟描述需求；16:00—16:40 按主题交流；16:40—17:00 自愿确认后续联系安排。"],["费用与交流礼仪","49 元为饮品及轻点心演示金额，不在线收款。不要在未获同意时传播其他参与者的资料；所有合作均需会后独立核实，不保证资源真实性或成交。"]],
+      "questions":[{"type":"short_text","prompt":"你希望交流的一项具体需求","required":false},{"type":"short_text","prompt":"你愿意分享的一项经验或资源","required":false}]
+    },
+    {
+      "key":"monthly-peer-review","title":"月度学友碰头会：分享一个进展和一次尝试","image":"meeting","dayOffset":22,"time":"19:00","durationMinutes":120,"capacity":30,"feeAmountCents":null,
+      "location":"园区 B 栋 2 层圆桌会议室（演示场地）",
+      "sections":[["一起看见小进展","每位伙伴分享本月做成的一件小事、尚未解决的一个问题，以及下个月准备尝试的一步。适合初次加入的学友，不需要准备完整演示文稿。"],["碰头会安排","19:00—19:15 新伙伴介绍；19:15—20:00 轮流分享；20:00—20:40 主题分组互助；20:40—21:00 汇总自愿公开的行动计划。"],["参与方式","可以只听不讲，也可以提前写下自己的问题。涉及公司或客户的内容请先脱敏；会后联系由双方自行决定，不统一公开通讯录。"]],
+      "questions":[{"type":"single","prompt":"这次你更希望如何参与？","required":false,"options":["分享进展","带来问题","先听听交流"]}]
+    }
+  ],
+  "posts":[
+    {"key":"workspace-280","category":"park","subtype":"rent","title":"采光通透的 280㎡办公空间｜团队办公布局参考","image":"office","location":"园区 B 栋 3 层东侧（演示位置）","area":"约280㎡（演示面积）","price":"68元/㎡/月（演示报价）","body":"适合20—30人团队的空间布局参考：入口设置接待与等候区，中间布置开放工位，临窗位置留出讨论区，另可划分一间小会议室。\n\n可重点关注自然采光、空调时段、网络布线和公共会议室使用方式。了解空间时建议把租金、物业、水电和停车费用分开核对。\n\n此条用于体验园区资源展示及意向提交，未关联真实在租单元，没有实际房源或预约承诺。"},
+    {"key":"training-room-seek","category":"park","subtype":"seek_rent","title":"寻找 30—40 人共学教室｜活动空间需求示例","image":"meeting","location":"园区公共配套区域（演示范围）","area":"约80—120㎡（演示需求）","price":"预算800—1200元/半天（演示预算）","body":"共学活动场地需求示例：容纳30—40人，桌椅可移动，具备投屏、稳定网络及基础饮水条件。优先考虑公共交通方便、签到区域清楚、洗手间指引明确的空间。\n\n计划使用时段为工作日傍晚或周末半天，希望提前核对设备清单、布场时间、清洁和超时费用。\n\n此条仅呈现场地需求信息结构，没有实际采购、租赁或付款安排。"},
+    {"key":"event-checklist","category":"operation","subtype":null,"title":"一份小型沙龙执行清单：从报名到散场","image":"meeting","location":"线上交流／园区共享空间（演示）","body":"办一场20—30人的交流活动，可以先把执行拆成四张清单：招募与提醒、签到与引导、设备与物料、散场与反馈。\n\n活动前一天核对报名口径、地址和设备；当天提前检查投屏、插座和麦克风；现场保留一位明确的联系人；结束后收集自愿反馈，不强制分享个人联系方式。\n\n欢迎体验帖子详情和意向功能。这里提供的是通用方法演示，不是对外承接活动执行服务的报价。"},
+    {"key":"shared-space-operations","category":"operation","subtype":null,"title":"午间共享空间怎么用：预约与交接小建议","image":"office","location":"园区公共会客区域（演示）","body":"共享空间使用体验，往往取决于预约是否清楚、到场能否找到位置、结束后是否容易交接。可以尝试把开始结束时间、可用设备和清洁要求写在同一张确认单上。\n\n每场活动预留布置与整理时间，留下故障反馈入口；遇到重复预约时先核对已确认的信息，不把临时口头约定当成最终安排。\n\n本帖用于运营资源展示，没有开放任何真实场地预约。"},
+    {"key":"presentation-service","category":"service","subtype":null,"title":"项目表达互助：先把三页核心内容理清楚","image":"workshop","location":"线上协作（演示方式）","body":"一个可供交流的项目表达流程：先确认听众与目标，再整理问题、证据和行动建议，最后制作三页核心内容。适合练习内部汇报、活动分享或项目介绍。\n\n建议准备一份已脱敏的材料、一段五分钟口头介绍，以及最希望得到反馈的一个问题。先交换结构意见，再讨论视觉细节。\n\n此条为服务信息展示示例，未对应真实服务商、报价、交付期限或商业承诺。"},
+    {"key":"photo-service","category":"service","subtype":null,"title":"活动记录怎么拍：摄影需求沟通参考","image":"park","location":"园区公共活动场景（演示）","body":"拍摄活动前，先沟通使用场景：是内部复盘、社群分享，还是对外宣传。再列出签到、分享、交流和合影等希望记录的画面，明确哪些人不希望入镜。\n\n素材交付时区分原片、精选图片与可公开版本；照片公开前核对人物授权、背景中的文件信息及场地拍摄要求。\n\n本帖仅展示需求沟通方式，没有安排真实摄影师，也不接受拍摄订单。"},
+    {"key":"coffee-corner-store","category":"store","subtype":null,"title":"园区咖啡角｜把午休留给一杯咖啡和交流","image":"cafe","storeName":"园区咖啡角（演示门店）","location":"园区 A 栋首层共享区（演示位置）","body":"一个适合短暂停留的咖啡空间展示：吧台旁可快速取饮品，靠窗区域适合两三人轻声交流，共享长桌可临时整理笔记。\n\n示例饮品包含美式、拿铁和无咖啡因选择。选择含乳饮品前注意个人过敏情况，公共空间内尽量控制音量、用完桌面后简单整理。\n\n此门店名称和位置均为演示，不对应已开业商户，没有实际营业时间、菜单价格或团购承诺。"},
+    {"key":"reading-corner-store","category":"store","subtype":null,"title":"学友阅读角｜安静读书，也欢迎交换一个观点","image":"cafe","storeName":"学友阅读角（演示门店）","location":"园区 A 栋二层共享书架旁（演示位置）","body":"阅读交流空间示例：设置安静阅读位和小组讨论位，公共书架按主题简单分类，桌面提供记录想法的位置。既可以独自读一会儿，也可以自愿参加小范围交流。\n\n使用共享书籍时注意归位，讨论区避免影响安静阅读；分享内容以自己的理解为主，引用时注明书名与作者，不复制传播整本书或付费课程。\n\n本条仅用于门店栏目展示，没有真实营业主体、会员卡销售或场地预订安排。"}
+  ]
+}
