@@ -39,6 +39,7 @@ test('preview defaults to avatar/name only and whitelists independently selected
   const member = { profileComplete: true, avatarUrl: '/a.png', displayName: '甲', boundPhone: '13800000001', memberNumber: '001', inviteCode: 'private-invite' }
   const settings = cardHelpers.emptySettings()
   assert.deepEqual(cardHelpers.previewCard(member, privateDetails, settings), { avatarUrl: '/a.png', displayName: '甲' })
+  assert.deepEqual(cardHelpers.previewCard({ ...member, profileComplete: false }, privateDetails, settings), { avatarUrl: null, displayName: '游客' })
   for (const field of cardHelpers.cardFields) {
     const card = cardHelpers.previewCard(member, privateDetails, { ...settings, [field.setting]: true })
     assert.deepEqual(Object.keys(card).sort(), ['avatarUrl', 'displayName', field.key].sort())

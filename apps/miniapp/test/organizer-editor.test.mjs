@@ -22,7 +22,7 @@ const activity = overrides => ({
   lifecycle: 'draft', moderation: 'normal', hasRegistrationEver: false, questions: [], ...overrides,
 })
 const script = readFileSync(new URL('../src/pages/activity/editor.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-function harness({ record = activity(), apiOverrides = {}, chooseCover = async () => null, DateClass = Date } = {}) {
+function harness({ record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseActivityLocation = async () => null, DateClass = Date } = {}) {
   const session = reactive({ token: 'token-a', epoch: 1, member: { id: 'member-a' } })
   const navigations = [], creates = [], updates = [], publishes = []
   let onUnload
@@ -41,7 +41,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
     '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/presentation': { feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
-    '@/services/wechat': { chooseCover },
+    '@/services/wechat': { chooseCover, chooseActivityLocation },
     '@/services/api/environment': { mediaUrl: value => value },
     '@/services/navigation': {
       routes: { editor: '/pages/activity/editor', manage: '/pages/activity/manage' },
@@ -49,7 +49,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { changeCover, coverUrl, coverError, uploadingCover, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeCover, coverUrl, coverError, uploadingCover, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -373,4 +373,47 @@ test('cover selection cannot upload after identity changes; late upload cannot r
     assert.equal(uploads, pendingAt === 'selection' ? 0 : 1)
     h.unload()
   }
+})
+
+
+test('rich introduction and notice load, save and clear without changing plain legacy text', async () => {
+  const delta = {ops:[{insert:'一起交流',attributes:{bold:true}},{insert:'\n'}]}
+  const h=harness({record:activity({descriptionDelta:delta,registrationNotice:'请带笔记本'})})
+  h.page.id.value='activity-a';await h.page.load()
+  assert.deepEqual(h.page.descriptionDelta.value,delta)
+  assert.equal(h.page.registrationNotice.value,'请带笔记本')
+  assert.deepEqual(h.page.payload().descriptionDelta,delta)
+  h.page.reviewed.value=true
+  h.page.updateDescription({text:'新的介绍',delta:{ops:[{insert:'新的介绍',attributes:{italic:true}}]}})
+  assert.equal(h.page.reviewed.value,false)
+  h.page.registrationNotice.value='  自带水杯  '
+  await h.page.submit();assert.equal(h.updates[0][1].description,'新的介绍');assert.equal(h.updates[0][1].registrationNotice,'自带水杯')
+  h.page.registrationNotice.value='';assert.equal(h.page.payload().registrationNotice,null)
+})
+test('invalid or oversized introduction and notice do not reach API',async()=>{
+  const h=harness();h.fill();await h.page.load()
+  h.page.richValid.value=false;await h.page.submit();assert.equal(h.creates.length,0);assert.match(h.page.submitError.value,/格式/)
+  h.page.richValid.value=true;h.page.form.description='字'.repeat(10001);await h.page.submit();assert.equal(h.creates.length,0)
+  h.page.form.description='文字';h.page.registrationNotice.value='字'.repeat(501);await h.page.submit();assert.equal(h.creates.length,0);assert.match(h.page.submitError.value,/500/)
+})
+test('map success fills address and can be supplemented manually; cancel and failure preserve address',async()=>{
+  let mode='success';const h=harness({chooseActivityLocation:async()=>{if(mode==='failure')throw Error('位置权限');return mode==='cancel'?null:'深圳会展中心'}})
+  await h.page.load();h.fill();await h.page.selectLocation();assert.equal(h.page.form.location,'深圳会展中心')
+  h.page.form.location+=' 会议室203';mode='cancel';await h.page.selectLocation();assert.equal(h.page.form.location,'深圳会展中心 会议室203');assert.equal(h.page.locationError.value,'')
+  mode='failure';await h.page.selectLocation();assert.match(h.page.locationError.value,/位置权限/);assert.equal(h.page.form.location,'深圳会展中心 会议室203');assert.equal(h.page.busy.value,false)
+})
+test('duplicate map taps and late selection after account switch or unload cannot overwrite form',async()=>{
+  for(const action of ['switch','unload']){
+    const d=deferred();let count=0;const h=harness({chooseActivityLocation:()=>{count++;return d.promise}})
+    await h.page.load();h.fill();const pending=h.page.selectLocation();await h.page.selectLocation();assert.equal(count,1)
+    if(action==='switch'){h.session.epoch++;h.session.token='token-b';h.page.form.location='新账号地址'}else h.unload()
+    d.resolve('旧结果');await pending;assert.notEqual(h.page.form.location,'旧结果')
+  }
+})
+test('started activity preserves rich introduction and notice on contact-only save',async()=>{
+  const delta={ops:[{insert:'已开始',attributes:{bold:true}}]}
+  const h=harness({record:activity({lifecycle:'published',startsAt:'2020-01-01T00:00:00Z',endsAt:'2099-01-01T00:00:00Z',descriptionDelta:delta,registrationNotice:'原须知'})})
+  h.page.id.value='activity-a';await h.page.load();h.page.updateDescription({text:'非法修改',delta:null});await h.page.selectLocation()
+  h.page.registrationNotice.value='非法修改';h.page.form.consultationContact='新微信'
+  const input=h.page.payload();assert.equal(input.registrationNotice,'原须知');assert.deepEqual(input.descriptionDelta,delta);assert.equal(input.consultationContact,'新微信')
 })

@@ -11,7 +11,7 @@ import { RecordViewInput, type ReaderDto, type ReadingListDto, type ReadingStats
 export function readerDto(member: Member): ReaderDto {
   return complete(member)
     ? { memberId: member.id, avatarUrl: member.avatarUrl, displayName: member.displayName! }
-    : { memberId: member.id, avatarUrl: null, displayName: `会员${member.memberNumber}` }
+    : { memberId: member.id, avatarUrl: null, displayName: `游客${member.memberNumber}` }
 }
 
 export function viewStats(views: number, visitors: number, registrations: number): ReadingStatsDto {

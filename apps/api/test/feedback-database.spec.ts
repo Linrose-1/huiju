@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from '../src/platform/legal.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
@@ -33,11 +34,12 @@ describe.skipIf(!enabled)('feedback on MySQL with complete rollback', () => {
           override async exchange(code: string) { return { appId: 'huiju-feedback-rollback-test', openId: code, unionId: null } }
         }
         const identity = new IdentityService(database, new FixtureWechat())
+        const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
         const service = new FeedbackService(database, identity)
         const organizer = new OrganizerService(database, identity)
-        const owner = await identity.login(randomUUID())
-        const participant = await identity.login(randomUUID())
-        const outsider = await identity.login(randomUUID())
+        const owner = await login(randomUUID())
+        const participant = await login(randomUUID())
+        const outsider = await login(randomUUID())
         const ownerHeader = `Bearer ${owner.token}`, participantHeader = `Bearer ${participant.token}`, outsiderHeader = `Bearer ${outsider.token}`
         for (const account of [owner, participant, outsider]) await tx.update(members).set({ boundPhone: '19900000001', displayName: '点评回滚测试', nameSetByUser: true, avatarUrl: '/feedback-fixture.png', avatarSetByUser: true }).where(eq(members.id, account.member.id))
         await tx.insert(activities).values({ id: activityId, organizerMemberId: owner.member.id, title: '点评回滚测试', description: '事务回滚', location: '测试', consultationContact: '私密', startsAt: new Date(Date.now() - 7200000), endsAt: new Date(Date.now() - 3600000), feeType: 'free', lifecycle: 'published', publishedAt: new Date(Date.now() - 10800000), activeRegistrationCount: 1, hasRegistrationEver: true })

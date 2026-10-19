@@ -2,7 +2,7 @@
 
 ## 智能活动推荐
 
-有效会员会话即可使用，无需完整资料；推荐成功每天10次与草拟分账，按完成时北京时间计次。规则见[专项需求](../product/智能活动推荐.md)，事务、隐私、过期及归因见[技术方案](../architecture/activity-recommendation.md)。实现与环境启用分开记录；本轮不执行迁移或真实付费模型调用。
+有效会话且手机号、主动头像与主动名称均完整的会员才可使用；推荐成功每天10次与草拟分账，按完成时北京时间计次。规则见[专项需求](../product/智能活动推荐.md)，事务、隐私、过期及归因见[技术方案](../architecture/activity-recommendation.md)。实现与环境启用分开记录；本轮不执行迁移或真实付费模型调用。
 
 | 方法与路径（均带 `/api/v1`） | 输入与用途 |
 | --- | --- |
@@ -32,7 +32,8 @@
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| `POST /auth/wechat/session` | 提交 `code`、可选 `inviteCode`，换取 `token`、`expiresAt`、本人 `member` |
+| `POST /auth/wechat/identify` | 静默提交 `code`、首次入口可选 `inviteCode`；新身份创建游客并固定邀请，已有身份恢复会话；不记录协议同意，返回 `token`、`expiresAt`、本人 `member` |
+| `POST /auth/wechat/session` | 兼容显式登录：提交 `code`、可选 `inviteCode` 和当前两份协议版本，身份与会话处理相同，另记录明确同意 |
 | `GET /auth/session`、`DELETE /auth/session` | 查询本人会话或撤销当前会话 |
 | `POST /members/me/phone` | 提交微信手机号授权 `code`，不能提交手工手机号；已绑定后不可更换 |
 | `POST /members/me/profile` | 提交用户主动设置的 `displayName`；保留等价 PATCH 路由 |
@@ -162,3 +163,20 @@
 写入帖子使用 CircleWriteInput，意向须明确 phone + requestId。公开接口不返回联系电话；意向列表仅作者可读。图片上传复用 AvatarInput 解码约束，发帖仅接受0–6个本人 imageIds。
 
 后台 GET /admin/circle/posts、GET /admin/circle/posts/:id/operations，以及 POST /admin/circle/posts/:id/remove|restore。处置须 reason、既有后台会话、精确 Origin 和 CSRF，操作与记录同事务；通知、举报未实现。OpenAPI 和 api-client 已生成并比较一致。开发库尚未执行0008，因此页面接入前不能视为当前3001服务已支持这些表。
+
+
+## 2026-10-04 后台运营与平台配置
+
+- `GET /admin/analytics`：7／30天看板；`/members`分页筛选、`/members/:id/events`分页行为记录、`/export`仅安全字段CSV。
+- `GET /admin/activities/:id/report`、`/registrations`：任意活动统计与私密报名数据（仅后台）；无管理员签到写入口。
+- `GET /platform/content`公开文案与本人编辑权限，会员使用`POST /platform/content`保存；后台使用`GET/PATCH /admin/platform/content`及分页`/content/history`。只有超管可使用`/admin/platform/editors`管理编辑人员。
+- `GET /platform/legal`公开开发占位文本；兼容显式登录输入必须提交`termsVersion`、`privacyVersion`，微信交换前校验，事务内记录同意。静默识别不提交协议；已识别游客或会员主动`POST /platform/legal/accept`记录同意。手机号、名称、头像写入前服务端检查本人当前两份协议同意记录，缺少时返回`LEGAL_CONSENT_REQUIRED`，不调用微信手机号或写入图片／资料。
+- 数据表由0010迁移提供，执行须单独授权；主体、联系方式和正式协议正文仍待补充。
+
+
+### 活动介绍格式与报名须知（2026-10-05）
+
+活动写入和读取DTO新增可选可空`descriptionDelta`、`registrationNotice`。Delta为`{ops:[{insert:string,attributes?:{bold?:boolean,italic?:boolean,underline?:boolean,list?:'ordered'|'bullet'}}]}`，最多1000片段／10000纯文本字（容许编辑器额外终止换行）。服务端重新提取description，拒绝对象嵌入和未知格式；须知最多500字，空白存null。省略字段的旧客户端兼容规则见数据库设计；开始后只允许咨询方式变化，下架公开响应隐藏正文Delta与须知。所选地图地址仍使用location。契约更新不代表0011已应用或微信能力已验收。
+
+
+2026-10-19 游客／会员身份更新：`members`、`MemberDto`、编号等内部名称保留，产品身份由 `profileComplete` 判定；未完整为游客，完整为会员，无新增数据库状态或迁移。静默身份不默认勾选协议；填写资料时通过既有 `POST /platform/legal/accept`，携带 Bearer 和 `termsVersion`、`privacyVersion` 显式保存同意。AI 找活动的创建、续页、展示与查看事件均要求完整资料，游客返回 `PROFILE_INCOMPLETE`，不预留额度或调用模型；旧“仅登录即可”例外已撤销。

@@ -22,6 +22,61 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('admin session and transport', () => {
+  it('uses the existing paginated circle contract and rejects forbidden moderation', async () => {
+    authenticated()
+    network.mockResolvedValueOnce(response({ items: [], hasMore: false }))
+    await admin.adminApi.circlePosts('park', 20)
+    const list = network.mock.calls[0]![0] as Request
+    expect(list.credentials).toBe('include')
+    expect(new URL(list.url).pathname).toBe('/api/v1/admin/circle/posts')
+    expect(new URL(list.url).searchParams.get('category')).toBe('park')
+    expect(new URL(list.url).searchParams.get('offset')).toBe('20')
+    expect(new URL(list.url).searchParams.get('limit')).toBe('20')
+    network.mockResolvedValueOnce(response({ items: [], hasMore: false }))
+    await admin.adminApi.circleOperations('post-id', 40)
+    expect((network.mock.calls[1]![0] as Request).url).toContain('/post-id/operations?offset=40&limit=20')
+    for (const action of ['removeCirclePost', 'restoreCirclePost'] as const) {
+      network.mockResolvedValueOnce(response({ ok: true }))
+      await admin.adminApi[action]('post-id', '核对原因')
+      const request = network.mock.calls.at(-1)![0] as Request
+      expect(request.method).toBe('POST')
+      expect(request.credentials).toBe('include')
+      expect(request.headers.get('X-CSRF-Token')).toBe('test-csrf')
+      expect(new URL(request.url).pathname).toBe(`/api/v1/admin/circle/posts/post-id/${action === 'removeCirclePost' ? 'remove' : 'restore'}`)
+      expect(await request.json()).toEqual({ reason: '核对原因' })
+    }
+    network.mockResolvedValueOnce(response({ code: 'ADMIN_FORBIDDEN' }, 403))
+    await expect(admin.adminApi.removeCirclePost('post-id', '原因')).rejects.toThrow('没有执行此操作')
+  })
+  it('uses cookie and CSRF for content edits and editor authorization, and handles forbidden writes', async () => {
+    authenticated()
+    network.mockResolvedValueOnce(response({ activityText: '活动文案', assistantText: '助手文案', canEdit: true }))
+    await admin.adminApi.saveContent({ activityText: '活动文案', assistantText: '助手文案' })
+    const contentRequest = network.mock.calls[0]![0] as Request
+    expect(contentRequest.method).toBe('PATCH')
+    expect(contentRequest.headers.get('X-CSRF-Token')).toBe('test-csrf')
+    expect(contentRequest.credentials).toBe('include')
+    expect(await contentRequest.json()).toEqual({ activityText: '活动文案', assistantText: '助手文案' })
+    network.mockResolvedValueOnce(response({ code: 'ADMIN_FORBIDDEN' }, 403))
+    await expect(admin.adminApi.setContentEditor('member-id', true)).rejects.toThrow('没有执行此操作')
+    const editorRequest = network.mock.calls[1]![0] as Request
+    expect(editorRequest.method).toBe('PUT')
+    expect(editorRequest.headers.get('X-CSRF-Token')).toBe('test-csrf')
+    expect(await editorRequest.json()).toEqual({ enabled: true })
+  })
+  it('exports the complete applied engagement filter as text rather than parsing CSV as JSON', async () => {
+    authenticated()
+    network.mockResolvedValue(new Response('会员编号,浏览次数\r\nHJ0001,2', { headers: { 'Content-Type': 'text/csv' } }))
+    const csv = await admin.adminApi.exportEngagement({ days: 7, behavior: 'browse', profile: 'complete', offset: 0 })
+    expect(csv).toContain('HJ0001,2')
+    const request = network.mock.calls[0]![0] as Request
+    expect(request.credentials).toBe('include')
+    const url = new URL(request.url)
+    expect(url.pathname).toBe('/api/v1/admin/analytics/export')
+    expect(url.searchParams.get('behavior')).toBe('browse')
+    expect(url.searchParams.get('profile')).toBe('complete')
+    expect(url.searchParams.get('days')).toBe('7')
+  })
   it('pages activity moderation and history with encoded filters', async () => {
     authenticated()
     network.mockImplementation(async () => response({ items: [], total: 0, hasMore: false }))
@@ -134,7 +189,7 @@ describe('admin session and transport', () => {
     const { allowedRoute } = await import('../src/services/access')
     expect(allowedRoute('/accounts')).toBe('/login')
     authenticated()
-    expect(allowedRoute('/accounts')).toBe('/feedback')
+    expect(allowedRoute('/accounts')).toBe('/analytics')
     expect(allowedRoute('/feedback')).toBeUndefined()
     admin.session.account!.mustChangePassword = true
     expect(allowedRoute('/feedback')).toBeUndefined()

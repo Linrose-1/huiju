@@ -1,4 +1,6 @@
 import type { components } from '../../../../../packages/api-client/src/generated'
+export type PlatformContent = components['schemas']['ContentDto']
+export type LegalDocuments = components['schemas']['LegalDto']
 export type ActivitySearchResult = components['schemas']['ActivitySearchResultDto']
 export type ActivityRecommendation = components['schemas']['ActivityRecommendationDto']
 export type Member = components['schemas']['MemberDto']

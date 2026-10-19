@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from '../src/platform/legal.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
@@ -28,9 +29,10 @@ describe.skipIf(!enabled)('member card on real MySQL in an outer rollback transa
           override async exchange(code: string) { return { appId: 'member-card-rollback-test', openId: code, unionId: null } }
         }
         const identity = new IdentityService(database, new FixtureWechat())
+        const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
         const cards = new MemberCardService(database, identity)
-        const owner = await identity.login(randomUUID())
-        const viewer = await identity.login(randomUUID())
+        const owner = await login(randomUUID())
+        const viewer = await login(randomUUID())
         ownerId = owner.member.id
         const ownerHeader = `Bearer ${owner.token}`
         const viewerHeader = `Bearer ${viewer.token}`

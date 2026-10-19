@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch, nextTick } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { ActivityWriteInput, ManagedActivity } from '@/services/api/types'
@@ -7,7 +7,10 @@ import { loginPage, navigate, requireProfile, routes } from '@/services/navigati
 import { mediaUrl } from '@/services/api/environment'
 import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
-import { chooseCover } from '@/services/wechat'
+import { chooseCover, chooseActivityLocation } from '@/services/wechat'
+import ActivityRichEditor from '@/components/business/ActivityRichEditor.vue'
+import { activityRichTextNodes } from '@/services/activity-rich-text'
+import type { ActivityRichValue } from '@/services/activity-rich-text'
 import { takeActivityDraft } from '@/services/ai-draft'
 import type { AiActivityDraft } from '@/services/api/types'
 import RequestState from '@/components/base/RequestState.vue'
@@ -22,6 +25,9 @@ const aiDraftMissing = ref(false)
 let fromAi = false
 const source = ref<ManagedActivity | null>(null)
 const coverUrl = ref(''), coverError = ref(''), uploadingCover = ref(false)
+const descriptionDelta = ref<ActivityRichValue['delta']>(null)
+const richValid = ref(true), locationError = ref(''), selectingLocation = ref(false)
+const registrationNotice = ref('')
 const form = reactive({ title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
 const customDeadline = ref(false), questions = ref<DraftQuestion[]>([])
 let sequence = 0, initialized = false, formOwner = ''
@@ -37,7 +43,7 @@ const previewTime = computed(() => {
   return start && end ? activityTimeRangeWeekday(start, end) : '请补充活动时间'
 })
 const previewQuestionTypes = computed(() => [...new Set(questions.value.map(q => questionLabels[questionTypes.indexOf(q.type)]))].join('、'))
-watch([form, questions, coverUrl], () => { reviewed.value = false }, { deep: true, flush: 'sync' })
+watch([form, questions, coverUrl, descriptionDelta, registrationNotice], () => { reviewed.value = false }, { deep: true, flush: 'sync' })
 const capacityLimited = ref(false)
 const editingQuestion = ref<DraftQuestion | null>(null)
 const questionError = ref('')
@@ -54,6 +60,11 @@ function dateParts(value: string) {
   return { date: `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`, time: `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}` }
 }
 function reset() {
+  descriptionDelta.value = null
+  registrationNotice.value = ''
+  richValid.value = true
+  locationError.value = ''
+  selectingLocation.value = false
   coverUrl.value = ''
   coverError.value = ''
   uploadingCover.value = false
@@ -73,6 +84,7 @@ function reset() {
   aiDraftMissing.value = false
 }
 function applyAiDraft(draft: AiActivityDraft) {
+  descriptionDelta.value = null
   const start = draft.startsAt ? dateParts(draft.startsAt) : { date: '', time: '' }
   const end = draft.endsAt ? dateParts(draft.endsAt) : { date: '', time: '' }
   const deadline = draft.registrationDeadline ? dateParts(draft.registrationDeadline) : { date: '', time: '' }
@@ -109,6 +121,8 @@ async function load() {
       if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
       source.value = activity
       if (!initialized) {
+        descriptionDelta.value = activity.descriptionDelta || null
+        registrationNotice.value = activity.registrationNotice || ''
         coverUrl.value = activity.coverUrl || ''
         const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
@@ -146,9 +160,11 @@ function payload(): ActivityWriteInput {
   if (source.value?.lifecycle === 'published' && Date.parse(source.value.startsAt) <= Date.now()) {
     if (!form.consultationContact.trim()) throw new Error('请填写咨询联系方式')
     const activity = source.value
-    return { title: activity.title, description: activity.description, coverUrl: activity.coverUrl, location: activity.location, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
+    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, location: activity.location, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
+  if (!richValid.value || form.description.length > 10000) throw new Error('活动介绍格式无效或超过 10000 字，请调整后保存')
+  if (registrationNotice.value.length > 500) throw new Error('报名须知最多 500 字')
   if (!form.feeType) throw new Error('请选择免费活动或收费活动')
   const startsAt = timestamp(form.startDate, form.startTime, source.value?.startsAt), endsAt = timestamp(form.endDate, form.endTime, source.value?.endsAt)
   if (!startsAt || !endsAt) throw new Error('请选择完整的开始与结束日期、时间')
@@ -170,7 +186,25 @@ function payload(): ActivityWriteInput {
     if (options && (options.length < 1 || options.length > 100 || options.some(option => option.length > 200) || new Set(options).size !== options.length)) throw new Error(`第 ${index + 1} 题需填写 1–100 个不同选项，每行一个，每项不超过 200 字`)
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options }
   })
-  return { title: form.title.trim(), description: form.description.trim(), location: form.location.trim(), consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null }
+  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null }
+}
+function updateDescription(value: ActivityRichValue) {
+  if (busy.value || !editable.value || started.value) return
+  form.description = value.text
+  descriptionDelta.value = value.delta
+}
+async function selectLocation() {
+  if (busy.value || loading.value || error.value || started.value || !editable.value || disposed) return
+  const request = ++generation, token = session.token, epoch = session.epoch
+  const current = () => request === generation && !disposed && token === session.token && epoch === session.epoch
+  busy.value = true
+  selectingLocation.value = true
+  locationError.value = ''
+  try {
+    const location = await chooseActivityLocation()
+    if (current() && location) form.location = location
+  } catch (e) { if (current()) locationError.value = errorMessage(e) }
+  finally { if (current()) { busy.value = false; selectingLocation.value = false } }
 }
 async function changeCover() {
   if (busy.value || loading.value || error.value || started.value || !editable.value || disposed) return
@@ -304,11 +338,6 @@ async function confirmPublish() {
 }
 function showPublishInformation() {
   uni.showModal({ title: '发布说明', content: '请核对活动时间、地点、咨询方式和报名设置。首次报名后，题目及费用模式和金额将锁定。' + feeDisclaimer + '。', showCancel: false })
-}
-async function focusLocation() {
-  locationFocus.value = false
-  await nextTick()
-  locationFocus.value = true
 }
 function switchValue(event: unknown): boolean {
   return (event as { detail: { value: boolean } }).detail.value
@@ -529,39 +558,13 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
           {{ coverError }}，可重新选择上传。
         </view>
         <view class="form-card description-card">
-          <view class="card-heading"><text>活动介绍 <text class="required">*</text></text><text class="helper">{{ form.description.length }}/{{ Math.max(1000, source?.description.length || 0) }}</text></view>
-          <view class="description-box">
-            <view
-              class="format-toolbar"
-              aria-label="富文本功能暂未开放，目前支持文字输入"
-            >
-              <text class="format-bold">B</text><text class="format-italic">I</text><text class="format-underline">U</text><view class="toolbar-divider" /><uni-icons
-                type="list"
-                size="29rpx"
-                color="#8993a2"
-              /><uni-icons
-                type="list"
-                size="29rpx"
-                color="#8993a2"
-              /><uni-icons
-                type="link"
-                size="29rpx"
-                color="#8993a2"
-              /><view class="toolbar-divider" /><uni-icons
-                type="image"
-                size="29rpx"
-                color="#8993a2"
-              /><text class="toolbar-note">仅文字</text>
-            </view>
-            <textarea
-              v-model="form.description"
-              class="description-input"
-              placeholder="请详细介绍本次活动的内容、亮点、适合人群等..."
-              :maxlength="Math.max(1000, source?.description.length || 0)"
-              :disabled="busy || !editable || started"
-              :cursor-spacing="130"
-            />
-          </view>
+          <view class="card-heading"><text>活动介绍 <text class="required">*</text></text><text class="helper">{{ form.description.length }}/10000</text></view>
+          <ActivityRichEditor
+            :value="{ text: form.description, delta: descriptionDelta }"
+            :disabled="busy || !editable || started"
+            @update:value="updateDescription"
+            @validity="richValid = $event"
+          />
         </view>
         <view class="form-card time-card">
           <view class="card-heading"><text>活动时间 <text class="required">*</text></text></view>
@@ -596,9 +599,9 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
             <text>活动地点 <text class="required">*</text></text><button
               class="location-link"
               :disabled="busy || !editable || started"
-              @click="focusLocation"
+              @click="selectLocation"
             >
-              填写地点
+              {{ selectingLocation ? '选点中' : '地图选点' }}
             </button>
           </view>
           <view class="field icon-field">
@@ -619,7 +622,13 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               color="#8b97aa"
             />
           </view>
-          <view class="field-note">请填写详细地址，地图选点暂未开放</view>
+          <view class="field-note">地图选点后可补充楼栋、楼层或房间，也可直接手动填写</view>
+          <view
+            v-if="locationError"
+            class="error"
+          >
+            {{ locationError }}
+          </view>
         </view>
         <view class="two-column">
           <view class="form-card capacity-card">
@@ -863,12 +872,14 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
           </button>
         </view>
         <view class="settings-card notice-card">
-          <view class="settings-heading"><text>报名须知</text><text class="require-badge optional">选填</text><text class="helper notice-unavailable">暂未开放</text></view><view class="settings-description">向参与者展示报名须知、费用说明等重要信息</view><view class="notice-input">
+          <view class="settings-heading"><text>报名须知</text><text class="require-badge optional">选填</text></view><view class="settings-description">向参与者展示报名须知、费用说明等重要信息</view><view class="notice-input">
             <textarea
-              disabled
-              placeholder="报名须知暂未开放，当前不会保存此项内容"
+              v-model="registrationNotice"
+              :disabled="busy || !editable || started"
+              placeholder="请填写参与要求、携带物品、注意事项等"
+              :cursor-spacing="130"
               :maxlength="500"
-            /><text>0/500</text>
+            /><text>{{ registrationNotice.length }}/500</text>
           </view>
         </view>
       </view>
@@ -941,7 +952,18 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
             </view><text>发起人</text><text>{{ session.member?.displayName || '当前会员' }}</text>
           </view>
         </view>
-        <view class="review-card"><view class="review-heading">活动简介</view><text class="preview-description">{{ form.description.trim() || '请补充活动介绍' }}</text></view>
+        <view class="review-card">
+          <view class="review-heading">活动简介</view><rich-text
+            v-if="form.description.trim()"
+            class="preview-description"
+            :nodes="activityRichTextNodes(descriptionDelta, form.description)"
+          /><text
+            v-else
+            class="preview-description"
+          >
+            请补充活动介绍
+          </text>
+        </view>
         <view class="review-card">
           <view class="review-heading">
             <text>报名设置</text><button
@@ -983,7 +1005,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               type="list"
               size="32rpx"
               color="#164f41"
-            /><view><text class="review-label">报名须知</text><text class="review-muted">未设置（暂未开放）</text></view>
+            /><view><text class="review-label">报名须知</text><text class="review-muted notice-text">{{ registrationNotice.trim() || '未设置' }}</text></view>
           </view>
         </view>
         <view class="review-card">

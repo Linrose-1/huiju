@@ -47,7 +47,7 @@ for(const pagePath of ['activity/organized','registration/index']) {
 
 
 test('mine uses the organized total, keeps active registration count and ignores results after hiding', async t => {
-  const session=reactive({token:'a',epoch:0});let hide;let finish
+  const session=reactive({token:'a',epoch:0,member:{profileComplete:true}});let hide;let finish
   let pending=false
   const deps={
     '@dcloudio/uni-app':{onShow(){},onHide(fn){hide=fn},onUnload(){}},
@@ -56,7 +56,7 @@ test('mine uses the organized total, keeps active registration count and ignores
       notifications:async()=>({items:[],unreadCount:pending?0:103}),
       organizedActivities:()=>pending?new Promise(resolve=>{finish=resolve}):Promise.resolve({items:[],total:125,hasMore:true})
     }},
-    '@/services/api/environment':{}, '@/services/navigation':{}, '@/stores/session':{useSessionStore:()=>session}
+    '@/services/api/environment':{}, '@/services/wechat':{bootstrapIdentity:async()=>{}}, '@/services/navigation':{}, '@/stores/session':{useSessionStore:()=>session}
   }
   const source=readFileSync(new URL('../src/pages/mine/index.vue',import.meta.url),'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const scope=effectScope();t.after(()=>scope.stop())

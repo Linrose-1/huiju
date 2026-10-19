@@ -20,6 +20,7 @@ async function load() {
 }
 async function copy() {
   const code = session.member?.inviteCode
+  if (!session.member?.profileComplete) { loginPage(routes.invitation); return }
   if (busy.value || loading.value || error.value || !session.token || !code) return
   const current = generation
   busy.value = true
@@ -35,14 +36,14 @@ onUnload(() => { generation++; stop() })
 <template>
   <view class="page-pad invitation-page">
     <view
-      v-if="!session.token"
+      v-if="!session.member?.profileComplete"
       class="empty"
     >
-      登录后查看自己的邀请码<button
+      游客完善资料成为会员后，可查看和复制自己的邀请码<button
         class="text-button"
         @click="loginPage(routes.invitation)"
       >
-        去登录
+        去完善资料
       </button>
     </view>
     <template v-else>

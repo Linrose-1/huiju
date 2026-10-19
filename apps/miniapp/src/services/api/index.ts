@@ -27,7 +27,10 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET
     uni.request({ url: API_BASE_URL + path, method, data, timeout,
       header: { 'Content-Type': 'application/json', ...(token && auth !== 'none' ? { Authorization: `Bearer ${token}` } : {}) },
       success(response) {
-        if ((epoch !== session.epoch || token !== session.token) && (auth !== false || !!token)) { reject(new ApiError('STALE_REQUEST', '身份已变更，请重新操作')); return }
+        if ((epoch !== session.epoch || token !== session.token) && (auth === true || method !== 'GET' || (auth === false && !!token))) {
+          if (auth === false && method === 'GET') { request<T>(path, method, data, 'none').then(resolve, reject); return }
+          reject(new ApiError('STALE_REQUEST', '身份已变更，请重新操作')); return
+        }
         const body = response.data as { code?: string; message?: string }
         if (response.statusCode === 401) {
           session.clear()
@@ -60,6 +63,10 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  platformContent: () => request<import('./types').PlatformContent>('/platform/content'),
+  savePlatformContent: (input: { activityText: string; assistantText: string }) => request<import('./types').PlatformContent>('/platform/content', 'POST', input, true),
+  legalDocuments: () => request<import('./types').LegalDocuments>('/platform/legal', 'GET', undefined, 'none'),
+  acceptLegal: (consent: { termsVersion: string; privacyVersion: string }) => request<{ ok: boolean }>('/platform/legal/accept', 'POST', consent, true),
   searchActivities: (input: { requestId: string; messages: string[] }) => request<ActivitySearchResult>('/ai/activity-searches', 'POST', input, true, 100000),
   moreActivitySearch: (id: string, cursor: string) => request<ActivitySearchResult>(`/ai/activity-searches/${encodeURIComponent(id)}?cursor=${encodeURIComponent(cursor)}`, 'GET', undefined, true),
   searchImpressions: (id: string, activityIds: string[]) => request<{ ok: boolean }>(`/ai/activity-searches/${encodeURIComponent(id)}/impressions`, 'POST', { activityIds }, true),
@@ -101,7 +108,8 @@ export const api = {
   cancelActivity: (id: string, reason: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/cancel`, 'POST', { reason }, true),
   notifications: (query: ListQuery = {}) => request<NotificationList>(`/members/me/notifications?${listQuery(query)}`, 'GET', undefined, true),
   readNotification: (id: string) => request<{ok: boolean}>(`/members/me/notifications/${encodeURIComponent(id)}/read`, 'POST', {}, true),
-  login: (code: string, inviteCode?: string) => request<Session>('/auth/wechat/session', 'POST', { code, ...(inviteCode ? { inviteCode } : {}) }, 'none'),
+  login: (code: string, inviteCode: string | undefined, consent: { termsVersion: string; privacyVersion: string }) => request<Session>('/auth/wechat/session', 'POST', { code, ...(inviteCode ? { inviteCode } : {}), ...consent }, 'none'),
+  identify: (code: string, inviteCode?: string) => request<Session>('/auth/wechat/identify', 'POST', { code, ...(inviteCode ? { inviteCode } : {}) }, 'none'),
   logout: () => request<{ ok: boolean }>('/auth/session', 'DELETE', undefined, true),
   phone: (code: string) => memberMutation('/members/me/phone', 'POST', { code }),
   profile: (displayName: string) => memberMutation('/members/me/profile', 'POST', { displayName }),

@@ -1,7 +1,8 @@
-import { refreshMember, ApiError } from '@/services/api'
+import { ApiError } from '@/services/api'
 import { bootstrapIdentity } from '@/services/wechat'
 import { useSessionStore } from '@/stores/session'
 export const routes = {
+  terms: '/pages/legal/terms', privacy: '/pages/legal/privacy', contentSettings: '/pages/platform/content',
   circle: '/pages/circle/index', circleDetail: '/pages/circle/detail', circleEditor: '/pages/circle/editor', circleMine: '/pages/circle/mine', circleIntents: '/pages/circle/intents',
   feedback: '/pages/activity/feedback',
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',
@@ -24,18 +25,14 @@ export function loginPage(returnTo = '') {
   navigate(routes.login + (returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''))
 }
 export async function requireLogin(): Promise<boolean> {
-  try { await bootstrapIdentity(); return !!useSessionStore().token }
-  catch { return false }
+  await bootstrapIdentity()
+  return !!useSessionStore().member?.profileComplete
 }
-export function searchLogin() { navigate(routes.login + '?mode=login&returnTo=' + encodeURIComponent(routes.activitySearch)) }
+export function searchLogin() { loginPage(routes.activitySearch) }
 export async function requireProfile(returnTo: string): Promise<boolean> {
-  const store = useSessionStore()
-  if (!store.token) {
-    try { await bootstrapIdentity() }
-    catch { loginPage(returnTo); return false }
-  }
   try {
-    const member = await refreshMember()
+    await bootstrapIdentity()
+    const member = useSessionStore().member
     if (!member?.profileComplete) { loginPage(returnTo); return false }
     return true
   } catch (error) {

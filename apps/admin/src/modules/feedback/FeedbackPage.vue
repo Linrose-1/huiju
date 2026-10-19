@@ -128,7 +128,10 @@ onMounted(() => load())
         >
           <template #default="{ row }">
             <strong>{{ row.activityTitle }}</strong>
-            <p class="feedback-content">
+            <p
+              class="feedback-content clamp"
+              :title="row.content"
+            >
               {{ row.content }}
             </p>
             <span
@@ -156,7 +159,10 @@ onMounted(() => load())
               {{ row.hiddenAt ? '已隐藏' : '公开中' }}
             </el-tag>
             <template v-if="row.hiddenAt">
-              <p class="feedback-content">
+              <p
+                class="feedback-content clamp"
+                :title="row.hiddenReason"
+              >
                 原因：{{ row.hiddenReason }}
               </p>
               <p class="muted">

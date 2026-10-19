@@ -45,7 +45,7 @@ describe('reading contract and privacy', () => {
   it('only exposes current public display fields, defaulting incomplete identities', () => {
     expect(readerDto(member)).toEqual({ memberId: member.id, avatarUrl: '/avatar.png', displayName: '当前名称' })
     for (const change of [{ boundPhone: null }, { avatarSetByUser: false }, { nameSetByUser: false }, { displayName: ' ' }]) {
-      expect(readerDto({ ...member, ...change })).toEqual({ memberId: member.id, avatarUrl: null, displayName: '会员1001' })
+      expect(readerDto({ ...member, ...change })).toEqual({ memberId: member.id, avatarUrl: null, displayName: '游客1001' })
     }
     expect(readerDto({ ...member, displayName: '更新后的名称' }).displayName).toBe('更新后的名称')
   })

@@ -56,48 +56,56 @@ onMounted(() => load(true))
       查看会员资料与邀请关系。
     </p>
     <div class="panel">
-      <form
-        class="filters member-search"
-        @submit.prevent="load(true)"
-      >
-        <el-input
-          v-model="query"
-          aria-label="搜索会员"
-          placeholder="编号、用户名称、真实姓名或手机号"
-          :maxlength="100"
-          clearable
-        />
-        <el-select
-          v-model="profile"
-          aria-label="资料完善情况"
+      <div class="toolbar">
+        <form
+          class="filters member-search"
+          @submit.prevent="load(true)"
         >
-          <el-option
-            label="全部资料状态"
-            value="all"
+          <el-input
+            v-model="query"
+            aria-label="搜索会员"
+            placeholder="编号、用户名称、真实姓名或手机号"
+            :maxlength="100"
+            clearable
           />
-          <el-option
-            label="资料已完善"
-            value="complete"
-          />
-          <el-option
-            label="资料未完善"
-            value="incomplete"
-          />
-        </el-select>
-        <el-button
-          type="primary"
-          native-type="submit"
-          :loading="loading"
-        >
-          搜索
-        </el-button>
+          <el-select
+            v-model="profile"
+            aria-label="资料完善情况"
+          >
+            <el-option
+              label="全部资料状态"
+              value="all"
+            />
+            <el-option
+              label="资料已完善"
+              value="complete"
+            />
+            <el-option
+              label="资料未完善"
+              value="incomplete"
+            />
+          </el-select>
+          <el-button
+            type="primary"
+            native-type="submit"
+            :loading="loading"
+          >
+            查询
+          </el-button>
+          <el-button
+            :disabled="loading"
+            @click="reset"
+          >
+            重置
+          </el-button>
+        </form>
         <el-button
           :disabled="loading"
-          @click="reset"
+          @click="load()"
         >
-          重置
+          刷新
         </el-button>
-      </form>
+      </div>
       <p
         v-if="inviterId"
         class="muted"
@@ -122,31 +130,31 @@ onMounted(() => load(true))
         />
         <el-table-column
           label="用户名称"
-          min-width="160"
+          min-width="140"
         >
           <template #default="{ row }">
-            {{ row.displayName || '未设置' }}
+            {{ row.displayName || '—' }}
           </template>
         </el-table-column>
         <el-table-column
           label="真实姓名"
-          min-width="120"
+          min-width="110"
         >
           <template #default="{ row }">
-            {{ row.realName || '未填写' }}
+            {{ row.realName || '—' }}
           </template>
         </el-table-column>
         <el-table-column
           label="绑定手机号"
-          min-width="150"
+          min-width="130"
         >
           <template #default="{ row }">
-            {{ row.boundPhone || '未绑定' }}
+            {{ row.boundPhone || '—' }}
           </template>
         </el-table-column>
         <el-table-column
           label="资料状态"
-          min-width="120"
+          width="100"
         >
           <template #default="{ row }">
             <el-tag :type="row.profileComplete ? 'success' : 'info'">
@@ -156,7 +164,7 @@ onMounted(() => load(true))
         </el-table-column>
         <el-table-column
           label="入会时间"
-          min-width="190"
+          min-width="170"
         >
           <template #default="{ row }">
             {{ formatDate(row.createdAt) }}
@@ -219,7 +227,7 @@ onMounted(() => load(true))
           :size="64"
           aria-label="会员头像"
         />
-        <h2>{{ detail.displayName || '未设置用户名称' }}</h2>
+        <h2>{{ detail.displayName || '—' }}</h2>
         <el-descriptions
           :column="1"
           border
@@ -229,25 +237,25 @@ onMounted(() => load(true))
             {{ detail.memberNumber }}
           </el-descriptions-item>
           <el-descriptions-item label="真实姓名">
-            {{ detail.realName || '未填写' }}
+            {{ detail.realName || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="绑定手机号">
-            {{ detail.boundPhone || '未绑定' }}
+            {{ detail.boundPhone || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="邮箱">
-            {{ detail.email || '未填写' }}
+            {{ detail.email || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="家乡">
-            {{ detail.hometown || '未填写' }}
+            {{ detail.hometown || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="个人简介">
-            {{ detail.bio || '未填写' }}
+            {{ detail.bio || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="资源">
-            {{ detail.resources || '未填写' }}
+            {{ detail.resources || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="需求">
-            {{ detail.needs || '未填写' }}
+            {{ detail.needs || '—' }}
           </el-descriptions-item>
           <el-descriptions-item label="资料状态">
             {{ detail.profileComplete ? '已完善' : '未完善' }}
@@ -287,8 +295,7 @@ onMounted(() => load(true))
 </template>
 
 <style scoped>
-.member-search { margin-bottom: 20px; }
-.member-search .el-input { width: min(360px, 100%); }
-.member-search .el-select { width: 180px; }
+.member-search .el-input { width: min(320px, 100%); }
+.member-search .el-select { width: 160px; }
 .member-details { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

@@ -63,7 +63,7 @@ describe('member card validation and privacy', () => {
     const full = publicCard(member, all)
     expect(Object.keys(full).sort()).toEqual(['avatarUrl', 'displayName', 'realName', 'email', 'boundPhone', 'hometown', 'bio', 'resources', 'needs'].sort())
     expect(publicCard({ ...member, bio: null }, all).bio).toBeNull()
-    expect(publicCard({ ...member, boundPhone: null }, cardSettings())).toEqual({ avatarUrl: null, displayName: '会员1001' })
+    expect(publicCard({ ...member, boundPhone: null }, cardSettings())).toEqual({ avatarUrl: null, displayName: '游客1001' })
   })
 })
 

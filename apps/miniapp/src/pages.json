@@ -36,8 +36,20 @@
     {
       "path": "pages/login/index",
       "style": {
-        "navigationBarTitleText": "登录与完善资料"
+        "navigationBarTitleText": "注册与登录"
       }
+    },
+    {
+      "path": "pages/legal/terms",
+      "style": { "navigationBarTitleText": "用户协议" }
+    },
+    {
+      "path": "pages/legal/privacy",
+      "style": { "navigationBarTitleText": "隐私政策" }
+    },
+    {
+      "path": "pages/platform/content",
+      "style": { "navigationBarTitleText": "运营文案设置" }
     },
     {
       "path": "pages/activity/detail",

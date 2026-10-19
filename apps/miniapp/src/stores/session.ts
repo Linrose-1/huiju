@@ -10,6 +10,12 @@ export const useSessionStore = defineStore('session', () => {
   const epoch = ref(0)
   const pendingInvite = ref('')
   const identifying = ref(false)
+  let entryCaptured = false
+  function captureInvite(value?: unknown) {
+    if (entryCaptured || token.value || identifying.value) return
+    entryCaptured = true
+    pendingInvite.value = typeof value === 'string' && value.length <= 32 ? value : ''
+  }
   function clear() {
     epoch.value += 1
     token.value = ''
@@ -36,5 +42,5 @@ export const useSessionStore = defineStore('session', () => {
     uni.setStorageSync(storageKey, { token: session.token, expiresAt: session.expiresAt })
   }
   restore()
-  return { token, member, expiresAt, epoch, pendingInvite, identifying, clear, accept }
+  return { token, member, expiresAt, epoch, pendingInvite, identifying, captureInvite, clear, accept }
 })

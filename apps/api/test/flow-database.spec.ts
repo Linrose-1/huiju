@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from '../src/platform/legal.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { and, eq, sql } from 'drizzle-orm'
@@ -35,18 +36,19 @@ describe.skipIf(!enabled)('real MySQL flow in a rolled-back transaction', () => 
           override async phone() { return '13800000000' }
         }
         const identity = new IdentityService(database, new FixtureWechat())
+        const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
         const service = new ActivityService(database, identity)
-        const sessionA = await identity.login(randomUUID())
+        const sessionA = await login(randomUUID())
         const codeB = randomUUID()
-        const sessionB = await identity.login(codeB, sessionA.member.inviteCode)
-        const sessionC = await identity.login(randomUUID(), 'invalid-invite')
+        const sessionB = await login(codeB, sessionA.member.inviteCode)
+        const sessionC = await login(randomUUID(), 'invalid-invite')
         fixtureIds.push(sessionA.member.id, sessionB.member.id, sessionC.member.id)
         const headerA = `Bearer ${sessionA.token}`
         const headerB = `Bearer ${sessionB.token}`
         const headerC = `Bearer ${sessionC.token}`
         expect(sessionA.member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
         expect(new Set([sessionA, sessionB, sessionC].map(value => value.member.memberNumber)).size).toBe(3)
-        const repeated = await identity.login(codeB, sessionC.member.inviteCode)
+        const repeated = await login(codeB, sessionC.member.inviteCode)
         expect(repeated.member.memberNumber).toBe(sessionB.member.memberNumber)
         expect(repeated.member.id).toBe(sessionB.member.id)
         const [memberB] = await tx.select().from(members).where(eq(members.id, sessionB.member.id))

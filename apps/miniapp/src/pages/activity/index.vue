@@ -14,6 +14,17 @@ const items = ref<Activity[]>([]), loading = ref(false), loadingMore = ref(false
 const error = ref(''), moreError = ref(''), search = ref(''), tab = ref('最新')
 let generation = 0, offset = 0, searchTimer: ReturnType<typeof globalThis.setTimeout> | undefined
 const scanning = ref(false)
+const activityText = ref('连接资产运营人才，共建共享“学加”学友生态'), contentError = ref('')
+let contentGeneration = 0
+async function loadContent() {
+    const current = ++contentGeneration
+    contentError.value = ''
+    try { const result = await api.platformContent(); if (current === contentGeneration) activityText.value = result.activityText }
+    catch (e) { if (current === contentGeneration) contentError.value = errorMessage(e) }
+}
+onShow(loadContent)
+onHide(() => { contentGeneration++ })
+onUnload(() => { contentGeneration++ })
 let disposed = false
 async function scanActivity() {
     if (scanning.value || disposed) return
@@ -90,8 +101,7 @@ watch(search, () => {
     loading.value = true
     searchTimer = globalThis.setTimeout(() => { if (!disposed) void load() }, 300)
 })
-onLoad(options => { if (options?.inviteCode)
-    useSessionStore().pendingInvite = String(options.inviteCode).slice(0, 32); })
+onLoad(options => { useSessionStore().captureInvite(options?.inviteCode) })
 onShow(load)
 onPullDownRefresh(load)
 onReachBottom(more)
@@ -103,8 +113,19 @@ onReachBottom(more)
         class="hero-image"
         src="/static/huiju/campus.jpg"
         mode="aspectFill"
-      /><view class="hero-fade" /><view class="hero-copy serif">连接资产运营人才，<br>共建共享“学加”学友生态。</view>
+      /><view class="hero-fade" /><view class="hero-copy serif">{{ activityText }}</view>
     </view><view class="sheet">
+      <view
+        v-if="contentError"
+        class="error"
+      >
+        {{ contentError }}<button
+          class="text-button"
+          @click="loadContent"
+        >
+          重试文案加载
+        </button>
+      </view>
       <view class="search row">
         <uni-icons
           type="search"

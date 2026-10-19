@@ -8,13 +8,13 @@ import ts from 'typescript'
 const require = createRequire(import.meta.url)
 const {reactive, effectScope} = require('vue')
 function harness(t) {
-  const session = reactive({token:'member-a',epoch:0,member:{inviteCode:'real-code-a'}})
+  const session = reactive({token:'member-a',epoch:0,member:{inviteCode:'real-code-a',profileComplete:true}})
   const refreshes=[],copies=[],tabs=[]
   let unload
   const deps={
     '@dcloudio/uni-app':{onShow(){},onUnload(fn){unload=fn}},
     '@/services/api':{refreshMember:()=>new Promise((resolve,reject)=>refreshes.push({resolve,reject})),errorMessage:e=>e.message},
-    '@/services/api/environment':{}, '@/services/navigation':{routes:{activity:'/pages/activity/index'}},
+    '@/services/api/environment':{}, '@/services/navigation':{loginPage:()=>{},routes:{activity:'/pages/activity/index'}},
     '@/stores/session':{useSessionStore:()=>session}
   }
   const source=readFileSync(new URL('../src/pages/invitation/index.vue',import.meta.url),'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]

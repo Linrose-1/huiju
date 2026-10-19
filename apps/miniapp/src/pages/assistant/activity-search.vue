@@ -12,6 +12,8 @@ const session = useSessionStore(), instance = getCurrentInstance()
 const input = ref(''), messages = ref<string[]>([]), result = ref<ActivitySearchResult | null>(null), items = ref<ActivityRecommendation[]>([])
 const busy = ref(false), moreBusy = ref(false), preparing = ref(false), error = ref(''), moreError = ref(''), opening = ref('')
 const ready = ref(false), remaining = ref<number | null>(null)
+const identityError = ref('')
+const profileMissing = ref(false), profileHintClosed = ref(false)
 let visible = false, disposed = false, generation = 0
 const environment = API_BASE_URL
 let pending: { requestId: string; messages: string[] } | null = null
@@ -26,11 +28,23 @@ function clear() {
   generation++; input.value = ''; messages.value = []; result.value = null; items.value = []; pending = null
   busy.value = false; moreBusy.value = false; opening.value = ''; error.value = ''; moreError.value = ''; remaining.value = null; ready.value = false
   impressed.clear(); impressing.clear(); disconnect()
+  profileMissing.value = false; profileHintClosed.value = false
 }
 async function prepare() {
   preparing.value = true
-  const ok = await requireLogin()
-  if (visible && !disposed) { ready.value = ok; preparing.value = false }
+  identityError.value = ''
+  try {
+    const ok = await requireLogin()
+    if (visible && !disposed) { ready.value = ok; if (ok) void checkProfile() }
+  } catch (e) { if (visible && !disposed) { ready.value = false; identityError.value = errorMessage(e) } }
+  finally { if (visible && !disposed) preparing.value = false }
+}
+async function checkProfile() {
+  const valid = current()
+  try {
+    const details = await api.profileDetails()
+    if (valid()) profileMissing.value = !session.member?.profileComplete || !details.resources?.trim() || !details.needs?.trim()
+  } catch { /* Optional guidance must not block searching. */ }
 }
 async function impression(id: string) {
   const searchId = result.value?.searchId
@@ -55,6 +69,7 @@ async function observe() {
 }
 async function search() {
   if (busy.value || !ready.value || !input.value.trim()) return
+  if (!session.member?.profileComplete) { ready.value = false; searchLogin(); return }
   if (messages.value.length >= 12) { error.value = '本次对话已达到 12 条输入，请返回助手后重新进入，开始新的查找。'; return }
   const nextMessages = [...messages.value, input.value.trim()]
   if (nextMessages.reduce((total, message) => total + message.length, 0) > 8000) {
@@ -100,7 +115,7 @@ async function open(item: ActivityRecommendation) {
 }
 function browse() { uni.switchTab({ url: routes.activity }) }
 function profile() { navigate(routes.profile) }
-watch(() => [session.token, session.epoch], () => { clear(); if (visible) ready.value = !!session.token }, { flush: 'sync' })
+watch(() => [session.token, session.epoch], () => { clear(); if (visible) ready.value = !!session.member?.profileComplete }, { flush: 'sync' })
 onShow(() => { visible = true; void prepare(); void observe() })
 onHide(() => {
   if (busy.value) error.value = '本次请求结果尚未确认，返回后可点击重试查找，不会重复扣次。'
@@ -122,14 +137,73 @@ onUnload(() => { disposed = true; visible = false; clear() })
       v-else-if="!ready"
       class="card"
     >
-      <view>登录后即可找活动，无需先完善资料。</view><button
-        class="primary"
-        @click="searchLogin"
+      <view
+        v-if="identityError"
+        class="error"
       >
-        去登录
+        {{ identityError }}
+      </view>
+      <view v-else>游客可先浏览活动，完善头像、用户名称和手机号后即可使用 AI 找活动。</view><button
+        class="primary"
+        @click="identityError ? prepare() : searchLogin()"
+      >
+        {{ identityError ? '重试身份识别' : '去完善资料' }}
       </button>
     </view>
     <template v-else>
+      <view
+        v-if="profileMissing && !profileHintClosed"
+        class="profile-hint"
+      >
+        <view class="profile-hint-copy">完善资源与需求，让推荐更贴合你。</view>
+        <button
+          class="profile-hint-action"
+          @click="profile"
+        >
+          去完善 →
+        </button>
+        <button
+          class="profile-hint-close"
+          aria-label="关闭资料完善提示"
+          @click="profileHintClosed=true"
+        >
+          ×
+        </button>
+      </view>
+      <view class="card composer">
+        <textarea
+          v-model="input"
+          :maxlength="2000"
+          :disabled="busy"
+          placeholder="输入需求或补充条件，请勿填写无关敏感信息"
+        />
+        <view
+          v-if="remaining!==null"
+          class="muted"
+        >
+          今日还可成功检索 {{ remaining }} 次，每日最多 10 次
+        </view>
+        <view
+          v-if="messages.length>=12"
+          class="muted"
+        >
+          本次对话已达到 12 条输入，请返回助手后重新进入，开始新的查找。
+        </view>
+        <view
+          v-if="error"
+          class="error"
+        >
+          {{ error }}
+        </view>
+        <button
+          class="primary"
+          :disabled="busy || !input.trim() || messages.length>=12"
+          :loading="busy"
+          @click="search"
+        >
+          {{ error?'重试查找':messages.length?'按新条件查找':'帮我找活动' }}
+        </button>
+      </view>
       <view
         v-for="(message,index) in messages"
         :key="index"
@@ -195,46 +269,6 @@ onUnload(() => { disposed = true; visible = false; clear() })
       >
         没有更多了，可补充条件重新查找。
       </view>
-      <view
-        v-if="result"
-        class="profile-hint"
-      >
-        完善你的资源与需求，推荐会更贴合你。<text @click="profile">去完善 →</text>
-      </view>
-      <view class="card composer">
-        <textarea
-          v-model="input"
-          :maxlength="2000"
-          :disabled="busy"
-          placeholder="输入需求或补充条件，请勿填写无关敏感信息"
-        />
-        <view
-          v-if="remaining!==null"
-          class="muted"
-        >
-          今日还可成功检索 {{ remaining }} 次，每日最多 10 次
-        </view>
-        <view
-          v-if="messages.length>=12"
-          class="muted"
-        >
-          本次对话已达到 12 条输入，请返回助手后重新进入，开始新的查找。
-        </view>
-        <view
-          v-if="error"
-          class="error"
-        >
-          {{ error }}
-        </view>
-        <button
-          class="primary"
-          :disabled="busy || !input.trim() || messages.length>=12"
-          :loading="busy"
-          @click="search"
-        >
-          {{ error?'重试查找':messages.length?'按新条件查找':'帮我找活动' }}
-        </button>
-      </view>
     </template>
     <button
       class="text-button"
@@ -245,5 +279,5 @@ onUnload(() => { disposed = true; visible = false; clear() })
   </view>
 </template>
 <style scoped>
-.search-page{padding:30rpx 26rpx calc(40rpx + env(safe-area-inset-bottom));background:#f4f9f7;min-height:100vh}.intro{font-size:38rpx;color:#174d38;font-weight:600;margin-bottom:16rpx}.search-page .muted{font-size:25rpx;line-height:1.7}.card{margin-top:24rpx;padding:26rpx}.message{margin:24rpx 0 16rpx;padding:22rpx;background:#e3f0e8;border-radius:18rpx;white-space:pre-wrap}.cover{width:100%;height:260rpx;border-radius:14rpx;margin-bottom:20rpx}.reason{margin:18rpx 0;line-height:1.7;color:#20593e}.recommendation-card button{margin-top:22rpx}.composer textarea{width:100%;height:180rpx;font-size:29rpx;line-height:1.6}.composer button{margin-top:20rpx}.profile-hint{font-size:25rpx;line-height:1.8;margin:28rpx 0;color:#687970}.profile-hint text{color:#176449;margin-left:14rpx}.error{margin:16rpx 0;line-height:1.6}
+.search-page{padding:30rpx 26rpx calc(40rpx + env(safe-area-inset-bottom));background:#f4f9f7;min-height:100vh}.intro{font-size:38rpx;color:#174d38;font-weight:600;margin-bottom:16rpx}.search-page .muted{font-size:25rpx;line-height:1.7}.card{margin-top:24rpx;padding:26rpx}.message{margin:24rpx 0 16rpx;padding:22rpx;background:#e3f0e8;border-radius:18rpx;white-space:pre-wrap}.cover{width:100%;height:260rpx;border-radius:14rpx;margin-bottom:20rpx}.reason{margin:18rpx 0;line-height:1.7;color:#20593e}.recommendation-card button{margin-top:22rpx}.composer textarea{width:100%;height:180rpx;font-size:29rpx;line-height:1.6}.composer button{margin-top:20rpx}.profile-hint{display:flex;align-items:center;gap:8rpx;margin-top:24rpx;padding:12rpx 10rpx 12rpx 20rpx;background:#e3f0e8;border-radius:16rpx;color:#365f4e}.profile-hint-copy{flex:1;min-width:0;font-size:25rpx;line-height:1.6}.profile-hint-action,.profile-hint-close{flex-shrink:0;background:transparent;color:#176449;border-radius:12rpx}.profile-hint-action{padding:18rpx 10rpx;font-size:25rpx;white-space:nowrap}.profile-hint-close{display:flex;align-items:center;justify-content:center;width:80rpx;height:80rpx;padding:0;font-size:38rpx}.error{margin:16rpx 0;line-height:1.6}
 </style>

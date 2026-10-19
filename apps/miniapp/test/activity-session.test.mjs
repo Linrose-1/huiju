@@ -19,8 +19,9 @@ function harness(t, token = '', reading = {}, navigation = {}) {
   })]))
   let unload, show
   const dependencies = {
-    '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad() {}, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {} },
+    '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad() {}, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {}, onShareTimeline() {} },
     '@/services/reading': { createReadingVisit: reading.createVisit || (() => ({ record: async () => {} })) },
+    '@/services/wechat': { showActivityShareMenu() {} },
     '@/services/api': { api: { ...api, activityReaders: reading.list || (async () => ({items:[], total:0, hasMore:false})) }, ApiError, errorMessage: e => e.message },
     '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': navigation,
     '@/stores/session': { useSessionStore: () => session },

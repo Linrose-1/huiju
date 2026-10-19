@@ -113,6 +113,8 @@ export class ActivityService {
       id: activity.id,
       title: state === 'removed' ? '活动已下架' : activity.title,
       description: state === 'removed' ? '' : activity.description,
+      descriptionDelta: state === 'removed' ? null : activity.descriptionDelta ?? null,
+      registrationNotice: state === 'removed' ? null : activity.registrationNotice ?? null,
       coverUrl: state === 'removed' ? null : activity.coverUrl,
       location: state === 'removed' ? '' : activity.location,
       startsAt: activity.startsAt.toISOString(),

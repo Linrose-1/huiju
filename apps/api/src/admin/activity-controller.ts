@@ -4,6 +4,8 @@ import { ErrorDto, OkDto } from '../flow/dto.js'
 import { ActivityModerationService } from '../flow/activity-moderation.js'
 import { ActivityModerationHistoryDto, ActivityModerationInput, AdminActivityListDto, AdminActivityQuery } from '../flow/activity-moderation-dto.js'
 import { AdminService } from './service.js'
+import { ActivityReportService } from './activity-report-service.js'
+import { ActivityRegistrationListDto, ActivityRegistrationQuery, ActivityReportDto } from './activity-report-dto.js'
 
 type AdminRequest = { headers: { cookie?: string; origin?: string; 'x-csrf-token'?: string } }
 
@@ -13,7 +15,17 @@ type AdminRequest = { headers: { cookie?: string; origin?: string; 'x-csrf-token
 @ApiResponse({ status: 409, type: ErrorDto }) @ApiResponse({ status: 503, type: ErrorDto })
 @Controller('admin/activities')
 export class AdminActivityController {
-  constructor(private readonly admin: AdminService, private readonly activities: ActivityModerationService) {}
+  constructor(private readonly admin: AdminService, private readonly activities: ActivityModerationService, private readonly reports: ActivityReportService) {}
+
+  @Get(':id/report') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: ActivityReportDto })
+  report(@Param('id', ParseUUIDPipe) id: string, @Req() request: AdminRequest) {
+    return this.admin.withSession({ cookie: request.headers.cookie }, tx => this.reports.report(tx, id))
+  }
+
+  @Get(':id/registrations') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: ActivityRegistrationListDto })
+  registrations(@Param('id', ParseUUIDPipe) id: string, @Query() query: ActivityRegistrationQuery, @Req() request: AdminRequest) {
+    return this.admin.withSession({ cookie: request.headers.cookie }, tx => this.reports.registrations(tx, id, query))
+  }
 
   @Get() @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: AdminActivityListDto })
   list(@Query() query: AdminActivityQuery, @Req() request: AdminRequest) {
@@ -22,7 +34,7 @@ export class AdminActivityController {
 
   @Get(':id/operations') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: ActivityModerationHistoryDto })
   history(@Param('id', ParseUUIDPipe) id: string, @Query() query: AdminActivityQuery, @Req() request: AdminRequest) {
-    return this.admin.withSession({ cookie: request.headers.cookie }, tx => this.activities.history(tx, id, query.offset))
+    return this.admin.withSession({ cookie: request.headers.cookie }, tx => this.reports.history(tx, id, query.offset))
   }
 
   @Post(':id/remove') @Header('Cache-Control', 'no-store') @HttpCode(200) @ApiOkResponse({ type: OkDto })

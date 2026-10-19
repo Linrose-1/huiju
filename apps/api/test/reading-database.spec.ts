@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from '../src/platform/legal.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
@@ -33,11 +34,12 @@ describe.skipIf(!enabled)('reading on real MySQL in an outer rollback transactio
           override async exchange(code: string) { return { appId: 'huiju-reading-rollback-test', openId: code, unionId: null } }
         }
         const identity = new IdentityService(database, new FixtureWechat())
+        const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
         const organizer = new OrganizerService(database, identity)
         const reading = new ReadingService(database, identity)
         const registration = new ActivityService(database, identity)
-        const owner = await identity.login(randomUUID())
-        const outsider = await identity.login(randomUUID())
+        const owner = await login(randomUUID())
+        const outsider = await login(randomUUID())
         const ownerHeader = `Bearer ${owner.token}`
         const outsiderHeader = `Bearer ${outsider.token}`
         await tx.update(members).set({ boundPhone: '19900000001', displayName: '阅读回滚测试', nameSetByUser: true, avatarUrl: '/reading-fixture.png', avatarSetByUser: true }).where(eq(members.id, owner.member.id))
@@ -64,7 +66,7 @@ describe.skipIf(!enabled)('reading on real MySQL in an outer rollback transactio
         await reading.record(activityId, { eventId: randomUUID(), visitorId: randomUUID() }, outsiderHeader)
         const readers = await reading.readers(activityId)
         expect(readers.total).toBe(2)
-        expect(readers.items).toContainEqual({ memberId: outsider.member.id, avatarUrl: null, displayName: `会员${outsider.member.memberNumber}` })
+        expect(readers.items).toContainEqual({ memberId: outsider.member.id, avatarUrl: null, displayName: `游客${outsider.member.memberNumber}` })
         for (const row of readers.items) expect(Object.keys(row).sort()).toEqual(['avatarUrl', 'displayName', 'memberId'])
         await registration.write(activityId, ownerHeader, 'register', { contactPhone: '19900000001', answers: [] })
         expect((await reading.stats(activityId, ownerHeader)).conversionRate).toBe(50)

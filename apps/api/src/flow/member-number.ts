@@ -1,5 +1,13 @@
 import { fail } from './common.js'
 
+export function memberInviteCode(memberNumber: string, legacyCode: string) {
+  return /^HJ[0-9]{14}$/.test(memberNumber) ? 'HJYQM' + memberNumber.slice(2) : legacyCode
+}
+
+export function inviteMemberNumber(inviteCode: string) {
+  return /^HJYQM[0-9]{14}$/.test(inviteCode) ? 'HJ' + inviteCode.slice(5) : null
+}
+
 export function memberNumberPrefix(now: Date) {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
   const part = (type: string) => parts.find(item => item.type === type)!.value

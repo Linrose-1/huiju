@@ -14,6 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/mysql-core'
 import { adminAccounts, members } from './members.js'
+import type { DescriptionDelta } from '../../flow/activity-description.js'
 
 export const activities = mysqlTable(
   'activities',
@@ -27,6 +28,8 @@ export const activities = mysqlTable(
       }),
     title: varchar('title', { length: 200 }).notNull(),
     description: text('description').notNull(),
+    descriptionDelta: json('description_delta').$type<DescriptionDelta>(),
+    registrationNotice: varchar('registration_notice', { length: 500 }),
     coverUrl: varchar('cover_url', { length: 2048 }),
     location: varchar('location', { length: 500 }).notNull(),
     consultationContact: text('consultation_contact').notNull(),

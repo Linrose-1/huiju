@@ -58,7 +58,7 @@ describe('feedback input and eligibility', () => {
     const result = feedbackDto(review, member)
     expect(result.score).toBe(4)
     expect(result.member).toEqual({ memberId: member.id, avatarUrl: '/current.png', displayName: '当前名称' })
-    expect(feedbackDto(comment, { ...member, boundPhone: null }).member).toEqual({ memberId: member.id, avatarUrl: null, displayName: '会员1001' })
+    expect(feedbackDto(comment, { ...member, boundPhone: null }).member).toEqual({ memberId: member.id, avatarUrl: null, displayName: '游客1001' })
     expect(Object.keys(result).sort()).toEqual(['id', 'activityId', 'member', 'content', 'score', 'createdAt', 'updatedAt', 'hidden'].sort())
   })
 })

@@ -71,6 +71,20 @@
       "when": 1790943302366,
       "tag": "0009_activity_recommendations",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1791097849910,
+      "tag": "0010_platform_content_and_consent",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1791194883895,
+      "tag": "0011_activity_content",
+      "breakpoints": true
     }
   ]
 }

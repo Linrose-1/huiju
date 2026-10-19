@@ -36,7 +36,7 @@ export class AdminActivityListDto {
 }
 export class ActivityModerationOperationDto {
   @ApiProperty() id!: string
-  @ApiProperty({ enum: ['remove', 'restore'] }) action!: string
+  @ApiProperty({ enum: ['publish', 'cancel', 'remove', 'restore', 'update_consultation_contact'] }) action!: string
   @ApiProperty({ type: String, nullable: true }) actorName!: string | null
   @ApiProperty({ type: String, nullable: true }) reason!: string | null
   @ApiProperty() createdAt!: string

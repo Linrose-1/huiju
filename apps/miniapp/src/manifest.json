@@ -50,11 +50,14 @@
 
 	},
 	"mp-weixin": { /* 小程序特有相关 */
-		"appid": "wx583d4cbc3c518832",
+		"appid": "wx0797ad5030ad418e",
+		"uniStatistics": { "enable": false },
 		"setting": {
 			"urlCheck": false
 		},
-		"usingComponents": true
+		"usingComponents": true,
+		"requiredPrivateInfos": ["chooseLocation"],
+		"permission": { "scope.userLocation": { "desc": "用于在地图中选择活动地点" } }
 	},
 	"vueVersion": "3"
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { adminApi, errorMessage, formatDate, type AdminActivity, type ActivityOperation } from '../../services/admin'
+import { adminApi, errorMessage, formatDate, type AdminActivity, type ActivityOperation, type ActivityReport, type ActivityRegistration } from '../../services/admin'
 import { useRequestScope } from '../../services/request-scope'
 
 const status = ref<'all' | 'normal' | 'removed'>('all')
@@ -24,6 +24,26 @@ const historyOffset = ref(0)
 const historyMore = ref(false)
 const historyLoading = ref(false)
 const historyError = ref('')
+const report = ref<ActivityReport | null>(null), reportLoading = ref(false), reportError = ref('')
+const registrations = ref<ActivityRegistration[]>([]), registrationOffset = ref(0), registrationTotal = ref(0), registrationMore = ref(false), registrationLoading = ref(false), registrationError = ref('')
+const registrationStatus = ref<'all' | 'active' | 'cancelled'>('all')
+const beginReport = useRequestScope(), beginRegistrations = useRequestScope()
+async function loadReport() {
+  if (!detail.value) return
+  const current = beginReport(); reportLoading.value = true; reportError.value = ''; report.value = null
+  try { const result = await adminApi.activityReport(detail.value.id); if (current()) report.value = result }
+  catch (e) { if (current()) reportError.value = errorMessage(e) }
+  finally { if (current()) reportLoading.value = false }
+}
+async function loadRegistrations(reset = false) {
+  if (!detail.value) return
+  if (reset) registrationOffset.value = 0
+  const current = beginRegistrations(); registrationLoading.value = true; registrationError.value = ''; registrations.value = []
+  try { const result = await adminApi.activityRegistrations(detail.value.id, registrationOffset.value, registrationStatus.value); if (current()) { registrations.value = result.items; registrationTotal.value = result.total; registrationMore.value = result.hasMore } }
+  catch (e) { if (current()) registrationError.value = errorMessage(e) }
+  finally { if (current()) registrationLoading.value = false }
+}
+function registrationPage(back: boolean) { registrationOffset.value = Math.max(0, registrationOffset.value + (back ? -40 : 40)); void loadRegistrations() }
 const begin = useRequestScope()
 const beginHistory = useRequestScope()
 
@@ -89,9 +109,10 @@ async function loadHistory() {
 function openDetail(item: AdminActivity) {
   detail.value = item
   historyOffset.value = 0
-  void loadHistory()
+  registrationStatus.value = 'all'
+  void loadReport(); void loadRegistrations(true); void loadHistory()
 }
-function closeDetail() { beginHistory(); detail.value = null; history.value = []; historyLoading.value = false }
+function closeDetail() { beginReport(); beginRegistrations(); report.value = null; registrations.value = []; reportLoading.value = false; registrationLoading.value = false; beginHistory(); detail.value = null; history.value = []; historyLoading.value = false }
 function changePage(back: boolean) { offset.value = Math.max(0, offset.value + (back ? -20 : 20)); void load() }
 function changeHistory(back: boolean) { historyOffset.value = Math.max(0, historyOffset.value + (back ? -20 : 20)); void loadHistory() }
 onMounted(() => load())
@@ -136,6 +157,7 @@ onMounted(() => load())
             />
           </el-select>
           <el-button
+            type="primary"
             :disabled="loading || submitting"
             @click="load(true)"
           >
@@ -168,7 +190,7 @@ onMounted(() => load())
         >
           <template #default="{ row }">
             <strong>{{ row.title }}</strong><p class="muted">
-              {{ row.organizerName || '未设置名称' }}
+              {{ row.organizerName || '—' }}
             </p>
           </template>
         </el-table-column>
@@ -293,7 +315,7 @@ onMounted(() => load())
     <el-dialog
       :model-value="Boolean(detail)"
       title="活动详情与操作记录"
-      width="720px"
+      width="1000px"
       @close="closeDetail"
     >
       <template v-if="detail">
@@ -301,9 +323,139 @@ onMounted(() => load())
         <p class="feedback-content">
           {{ detail.description }}
         </p>
-        <p>地点：{{ detail.location }}</p>
-        <p>{{ detail.feeType === 'free' ? '免费活动' : `收费活动 ¥${((detail.feeAmountCents ?? 0) / 100).toFixed(2)}` }}</p>
-        <h3>下架与恢复记录</h3>
+        <p class="muted detail-meta">
+          地点：{{ detail.location }} · {{ detail.feeType === 'free' ? '免费活动' : `收费活动 ¥${((detail.feeAmountCents ?? 0) / 100).toFixed(2)}` }}
+        </p>
+        <h3>活动统计</h3>
+        <p
+          v-if="reportLoading"
+          role="status"
+        >
+          正在加载统计…
+        </p><el-alert
+          v-if="reportError"
+          :title="reportError"
+          type="error"
+          :closable="false"
+        /><el-button
+          v-if="reportError"
+          @click="loadReport"
+        >
+          重试
+        </el-button>
+        <el-descriptions
+          v-if="report"
+          :column="3"
+          border
+        >
+          <el-descriptions-item label="浏览次数">
+            {{ report.views }}
+          </el-descriptions-item><el-descriptions-item label="浏览人数">
+            {{ report.visitors }}
+          </el-descriptions-item><el-descriptions-item label="当前有效报名">
+            {{ report.activeRegistrations }}
+          </el-descriptions-item><el-descriptions-item label="到场人数">
+            {{ report.attendedMembers }}
+          </el-descriptions-item><el-descriptions-item label="报名 / 浏览人数">
+            {{ report.conversionRate === null ? '暂无浏览' : report.conversionRate.toFixed(1) + '%' }}
+          </el-descriptions-item><el-descriptions-item label="点评评分">
+            {{ report.averageScore === null ? '暂无评分' : report.averageScore.toFixed(1) }}（{{ report.reviewCount }} 条）
+          </el-descriptions-item><el-descriptions-item label="咨询联系方式">
+            {{ report.consultationContact }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <h3>报名名单</h3><el-select
+          v-model="registrationStatus"
+          style="width: 160px"
+          aria-label="报名状态"
+          :disabled="registrationLoading"
+          @change="loadRegistrations(true)"
+        >
+          <el-option
+            value="all"
+            label="全部报名记录"
+          /><el-option
+            value="active"
+            label="当前有效报名"
+          /><el-option
+            value="cancelled"
+            label="已取消报名"
+          />
+        </el-select>
+        <el-alert
+          v-if="registrationError"
+          :title="registrationError"
+          type="error"
+          :closable="false"
+        /><el-button
+          v-if="registrationError"
+          @click="loadRegistrations()"
+        >
+          重试
+        </el-button>
+        <el-table
+          v-loading="registrationLoading"
+          :data="registrations"
+          empty-text="暂无报名记录"
+        >
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="registration-answers">
+                <p
+                  v-for="answer in row.answers"
+                  :key="answer.questionId"
+                >
+                  <strong>{{ answer.prompt }}</strong>：{{ Array.isArray(answer.answer) ? answer.answer.join('、') : answer.answer }}
+                </p><p
+                  v-if="!row.answers.length"
+                  class="muted"
+                >
+                  未设置自定义问题
+                </p><p>报名：{{ formatDate(row.registeredAt) }}<span v-if="row.cancelledAt"> · 取消：{{ formatDate(row.cancelledAt) }}</span><span v-if="row.attendedAt"> · 到场：{{ formatDate(row.attendedAt) }}</span></p>
+              </div>
+            </template>
+          </el-table-column><el-table-column
+            prop="memberNumber"
+            label="会员编号"
+            min-width="170"
+          /><el-table-column
+            prop="displayName"
+            label="用户名称"
+            min-width="120"
+          /><el-table-column
+            prop="contactPhone"
+            label="本次联系手机号"
+            min-width="140"
+          /><el-table-column
+            label="报名状态"
+            width="120"
+          >
+            <template #default="{ row }">
+              {{ row.status === 'active' ? '有效报名' : '已取消' }}
+            </template>
+          </el-table-column><el-table-column
+            label="到场状态"
+            width="100"
+          >
+            <template #default="{ row }">
+              {{ row.attended ? '已到场' : '未到场' }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="pagination">
+          <span>共 {{ registrationTotal }} 条</span><el-button
+            :disabled="registrationLoading || !registrationOffset"
+            @click="registrationPage(true)"
+          >
+            上一页
+          </el-button><el-button
+            :disabled="registrationLoading || !registrationMore"
+            @click="registrationPage(false)"
+          >
+            下一页
+          </el-button>
+        </div>
+        <h3>操作记录</h3>
         <el-alert
           v-if="historyError"
           :title="historyError"
@@ -327,14 +479,14 @@ onMounted(() => load())
           v-else-if="!historyError && !history.length"
           class="muted"
         >
-          暂无下架或恢复记录
+          暂无操作记录
         </p>
         <article
           v-for="item in history"
           :key="item.id"
           class="operation"
         >
-          <strong>{{ item.action === 'remove' ? '下架' : '恢复' }} · {{ item.actorName || '管理员' }}</strong>
+          <strong>{{ ({ remove: '下架', restore: '恢复', cancel: '取消', publish: '发布', update_consultation_contact: '修改咨询联系方式' } as Record<string, string>)[item.action] || item.action }} · {{ item.actorName || '管理员' }}</strong>
           <p class="feedback-content">
             {{ item.reason }}
           </p>
@@ -360,5 +512,8 @@ onMounted(() => load())
 </template>
 
 <style scoped>
-.operation { padding: 16px 0; border-bottom: 1px solid var(--huiju-border); }
+.operation { padding: 12px 0; border-bottom: 1px solid var(--huiju-border); }
+.operation:last-of-type { border-bottom: 0; }
+.registration-answers { padding: 0 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail-meta { margin: 4px 0 0; }
 </style>

@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { Logger } from '@nestjs/common'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RecommendationProvider, validateParsedSearch } from '../src/recommendations/provider.js'
 import { matchesHardConditions, publicCandidatePayload } from '../src/recommendations/matching.js'
@@ -65,6 +66,23 @@ describe('recommendation parsing and public matching', () => {
     expect(matchesHardConditions(candidate, parsed)).toBe(true)
     expect(matchesHardConditions({ ...candidate, startsAt: candidate.endsAt }, parsed)).toBe(false)
   })
+  it.each(['商业或地产', '商业或者地产', '商业 OR 地产'])('clarifies alternatives instead of accepting all themes for %s', message => {
+    const parsed = validateParsedSearch({ ...empty, hard: { themes: [{ value: '商业', evidence: '商业' }, { value: '地产', evidence: '地产' }] } }, [message])
+    expect(parsed.clarify).toContain('任选')
+    expect(matchesHardConditions(candidate, parsed)).toBe(false)
+  })
+  it('does not silently drop one or all alternatives and retains the question when adding a city', () => {
+    for (const themes of [[], [{ value: '商业', evidence: '商业' }]]) {
+      expect(validateParsedSearch({ ...empty, hard: { themes } }, ['商业或地产']).clarify).toContain('任选')
+    }
+    expect(validateParsedSearch({ ...empty, hard: { location: { value: '深圳', evidence: '深圳' }, themes: [{ value: '商业', evidence: '商业' }] } }, ['商业或地产', '深圳']).clarify).toContain('任选')
+  })
+  it('allows conjunctions, ordinary uncertainty and an explicit replacement of alternatives', () => {
+    const themes = [{ value: '商业', evidence: '商业' }, { value: '地产', evidence: '地产' }]
+    expect(validateParsedSearch({ ...empty, hard: { themes } }, ['商业和地产都必须有']).clarify).toBeNull()
+    expect(validateParsedSearch({ ...empty, hard: { themes: themes.slice(0, 1) } }, ['或许看看商业活动']).clarify).toBeNull()
+    expect(validateParsedSearch({ ...empty, hard: { themes: themes.slice(0, 1) } }, ['商业或地产', '那就只看商业']).clarify).toBeNull()
+  })
   it('refuses over-budget candidate sets and descriptions instead of truncating', () => {
     expect(() => publicCandidatePayload(Array.from({ length: 61 }, () => candidate))).toThrow('候选活动较多')
     expect(() => publicCandidatePayload([{ ...candidate, description: '内容'.repeat(30001) }])).toThrow('候选活动较多')
@@ -115,6 +133,23 @@ describe('recommendation parsing and public matching', () => {
     expect(network).toHaveBeenCalledTimes(1)
     network.mockResolvedValue(response({ hard: 'invalid', preferences: [] }))
     await expect(new RecommendationProvider().parse(['找活动'])).rejects.toThrow('暂时无法智能匹配')
+  })
+  it('diagnoses upstream and JSON failures without logging credentials or response bodies', async () => {
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      network.mockResolvedValueOnce(new Response('private-provider-body', { status: 502 }))
+      await expect(new RecommendationProvider().parse(['找活动'])).rejects.toThrow('暂时无法智能匹配')
+      network.mockResolvedValueOnce(new Response(JSON.stringify({ choices: [{ message: { content: 'private-malformed-content' } }] })))
+      await expect(new RecommendationProvider().parse(['找活动'])).rejects.toThrow('暂时无法智能匹配')
+      network.mockRejectedValueOnce(new TypeError('private-network-error', { cause: { code: 'UND_ERR_SOCKET', message: 'private-url-token' } }))
+      await expect(new RecommendationProvider().parse(['找活动'])).rejects.toThrow('暂时无法智能匹配')
+      expect(network).toHaveBeenCalledTimes(3)
+      const logged = JSON.stringify(warn.mock.calls)
+      expect(logged).toContain('upstream_http_502')
+      expect(logged).toContain('invalid_json')
+      expect(logged).toContain('parse:request_failed_UND_ERR_SOCKET')
+      for (const secret of ['test-only-key', 'private-provider-body', 'private-malformed-content', 'private-network-error', 'private-url-token', '找活动']) expect(logged).not.toContain(secret)
+    } finally { warn.mockRestore() }
   })
   it('times out once and exposes no raw error', async () => {
     vi.useFakeTimers()

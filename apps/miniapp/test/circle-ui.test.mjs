@@ -19,6 +19,7 @@ const routes={circle:'/pages/circle/index',circleDetail:'/pages/circle/detail',c
 const post=()=>({id:'post-a',category:'park',subtype:'rent',title:'园区资源',body:'说明',state:'open',isOwner:false,images:[],author:{id:'author-a',displayName:'作者'},createdAt:'2026-09-30T00:00:00Z'})
 function harness(page='detail',overrides={}) {
   const session=reactive({token:'token-a',epoch:0,member:{profileComplete:true,boundPhone:'13800000000',inviteCode:'sharer-code'}}),hooks={},calls=[],sent=[],saved=[],uploaded=[]
+  session.captureInvite=()=>{}
   const uni={stopPullDownRefresh(){},showToast:options=>calls.push(['toast',options.title]),switchTab:options=>calls.push(['tab',options.url]),...overrides.uni}
   const api={circlePost:async()=>post(),circlePosts:async()=>({items:[],hasMore:false}),circleIntents:async()=>({items:[],hasMore:false}),endCirclePost:async id=>calls.push(['end',id]),submitCircleIntent:async(...args)=>{sent.push(args)},saveCirclePost:async(...args)=>{saved.push(args);return {...post(),isOwner:true}},uploadCircleImage:async(...args)=>{uploaded.push(args);return {id:'image-a'}},...overrides.api}
   const navigation={routes,navigate:(...args)=>calls.push(['navigate',...args]),loginPage:url=>calls.push(['login',url]),requireProfile:overrides.requireProfile||async function(){return session.member.profileComplete}}
@@ -216,7 +217,7 @@ test('account change while end confirmation is open prevents ending previous own
 test('login cancellation returns to original post without calling login or saving profile',async()=>{
   const calls=[],session={token:'',pendingInvite:'',member:null};let onLoad
   const uni=Object.fromEntries(['navigateBack','switchTab','redirectTo','navigateTo'].map(method=>[method,options=>{calls.push([method,options?.url]);options?.complete?.()}]))
-  const deps={'@/services/api':{api:{profile:()=>assert.fail('cancel must not save profile')},refreshMember:()=>assert.fail('cancel must not request profile')},'@/services/wechat':{loginWithWechat:()=>assert.fail('cancel must not login')},'@/stores/session':{useSessionStore:()=>session},'@/services/api/environment':{LOCAL_TEST:false,mediaUrl:x=>x},'@dcloudio/uni-app':{onLoad:fn=>onLoad=fn}}
+  const deps={'@/services/api':{api:{profile:()=>assert.fail('cancel must not save profile'),legalDocuments:async()=>({development:true,terms:{version:'dev'},privacy:{version:'dev'}})},errorMessage:e=>e.message,refreshMember:()=>assert.fail('cancel must not request profile')},'@/services/wechat':{bootstrapIdentity:async()=>{}},'@/stores/session':{useSessionStore:()=>session},'@/services/api/environment':{LOCAL_TEST:false,mediaUrl:x=>x},'@dcloudio/uni-app':{onLoad:fn=>onLoad=fn,onUnload:()=>{}}}
   deps['@/services/navigation']=evaluate(source('services/navigation.ts'),deps,{uni,getCurrentPages:()=>[{route:'pages/circle/detail',options:{id:'post-a'}},{route:'pages/login/index'}]})
   const script=source('pages/login/index.vue').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const page=evaluate(script+'\nexport {cancel,cancelText,busy};',deps,{uni})
@@ -233,7 +234,7 @@ test('login cancellation returns to original post without calling login or savin
     await onLoad({returnTo});page.cancel();assert.deepEqual(calls.pop(),[method,target])
   }
   for(const returnTo of ['', '/pages/login/index', 'https://example.test', '/pages/circle/detail-unknown?id=post-a']){
-    await onLoad({returnTo});assert.equal(page.cancelText.value,'暂不登录，先看看活动');page.cancel();assert.deepEqual(calls.pop(),['switchTab','/pages/activity/index'])
+    await onLoad({returnTo});assert.equal(page.cancelText.value,'暂不完善，先看看活动');page.cancel();assert.deepEqual(calls.pop(),['switchTab','/pages/activity/index'])
   }
 })
 

@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator'
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator'
 import { ActivityDto, ActivityCountsDto, PublicMemberDto, RegistrationDto } from './dto.js'
+import type { DescriptionDelta } from './activity-description.js'
+import { DescriptionDeltaDto } from './activity-description-dto.js'
 
 export class CoverUploadDto {
   @ApiProperty() coverUrl!: string
@@ -18,6 +20,8 @@ export class QuestionWriteInput {
 export class ActivityWriteInput {
   @ApiProperty() @IsString() @Length(1, 200) @Matches(/\S/) title!: string
   @ApiProperty() @IsString() @Length(1, 10000) @Matches(/\S/) description!: string
+  @ApiPropertyOptional({ type: DescriptionDeltaDto, nullable: true }) @IsOptional() @IsObject() descriptionDelta?: DescriptionDelta | null
+  @ApiPropertyOptional({ type: String, nullable: true }) @IsOptional() @IsString() @Length(0, 500) registrationNotice?: string | null
   @ApiPropertyOptional({ type: String, nullable: true }) @IsOptional() @IsString() @Length(1, 2048) coverUrl?: string | null
   @ApiProperty() @IsString() @Length(1, 500) @Matches(/\S/) location!: string
   @ApiProperty() @IsString() @Length(1, 1000) @Matches(/\S/) consultationContact!: string

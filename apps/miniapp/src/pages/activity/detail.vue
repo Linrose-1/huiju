@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onShareTimeline, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, PublicMember, Registration, ReadingList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -8,6 +8,8 @@ import { dateTime, fee, stateText, feeNotice, feeDisclaimer, activityTimeRangeWe
 import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { createReadingVisit } from '@/services/reading'
+import { showActivityShareMenu } from '@/services/wechat'
+import { activityRichTextNodes } from '@/services/activity-rich-text'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
 const id = ref(''), activity = ref<Activity | null>(null), roster = ref<PublicMember[]>([]), registration = ref<Registration | null>(null), loading = ref(true), busy = ref(false), error = ref(''), rosterError = ref(''), expanded = ref(false)
@@ -137,8 +139,7 @@ catch (e) {
 finally {
     busy.value = false
 } }
-onLoad(options => { id.value = String(options?.id || ''); searchId.value = String(options?.searchId || ''); if (options?.inviteCode)
-    session.pendingInvite = String(options.inviteCode).slice(0, 32); if (!id.value) {
+onLoad(options => { showActivityShareMenu(); id.value = String(options?.id || ''); searchId.value = String(options?.searchId || ''); session.captureInvite(options?.inviteCode); if (!id.value) {
     loading.value = false
     error.value = '活动链接不完整，请从活动列表重新进入'
 } })
@@ -150,7 +151,11 @@ onReachBottom(() => {
     if (rosterExpanded.value) void loadRoster(true)
     if (readersExpanded.value) void loadReaders(true)
 })
-onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path: routes.detail + '?id=' + id.value + (session.member?.inviteCode ? '&inviteCode=' + encodeURIComponent(session.member.inviteCode) : '') }))
+function shareQuery() {
+    return 'id=' + encodeURIComponent(id.value) + (session.member?.inviteCode ? '&inviteCode=' + encodeURIComponent(session.member.inviteCode) : '')
+}
+onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path: routes.detail + '?' + shareQuery() }))
+onShareTimeline(() => ({ title: activity.value?.title || '会聚活动', query: shareQuery() }))
 </script>
 <template>
   <view class="page-pad with-footer activity-detail">
@@ -228,7 +233,7 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
           class="intro"
           :class="{collapsed:!expanded}"
         >
-          {{ activity.description }}
+          <rich-text :nodes="activityRichTextNodes(activity.descriptionDelta, activity.description)" />
         </view><button
           class="text-button expand"
           @click="expanded=!expanded"
@@ -239,6 +244,11 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
             color="#296b51"
           />
         </button><view
+          v-if="activity.registrationNotice"
+          class="notice registration-notice"
+        >
+          <view class="section-title">报名须知</view><text>{{ activity.registrationNotice }}</text>
+        </view><view
           v-if="activity.feeType==='paid'"
           class="notice fee-notice"
         >
@@ -472,4 +482,5 @@ onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path:
 .fixed-footer .share { flex: 0 0 210rpx; display: flex; align-items: center; justify-content: center; gap: 10rpx; background: #eff5f2; color: #16262b; }
 .fixed-footer .primary { background: linear-gradient(110deg,#33996f,#145b45); }
 .fixed-footer .primary[disabled] { background: #e3ebe5; color: #81938a; }
+.registration-notice{display:block;white-space:pre-wrap;overflow-wrap:anywhere}
 </style>

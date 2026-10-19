@@ -14,6 +14,7 @@ import { complete, IdentityService, validAvatar } from './identity.js'
 import { AvatarInput } from './dto.js'
 import { ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
 import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
+import { activityDescription, activityRegistrationNotice } from './activity-description.js'
 
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
@@ -22,7 +23,8 @@ const coverName = /^[a-f0-9-]{36}_[a-f0-9-]{36}\.(png|jpg)$/
 const coverPrefix = '/api/v1/media/covers/'
 
 export function activityValues(input: ActivityWriteInput) {
-  if ([input.title, input.description, input.location, input.consultationContact].some(value => !value?.trim())) fail('INVALID_ACTIVITY', '请填写完整的活动必填信息')
+  const description = activityDescription(input.description, input.descriptionDelta)
+  if ([input.title, input.location, input.consultationContact].some(value => !value?.trim())) fail('INVALID_ACTIVITY', '请填写完整的活动必填信息')
   const startsAt = new Date(input.startsAt)
   const endsAt = new Date(input.endsAt)
   const registrationDeadline = input.registrationDeadline ? new Date(input.registrationDeadline) : null
@@ -44,7 +46,7 @@ export function activityValues(input: ActivityWriteInput) {
     }
   }
   return {
-    title: input.title.trim(), description: input.description.trim(), coverUrl: input.coverUrl ?? null,
+    title: input.title.trim(), ...description, registrationNotice: activityRegistrationNotice(input.registrationNotice), coverUrl: input.coverUrl ?? null,
     location: input.location.trim(), consultationContact: input.consultationContact.trim(),
     startsAt, endsAt, registrationDeadline, capacity: input.capacity ?? null,
     feeType: input.feeType, feeAmountCents: input.feeAmountCents ?? null
@@ -57,7 +59,10 @@ export function requireOrganizer(activity: Activity | undefined, memberId: strin
 }
 
 export function validateActivityEdit(activity: Activity, questions: Question[], input: ActivityWriteInput, now = new Date()) {
-  const values = activityValues(input)
+  const values = activityValues({ ...input,
+    descriptionDelta: input.descriptionDelta === undefined && input.description.trim() === activity.description ? activity.descriptionDelta : input.descriptionDelta,
+    registrationNotice: input.registrationNotice === undefined ? activity.registrationNotice : input.registrationNotice,
+  })
   if (activity.lifecycle === 'cancelled' || activity.moderation === 'removed') fail('ACTIVITY_UNAVAILABLE', '活动已取消或下架，不能编辑', 409)
   const sameQuestions = questions.length === input.questions.length && questions.every((q, index) => {
     const other = input.questions[index]
@@ -73,6 +78,8 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
     const changed = Object.entries(values).some(([key, value]) => {
       if (key === 'consultationContact') return false
       const original = activity[key as keyof typeof values]
+      if (key === 'descriptionDelta') return JSON.stringify(value) !== JSON.stringify(original == null ? null : activityDescription(activity.description, activity.descriptionDelta).descriptionDelta)
+      if (key === 'registrationNotice') return value !== (original ?? null)
       // A missing deadline and the start time have identical meaning.
       if (key === 'registrationDeadline') return (value as Date | null)?.getTime() !== (activity.registrationDeadline ?? activity.startsAt).getTime()
         && (value as Date | null)?.getTime() !== activity.registrationDeadline?.getTime()
@@ -134,6 +141,7 @@ export class OrganizerService {
     const [organizer] = await db.select({ memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     return {
       id: activity.id, title: activity.title, description: activity.description, coverUrl: activity.coverUrl,
+      descriptionDelta: activity.descriptionDelta ?? null, registrationNotice: activity.registrationNotice ?? null,
       location: activity.location, consultationContact: activity.consultationContact,
       startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(),
       registrationDeadline: (activity.registrationDeadline ?? activity.startsAt).toISOString(),

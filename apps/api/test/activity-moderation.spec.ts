@@ -7,6 +7,7 @@ import { MySqlDialect } from 'drizzle-orm/mysql-core'
 import type { SQL } from 'drizzle-orm'
 import { ActivityModerationService } from '../src/flow/activity-moderation.js'
 import { AdminActivityController } from '../src/admin/activity-controller.js'
+import { ActivityReportService } from '../src/admin/activity-report-service.js'
 import { AdminService, type AdminTransaction } from '../src/admin/service.js'
 import { csrfFor } from '../src/admin/security.js'
 import { NotificationDelivery } from '../src/notifications/delivery.js'
@@ -145,7 +146,7 @@ describe('activity moderation HTTP with real AdminService and domain service', (
   let app: INestApplication, base: string, current: ReturnType<typeof fixture>
   beforeAll(async () => {
     vi.stubEnv('ADMIN_ORIGIN', context.origin)
-    const module = await Test.createTestingModule({ controllers: [AdminActivityController], providers: [AdminService, ActivityModerationService, NotificationDelivery,
+    const module = await Test.createTestingModule({ controllers: [AdminActivityController], providers: [AdminService, ActivityModerationService, ActivityReportService, NotificationDelivery,
       { provide: FlowDatabase, useValue: { get db() { return current.database.db } } },
     ] }).compile()
     app = module.createNestApplication({ logger: false })

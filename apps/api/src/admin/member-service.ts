@@ -3,6 +3,7 @@ import { and, count, desc, eq, or, sql } from 'drizzle-orm'
 import { members } from '../database/schema/members.js'
 import { fail } from '../flow/common.js'
 import { complete, type Member } from '../flow/identity.js'
+import { memberInviteCode } from '../flow/member-number.js'
 import { AdminMemberDetailDto, AdminMemberListDto, AdminMemberQuery, AdminMemberSummaryDto } from './member-dto.js'
 import type { AdminTransaction } from './service.js'
 
@@ -34,7 +35,7 @@ export class AdminMemberService {
     const [inviter] = member.inviterMemberId ? await tx.select({ id: members.id, memberNumber: members.memberNumber, displayName: members.displayName, kind: members.kind }).from(members).where(eq(members.id, member.inviterMemberId)) : []
     const [invitees] = await tx.select({ value: count() }).from(members).where(and(eq(members.inviterMemberId, id), eq(members.kind, 'member')))
     return { ...summary(member), avatarUrl: member.avatarUrl, email: member.email, hometown: member.hometown,
-      resources: member.resources, needs: member.needs, bio: member.bio, inviteCode: member.inviteCode,
+      resources: member.resources, needs: member.needs, bio: member.bio, inviteCode: memberInviteCode(member.memberNumber, member.inviteCode),
       inviter: inviter ? { id: inviter.id, memberNumber: inviter.memberNumber, displayName: inviter.displayName, kind: inviter.kind } : null,
       inviteeCount: Number(invitees!.value) }
   }

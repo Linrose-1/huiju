@@ -6,9 +6,7 @@ import { LOCAL_TEST } from '@/services/api/environment'
 function captureInvite(options: {
     query?: Record<string, unknown>
 } | undefined) {
-    const invite = options?.query?.inviteCode
-    if (typeof invite === 'string' && invite.length <= 32)
-        useSessionStore().pendingInvite = invite
+    useSessionStore().captureInvite(options?.query?.inviteCode)
 }
 onLaunch(options => { captureInvite(options); void bootstrapIdentity().catch(() => undefined); })
 onShow(() => {
@@ -16,6 +14,7 @@ onShow(() => {
     // #ifdef MP-WEIXIN
     captureInvite(uni.getEnterOptionsSync())
     // #endif
+    void bootstrapIdentity().catch(() => undefined)
 })
 </script>
 <style lang="scss">

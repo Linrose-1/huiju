@@ -2,35 +2,43 @@
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
-import { api, refreshMember, errorMessage } from '@/services/api'
+import { api, errorMessage } from '@/services/api'
 import { mediaUrl } from '@/services/api/environment'
-import { navigate, routes, loginPage } from '@/services/navigation'
+import { navigate, routes, loginPage, requireProfile } from '@/services/navigation'
+import { bootstrapIdentity } from '@/services/wechat'
 const session = useSessionStore(), count = ref<number | null>(null), organizedCount = ref<number | null>(null), error = ref(''), loading = ref(false)
 const unreadCount = ref(0)
+const canEditContent = ref(false)
 let generation = 0
 async function load() {
-  const current = ++generation, token = session.token, epoch = session.epoch
+  const current = ++generation
+  let token = session.token, epoch = session.epoch
   const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
   count.value = null; organizedCount.value = null; unreadCount.value = 0; error.value = ''; loading.value = false
-  if (!token) return
+  canEditContent.value = false
   loading.value = true
   try {
-    await refreshMember()
-    if (!isCurrent()) return
+    await bootstrapIdentity()
+    if (current !== generation) return
+    token = session.token; epoch = session.epoch
+    if (!session.member?.profileComplete) return
+    void Promise.resolve().then(() => api.platformContent()).then(content => { if (isCurrent()) canEditContent.value = content.canEdit }).catch(() => undefined)
     const [registered, organized, notifications] = await Promise.all([api.registrations(), api.organizedActivities(), api.notifications()])
     if (!isCurrent()) return
     count.value = registered.activeCount
     organizedCount.value = organized.total
     unreadCount.value = notifications.unreadCount
-  } catch (e) { if (isCurrent()) error.value = errorMessage(e) }
-  finally { if (isCurrent()) loading.value = false }
+  } catch (e) { if (current === generation) error.value = errorMessage(e) }
+  finally { if (current === generation) loading.value = false }
 }
-function openRegistrations() { if (!session.token)
-    loginPage(routes.registrations)
-else
-    navigate(routes.registrations); }
-function invitation() { navigate(routes.invitation) }
-async function logout() { const result = await uni.showModal({ title: '退出登录', content: '下次报名需要重新登录，确认退出？' }); if (!result.confirm)
+async function openMemberPage(target: string) {
+  try { if (await requireProfile(target)) navigate(target) }
+  catch (e) { error.value = errorMessage(e) }
+}
+function editProfile() { if (session.member?.profileComplete) navigate(routes.profile); else loginPage(routes.profile) }
+function openRegistrations() { void openMemberPage(routes.registrations) }
+function invitation() { void openMemberPage(routes.invitation) }
+async function logout() { const result = await uni.showModal({ title: '退出登录', content: '本次将退出，下次进入小程序时会重新识别微信身份，确认退出？' }); if (!result.confirm)
     return; try {
     await api.logout()
 }
@@ -42,7 +50,7 @@ finally {
     count.value = null
     organizedCount.value = null
 } }
-watch(() => [session.token, session.epoch], () => { generation++; count.value = null; organizedCount.value = null; unreadCount.value = 0; loading.value = false })
+watch(() => [session.token, session.epoch], () => { count.value = null; organizedCount.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false }, { flush: 'sync' })
 onShow(load)
 onHide(() => { generation++ })
 onUnload(() => { generation++ })
@@ -67,7 +75,7 @@ onUnload(() => { generation++ })
             color="#a4b6ac"
           />
         </view><view class="grow">
-          <view class="name serif">{{ session.member?.displayName || (session.token?'待完善资料':'未登录') }}</view><view class="member-number">{{ session.member?'会员编号 '+session.member.memberNumber:'登录后管理自己的活动' }}</view><view class="complete">
+          <view class="name serif">{{ session.member?.profileComplete ? session.member.displayName : '游客' }}</view><view class="member-number">{{ session.member?.profileComplete ? '会员编号 '+session.member.memberNumber : '完善头像、用户名称和手机号后成为会员' }}</view><view class="complete">
             <uni-icons
               :type="session.member?.profileComplete?'checkbox-filled':'info'"
               size="32rpx"
@@ -76,9 +84,9 @@ onUnload(() => { generation++ })
           </view>
         </view><button
           class="edit"
-          @click="session.token ? navigate(routes.profile) : loginPage(routes.profile)"
+          @click="editProfile"
         >
-          {{ session.token?'编辑资料':'去登录' }} <text
+          {{ session.member?.profileComplete?'编辑资料':'完善资料' }} <text
             class="entry-arrow"
             aria-hidden="true"
           >
@@ -115,7 +123,7 @@ onUnload(() => { generation++ })
           </view>
         </view><view class="grow"><view class="serif namecard-title">我的名片</view><view class="muted small">选择对同学展示的信息</view></view><button
           class="edit"
-          @click="navigate(routes.cardSettings)"
+          @click="openMemberPage(routes.cardSettings)"
         >
           设置名片 <text
             class="entry-arrow"
@@ -148,7 +156,7 @@ onUnload(() => { generation++ })
         </view><view
           class="tile"
           hover-class="tile-pressed"
-          @click="navigate(routes.organizedActivities)"
+          @click="openMemberPage(routes.organizedActivities)"
         >
           <view class="row">
             <view class="tile-icon">
@@ -170,7 +178,7 @@ onUnload(() => { generation++ })
         <view
           class="menu-row row"
           hover-class="menu-pressed"
-          @click="navigate(routes.notifications)"
+          @click="openMemberPage(routes.notifications)"
         >
           <view class="menu-icon">
             <uni-icons
@@ -211,6 +219,28 @@ onUnload(() => { generation++ })
           >
             {{ '>' }}
           </text>
+        </view>
+        <view
+          v-if="canEditContent"
+          class="menu-row row"
+          hover-class="menu-pressed"
+          @click="navigate(routes.contentSettings)"
+        >
+          <view class="grow"><view class="tile-title">运营文案设置</view><view class="muted small">修改活动页和助手页文案</view></view><text class="entry-arrow">{{ '>' }}</text>
+        </view>
+        <view
+          class="menu-row row"
+          hover-class="menu-pressed"
+          @click="navigate(routes.terms)"
+        >
+          <view class="grow"><view class="tile-title">用户协议</view></view><text class="entry-arrow">{{ '>' }}</text>
+        </view>
+        <view
+          class="menu-row row"
+          hover-class="menu-pressed"
+          @click="navigate(routes.privacy)"
+        >
+          <view class="grow"><view class="tile-title">隐私政策</view></view><text class="entry-arrow">{{ '>' }}</text>
         </view>
       </view><button
         v-if="session.token"

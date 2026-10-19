@@ -324,6 +324,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/wechat/identify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["IdentityController_identify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/wechat/session": {
         parameters: {
             query?: never;
@@ -820,6 +836,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/activities/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminActivityController_report"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/activities/{id}/registrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminActivityController_registrations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/activities": {
         parameters: {
             query?: never;
@@ -942,6 +990,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["AdminCircleController_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AnalyticsController_dashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AnalyticsController_members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/members/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AnalyticsController_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/analytics/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AnalyticsController_export"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1172,6 +1284,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/legal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PlatformController_legal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PlatformController_content"];
+        put?: never;
+        post: operations["PlatformController_save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/legal/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PlatformController_accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/platform/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminPlatformController_content"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["AdminPlatformController_save"];
+        trace?: never;
+    };
+    "/api/v1/admin/platform/content/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminPlatformController_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/platform/editors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminPlatformController_editors"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/platform/editors/{memberId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["AdminPlatformController_editor"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1191,6 +1415,20 @@ export interface components {
             avatarUrl: string | null;
             displayName: string | null;
         };
+        DescriptionAttributesDto: {
+            bold?: boolean;
+            italic?: boolean;
+            underline?: boolean;
+            /** @enum {string} */
+            list?: "ordered" | "bullet";
+        };
+        DescriptionOperationDto: {
+            insert: string;
+            attributes?: components["schemas"]["DescriptionAttributesDto"];
+        };
+        DescriptionDeltaDto: {
+            ops: components["schemas"]["DescriptionOperationDto"][];
+        };
         QuestionDto: {
             id: string;
             /** @enum {string} */
@@ -1205,6 +1443,8 @@ export interface components {
             id: string;
             title: string;
             description: string;
+            descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
+            registrationNotice?: string | null;
             coverUrl: string | null;
             location: string;
             startsAt: string;
@@ -1299,6 +1539,8 @@ export interface components {
         ActivityWriteInput: {
             title: string;
             description: string;
+            descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
+            registrationNotice?: string | null;
             coverUrl?: string | null;
             location: string;
             consultationContact: string;
@@ -1317,6 +1559,8 @@ export interface components {
             id: string;
             title: string;
             description: string;
+            descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
+            registrationNotice?: string | null;
             coverUrl: string | null;
             location: string;
             startsAt: string;
@@ -1401,7 +1645,7 @@ export interface components {
             /** @description 当前有效报名人数 / 去重浏览人数 × 100；无浏览时为 null */
             conversionRate: number | null;
         };
-        LoginInput: {
+        WechatIdentityInput: {
             code: string;
             inviteCode?: string;
         };
@@ -1418,6 +1662,12 @@ export interface components {
             token: string;
             expiresAt: string;
             member: components["schemas"]["MemberDto"];
+        };
+        LoginInput: {
+            code: string;
+            inviteCode?: string;
+            termsVersion: string;
+            privacyVersion: string;
         };
         PhoneInput: {
             code: string;
@@ -1622,6 +1872,42 @@ export interface components {
             inviter: components["schemas"]["AdminMemberRelationDto"] | null;
             inviteeCount: number;
         };
+        ActivityReportDto: {
+            id: string;
+            title: string;
+            consultationContact: string;
+            views: number;
+            visitors: number;
+            activeRegistrations: number;
+            attendedMembers: number;
+            conversionRate: number | null;
+            reviewCount: number;
+            averageScore: number | null;
+        };
+        ActivityRegistrationAnswerDto: {
+            questionId: string;
+            prompt: string;
+            type: string;
+            answer: string | string[];
+        };
+        ActivityRegistrationDto: {
+            id: string;
+            memberId: string;
+            memberNumber: string;
+            displayName: string | null;
+            status: string;
+            contactPhone: string;
+            registeredAt: string;
+            cancelledAt: string | null;
+            attended: boolean;
+            attendedAt: string | null;
+            answers: components["schemas"]["ActivityRegistrationAnswerDto"][];
+        };
+        ActivityRegistrationListDto: {
+            items: components["schemas"]["ActivityRegistrationDto"][];
+            total: number;
+            hasMore: boolean;
+        };
         AdminActivityDto: {
             id: string;
             title: string;
@@ -1647,7 +1933,7 @@ export interface components {
         ActivityModerationOperationDto: {
             id: string;
             /** @enum {string} */
-            action: "remove" | "restore";
+            action: "publish" | "cancel" | "remove" | "restore" | "update_consultation_contact";
             actorName: string | null;
             reason: string | null;
             createdAt: string;
@@ -1705,6 +1991,61 @@ export interface components {
         };
         CircleReasonInput: {
             reason: string;
+        };
+        AnalyticsMetricDto: {
+            key: string;
+            current: number;
+            previous: number;
+            delta: number;
+            changePercent: number | null;
+        };
+        AnalyticsTrendDto: {
+            date: string;
+            newMembers: number;
+            browsingMembers: number;
+            participatingMembers: number;
+        };
+        AnalyticsBehaviorDto: {
+            behavior: string;
+            members: number;
+            count: number;
+        };
+        AnalyticsDashboardDto: {
+            days: number;
+            startDate: string;
+            endDate: string;
+            metrics: components["schemas"]["AnalyticsMetricDto"][];
+            trend: components["schemas"]["AnalyticsTrendDto"][];
+            behaviors: components["schemas"]["AnalyticsBehaviorDto"][];
+            coverageNotes: string[];
+        };
+        AnalyticsMemberDto: {
+            id: string;
+            memberNumber: string;
+            displayName: string | null;
+            profileComplete: boolean;
+            browse: number;
+            register: number;
+            attend: number;
+            publish: number;
+            comment: number;
+            review: number;
+            lastActiveAt: string | null;
+        };
+        AnalyticsMemberListDto: {
+            items: components["schemas"]["AnalyticsMemberDto"][];
+            total: number;
+            hasMore: boolean;
+        };
+        AnalyticsEventDto: {
+            behavior: string;
+            activityId: string;
+            activityTitle: string;
+            occurredAt: string;
+        };
+        AnalyticsEventListDto: {
+            items: components["schemas"]["AnalyticsEventDto"][];
+            hasMore: boolean;
         };
         CircleWriteInput: {
             requestId: string;
@@ -1800,6 +2141,60 @@ export interface components {
         };
         SearchViewDto: {
             sourceToken: string | null;
+        };
+        LegalDocumentDto: {
+            version: string;
+            title: string;
+            body: string;
+        };
+        LegalDto: {
+            development: boolean;
+            terms: components["schemas"]["LegalDocumentDto"];
+            privacy: components["schemas"]["LegalDocumentDto"];
+        };
+        ContentDto: {
+            activityText: string;
+            assistantText: string;
+            canEdit: boolean;
+        };
+        ContentInput: {
+            activityText: string;
+            assistantText: string;
+        };
+        ConsentInput: {
+            termsVersion: string;
+            privacyVersion: string;
+        };
+        AuditDto: {
+            id: string;
+            /** @enum {string} */
+            actorType: "admin" | "member";
+            actorId: string;
+            actorName: string;
+            /** @enum {string} */
+            action: "content" | "editor";
+            targetMemberId: string | null;
+            targetMemberNumber: string | null;
+            before: Record<string, never>;
+            after: Record<string, never>;
+            createdAt: string;
+        };
+        AuditListDto: {
+            items: components["schemas"]["AuditDto"][];
+            hasMore: boolean;
+        };
+        EditorDto: {
+            memberId: string;
+            memberNumber: string;
+            displayName: string | null;
+            enabled: boolean;
+        };
+        EditorListDto: {
+            items: components["schemas"]["EditorDto"][];
+            hasMore: boolean;
+        };
+        EditorInput: {
+            enabled: boolean;
         };
     };
     responses: never;
@@ -2981,6 +3376,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReadingStatsDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    IdentityController_identify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WechatIdentityInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionDto"];
                 };
             };
             400: {
@@ -5772,6 +6246,147 @@ export interface operations {
             };
         };
     };
+    AdminActivityController_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityReportDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminActivityController_registrations: {
+        parameters: {
+            query?: {
+                offset?: number;
+                status?: "all" | "active" | "cancelled";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRegistrationListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
     AdminActivityController_list: {
         parameters: {
             query?: {
@@ -6163,6 +6778,168 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OkDto"];
+                };
+            };
+        };
+    };
+    AnalyticsController_dashboard: {
+        parameters: {
+            query?: {
+                days?: 7 | 30;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsDashboardDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AnalyticsController_members: {
+        parameters: {
+            query?: {
+                days?: 7 | 30;
+                offset?: number;
+                behavior?: "all" | "new" | "converted" | "browse" | "participate" | "register" | "attend" | "publish" | "comment" | "review" | "inactive" | "silent";
+                inviterId?: string;
+                profile?: "all" | "complete" | "incomplete";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsMemberListDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AnalyticsController_events: {
+        parameters: {
+            query?: {
+                days?: 7 | 30;
+                offset?: number;
+                behavior?: "all" | "new" | "converted" | "browse" | "participate" | "register" | "attend" | "publish" | "comment" | "review" | "inactive" | "silent";
+                inviterId?: string;
+                profile?: "all" | "complete" | "incomplete";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsEventListDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AnalyticsController_export: {
+        parameters: {
+            query?: {
+                days?: 7 | 30;
+                offset?: number;
+                behavior?: "all" | "new" | "converted" | "browse" | "participate" | "register" | "attend" | "publish" | "comment" | "review" | "inactive" | "silent";
+                inviterId?: string;
+                profile?: "all" | "complete" | "incomplete";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
                 };
             };
         };
@@ -7000,6 +7777,467 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchViewDto"];
+                };
+            };
+        };
+    };
+    PlatformController_legal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    PlatformController_content: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    PlatformController_save: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    PlatformController_accept: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminPlatformController_content: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminPlatformController_save: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContentInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminPlatformController_history: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminPlatformController_editors: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EditorListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminPlatformController_editor: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditorInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
                 };
             };
         };

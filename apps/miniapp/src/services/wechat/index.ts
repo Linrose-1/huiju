@@ -2,6 +2,24 @@ import { api, ApiError, refreshMember } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
 import { LOCAL_TEST } from '@/services/api/environment'
 let signingIn: { epoch: number; promise: Promise<void> } | null = null
+export function chooseActivityLocation(): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    // #ifdef MP-WEIXIN
+    uni.chooseLocation({
+      success: result => {
+        const address = result.address.trim(), name = result.name.trim()
+        const location = !name || address.endsWith(name) ? address : [address, name].filter(Boolean).join(' ')
+        if (!location || location.length > 500) { reject(new Error('选点地址为空或超过 500 字，请手动填写')); return }
+        resolve(location)
+      },
+      fail: result => result.errMsg?.includes('cancel') ? resolve(null) : reject(new Error('地图选点未完成，请检查位置权限后重试，也可手动填写地址')),
+    })
+    // #endif
+    // #ifndef MP-WEIXIN
+    reject(new Error('请在微信小程序中地图选点，也可手动填写地址'))
+    // #endif
+  })
+}
 export function scanActivityCode(): Promise<{ path?: string; result: string } | null> {
   return new Promise((resolve, reject) => {
     // #ifdef MP-WEIXIN
@@ -34,7 +52,11 @@ export async function chooseCover(): Promise<{ base64: string; mimeType: 'image/
   throw new Error('请在微信小程序中选择封面')
   // #endif
 }
-export function loginWithWechat(): Promise<void> {
+export function loginWithWechat(consent: { termsVersion: string; privacyVersion: string }): Promise<void> {
+  if (!consent?.termsVersion || !consent?.privacyVersion) return Promise.reject(new ApiError('LEGAL_CONSENT_REQUIRED', '请先阅读并同意用户协议和隐私政策'))
+  return bootstrapIdentity().then(() => api.acceptLegal(consent)).then(() => undefined)
+}
+function identifyWithWechat(): Promise<void> {
   const session = useSessionStore()
   if (signingIn?.epoch === session.epoch) return signingIn.promise
   const epoch = session.epoch
@@ -50,7 +72,7 @@ export function loginWithWechat(): Promise<void> {
     // #endif
   }).then(code => {
     if (epoch !== session.epoch) throw new ApiError('STALE_REQUEST', '身份已变更，请重新登录')
-    return api.login(code, inviteCode || undefined)
+    return api.identify(code, inviteCode || undefined)
   }).then(result => {
     if (epoch !== session.epoch) throw new ApiError('STALE_REQUEST', '身份已变更，请重新登录')
     session.accept(result)
@@ -66,7 +88,12 @@ export async function bootstrapIdentity(): Promise<void> {
     try { await refreshMember(); return }
     catch (error) { if (!(error instanceof ApiError && error.status === 401)) throw error }
   }
-  await loginWithWechat()
+  return identifyWithWechat()
+}
+export function showActivityShareMenu() {
+  // #ifdef MP-WEIXIN
+  uni.showShareMenu({ menus: ['shareAppMessage', 'shareTimeline'] })
+  // #endif
 }
 export async function uploadAvatar(path: string) {
   const session = useSessionStore()

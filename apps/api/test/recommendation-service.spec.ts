@@ -6,7 +6,7 @@ import { recommendationSearches } from '../src/database/schema/recommendations.j
 import { IdentityService } from '../src/flow/identity.js'
 import { ReadingService } from '../src/flow/reading.js'
 import { RecommendationCandidatesService, type RecommendationCandidate } from '../src/flow/recommendation-candidates.js'
-import { RecommendationProvider } from '../src/recommendations/provider.js'
+import { RecommendationProvider, validateParsedSearch } from '../src/recommendations/provider.js'
 import { RecommendationRecordsService } from '../src/recommendations/records.js'
 import { ActivitySearchService, orderWithLocalHints } from '../src/recommendations/service.js'
 import type { ParsedSearch, RankedCandidate } from '../src/recommendations/types.js'
@@ -20,7 +20,7 @@ function fixture(length = 7) {
   const records = new RecommendationRecordsService(store.database)
   const inventory = Array.from({ length }, candidate)
   const visible = new Map(inventory.map(item => [item.id, item]))
-  const identity = { require: vi.fn(async (header = 'member') => ({ id: header, boundPhone: null })),
+  const identity = { require: vi.fn(async (header = 'member') => ({ id: header, boundPhone: '13800000000', avatarUrl: '/avatar', displayName: '会员', avatarSetByUser: true, nameSetByUser: true })),
     recommendationProfile: vi.fn(async () => ({ resources: '私人资源字样', needs: '私人需求字样', hometown: '私人家乡字样', bio: '私人简介字样' })) }
   const candidates = { find: vi.fn(async () => inventory), available: vi.fn(async (_member: string, ids: string[]) => ids.flatMap(id => visible.has(id) ? [visible.get(id)!] : [])),
     registrationHistory: vi.fn(async () => [{ title: '私人报名历史字样', location: '历史活动地点' }]) }
@@ -38,7 +38,19 @@ const input = () => ({ requestId: randomUUID(), messages: ['找个产业园活�
 afterEach(() => { vi.useRealTimers() })
 
 describe('recommendation orchestration without database or real provider', () => {
-  it('allows an incomplete member and keeps profile/history out of provider arguments and result reasons', async () => {
+  it('clarifies alternative themes without querying candidates, ranking or consuming a success', async () => {
+    const f = fixture()
+    const request = { requestId: randomUUID(), messages: ['商业或地产'] }
+    f.provider.parse.mockResolvedValue(validateParsedSearch({ ...parsed, hard: { themes: [
+      { value: '商业', evidence: '商业' }, { value: '地产', evidence: '地产' },
+    ] } }, request.messages))
+    const result = await f.service.create(request)
+    expect(result).toMatchObject({ status: 'clarify', items: [], remainingToday: 10, conditions: ['待确认：任选条件'] })
+    expect(result.question).toContain('任选')
+    expect(f.candidates.find).not.toHaveBeenCalled()
+    expect(f.provider.rank).not.toHaveBeenCalled()
+  })
+  it('allows a complete member and keeps profile/history out of provider arguments and result reasons', async () => {
     const f = fixture()
     const request = input(), result = await f.service.create(request)
     expect(result.items).toHaveLength(3)
@@ -49,6 +61,21 @@ describe('recommendation orchestration without database or real provider', () =>
     expect(f.candidates.registrationHistory).toHaveBeenCalledWith('member')
     expect(JSON.stringify(f.provider.rank.mock.calls)).not.toContain('私人')
     expect(JSON.stringify(result)).not.toMatch(/私人|boundPhone|description|fingerprint|inputHash|cursorSecret/)
+  })
+  it.each((['create', 'page', 'impressions', 'view'] as const).flatMap(action => [
+    { action, missing: { boundPhone: '' } }, { action, missing: { avatarUrl: '' } }, { action, missing: { displayName: '  ' } },
+    { action, missing: { avatarSetByUser: false } }, { action, missing: { nameSetByUser: false } },
+  ]))('rejects visitor $action with $missing before quota, model or record access', async ({ action, missing }) => {
+    const f = fixture()
+    f.identity.require.mockResolvedValueOnce({ id: 'member', boundPhone: '13800000000', avatarUrl: '/avatar', displayName: '游客', avatarSetByUser: true, nameSetByUser: true, ...missing })
+    const reserve = vi.spyOn(f.records, 'reserve'), read = vi.spyOn(f.records, 'read')
+    const impressions = vi.spyOn(f.records, 'impressions'), view = vi.spyOn(f.records, 'view')
+    const id = randomUUID(), activityId = randomUUID()
+    const call = action === 'create' ? f.service.create(input()) : action === 'page' ? f.service.page(id, undefined)
+      : action === 'impressions' ? f.service.impressions(id, [activityId]) : f.service.view(id, activityId)
+    await expect(call).rejects.toMatchObject({ status: 403, response: { code: 'PROFILE_INCOMPLETE' } })
+    for (const spy of [reserve, read, impressions, view, f.provider.parse, f.provider.rank, f.candidates.find, f.candidates.available]) expect(spy).not.toHaveBeenCalled()
+    expect(f.store.rows(recommendationSearches)).toEqual([])
   })
   it('paginates at most three and skips removed, enrolled or changed public fields without another model call or charge', async () => {
     const f = fixture(), first = await f.service.create(input())

@@ -24,7 +24,7 @@ async function submit() {
     <div class="brand">
       会聚 <span>管理后台</span>
     </div>
-    <h1 style="margin-top: 32px">
+    <h1 class="auth-title">
       欢迎登录
     </h1>
     <p class="page-description">
@@ -73,3 +73,7 @@ async function submit() {
     </p>
   </section>
 </template>
+
+<style scoped>
+.auth-title { margin-top: 24px; }
+</style>

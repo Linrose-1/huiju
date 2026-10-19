@@ -16,6 +16,8 @@ function harness(initialStorage = new Map(), localTest = false) {
   setActivePinia(createPinia())
   const queue = []
   const logins = []
+  const shares = []
+  const locations = []
   const storage = initialStorage
   const uni = {
     getStorageSync: key => storage.get(key),
@@ -23,12 +25,15 @@ function harness(initialStorage = new Map(), localTest = false) {
     removeStorageSync: key => storage.delete(key),
     request: options => queue.push(options),
     login: options => logins.push(options),
+    showShareMenu: options => shares.push(options),
+    chooseLocation: options => locations.push(options),
   }
   const cache = new Map()
   function load(path) {
     if (path === '@/services/api/environment' || path === './environment') return { API_BASE_URL: base, LOCAL_TEST: localTest }
     let file = resolve(root, path.replace(/^@\//, '') + (path.endsWith('.ts') ? '' : '.ts'))
     if (!existsSync(file)) file = file.slice(0, -3) + '/index.ts'
+    file = resolve(file)
     if (cache.has(file)) return cache.get(file).exports
     const module = { exports: {} }
     cache.set(file, module)
@@ -42,10 +47,65 @@ function harness(initialStorage = new Map(), localTest = false) {
   const api = load('@/services/api/index')
   const accept = token => store.accept({ token, expiresAt: new Date(Date.now() + 3600000).toISOString(), member: sampleMember })
   const respond = (statusCode, data) => { const request = queue.shift(); assert.ok(request, 'expected queued request'); request.success({ statusCode, data }); return request }
-  return { store, api, queue, logins, storage, accept, respond, wechat: () => load('@/services/wechat/index') }
+  const app = entry => {
+    const hooks = {}
+    uni.getEnterOptionsSync = () => entry
+    const source = readFileSync(resolve(root, 'App.vue'), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
+    const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+    new Function('require', 'exports', 'uni', code)(name => name === '@dcloudio/uni-app'
+      ? { onLaunch: fn => { hooks.onLaunch = fn }, onShow: fn => { hooks.onShow = fn } } : load(name), {}, uni)
+    return hooks
+  }
+  return { store, api, queue, logins, shares, locations, storage, accept, respond, app, wechat: () => load('@/services/wechat/index') }
 }
 
-test('cold start does not create an identity or block public activity requests', async () => {
+test('map selection is explicit, joins address and place name and handles cancel or permission failure', async () => {
+  const h = harness(), wechat = h.wechat()
+  assert.equal(h.locations.length, 0)
+  let request = wechat.chooseActivityLocation()
+  h.locations.shift().success({address:'深圳市福田区',name:'会展中心'})
+  assert.equal(await request, '深圳市福田区 会展中心')
+  request = wechat.chooseActivityLocation()
+  h.locations.shift().success({address:'深圳市会展中心',name:'会展中心'})
+  assert.equal(await request, '深圳市会展中心')
+  request = wechat.chooseActivityLocation()
+  h.locations.shift().fail({errMsg:'chooseLocation:fail cancel'})
+  assert.equal(await request, null)
+  request = wechat.chooseActivityLocation()
+  h.locations.shift().fail({errMsg:'chooseLocation:fail auth deny'})
+  await assert.rejects(request, /位置权限/)
+  request = wechat.chooseActivityLocation()
+  h.locations.shift().success({address:'字'.repeat(501),name:''})
+  await assert.rejects(request, /500/)
+})
+
+test('activity sharing enables friend and timeline menus without exchanging identity', () => {
+  const h = harness()
+  h.wechat().showActivityShareMenu()
+  assert.deepEqual(h.shares, [{ menus: ['shareAppMessage', 'shareTimeline'] }])
+  assert.equal(h.logins.length, 0); assert.equal(h.queue.length, 0)
+})
+
+test('timeline first invitation survives later entry and silent identification records no consent', async () => {
+  const h = harness(), inviteCode = 'HJYQM20261005000001'
+  const entry = { query: { id: 'activity-a', inviteCode }, scene: 1154 }
+  const app = h.app(entry)
+  app.onLaunch(entry); await setImmediate()
+  assert.equal(h.store.pendingInvite, inviteCode)
+  assert.equal(h.logins.length, 1); assert.equal(h.queue.length, 0)
+  entry.query = {}; app.onShow(); await setImmediate()
+  assert.equal(h.store.pendingInvite, inviteCode)
+  const login = h.wechat().bootstrapIdentity()
+  h.logins.shift().success({ code: 'explicit-code' }); await setImmediate()
+  assert.equal(h.queue[0].data.inviteCode, inviteCode)
+  assert.equal(h.queue[0].url.endsWith('/auth/wechat/identify'), true)
+  assert.equal(h.queue[0].data.termsVersion, undefined)
+  h.respond(200, { token: 'new-session', expiresAt: '2099-01-01', member: sampleMember })
+  await login
+  assert.equal(h.store.pendingInvite, '')
+})
+
+test('public requests do not wait for identity and remain available before identification', async () => {
   const h = harness()
   const result = h.api.api.activities()
   assert.equal(h.store.token, '')
@@ -54,7 +114,7 @@ test('cold start does not create an identity or block public activity requests',
   assert.deepEqual(await result, { items: [] })
 })
 
-test('local test cold starts use a stable mock credential without wx.login', async () => {
+test('local test silent identification uses a stable mock credential without wx.login', async () => {
   for (let attempt = 0; attempt < 2; attempt++) {
     const h = harness(new Map(), true)
     const login = h.wechat().bootstrapIdentity()
@@ -128,6 +188,25 @@ test('private expiration reports authentication failure without retrying a write
   assert.equal(h.store.member, null)
 })
 
+test('public GET discards old identity data and rereads anonymously during silent recovery', async () => {
+  const h = harness(); h.accept('expired')
+  const result = h.api.api.activity('public-activity')
+  h.store.clear(); h.accept('recovered')
+  h.respond(200, { id: 'public-activity', consultationContact: 'old identity only' })
+  assert.equal(h.queue.length, 1)
+  assert.equal(h.queue[0].header.Authorization, undefined)
+  h.respond(200, { id: 'public-activity', consultationContact: null })
+  assert.deepEqual(await result, { id: 'public-activity', consultationContact: null })
+  assert.equal(h.store.token, 'recovered')
+})
+
+test('anonymous legal read remains valid when silent identity completes meanwhile', async () => {
+  const h = harness(); const result = h.api.api.legalDocuments()
+  h.accept('new-session')
+  h.respond(200, { development: true })
+  assert.deepEqual(await result, { development: true })
+})
+
 test('network failure remains a failure and does not fabricate a result', async () => {
   const h = harness(); const result = h.api.api.activities()
   h.queue.shift().fail({ errMsg: 'timeout' })
@@ -147,31 +226,27 @@ test('new account does not reuse the previous account pending refresh', async ()
   assert.equal(h.store.member.displayName, 'New member')
 })
 
-test('silent and manual login merge one exchange and preserve captured invitation', async () => {
-  const h = harness(); h.store.pendingInvite = 'FIRST'
-  const wechat = h.wechat()
-  const silent = wechat.bootstrapIdentity()
-  h.store.pendingInvite = 'LATER'
-  const manual = wechat.loginWithWechat()
-  assert.equal(h.logins.length, 1)
-  h.logins.shift().success({ code: 'test-code' })
-  await setImmediate()
-  assert.equal(h.queue.length, 1)
-  assert.equal(h.queue[0].data.inviteCode, 'FIRST')
-  h.respond(200, { token: 'session', expiresAt: new Date(Date.now() + 3600000).toISOString(), member: sampleMember })
-  await Promise.all([silent, manual])
-  assert.equal(h.store.token, 'session')
-  assert.equal(h.store.identifying, false)
+test('silent identity does not require or fabricate agreement consent', async () => {
+  const h = harness(); h.store.captureInvite('FIRST')
+  await assert.rejects(h.wechat().loginWithWechat(), error => error.code === 'LEGAL_CONSENT_REQUIRED')
+  const result = h.wechat().bootstrapIdentity()
+  h.logins.shift().success({ code: 'silent' }); await setImmediate()
+  assert.deepEqual(h.queue[0].data, { code: 'silent', inviteCode: 'FIRST' })
+  h.respond(200, { token: 'visitor', expiresAt: '2099-01-01', member: sampleMember }); await result
+  assert.equal(h.queue.length, 0); assert.equal(h.store.member.profileComplete, false)
 })
 
-test('silent login failure leaves public browsing available', async () => {
-  const h = harness(); const silent = h.wechat().bootstrapIdentity()
-  h.logins.shift().fail({ errMsg: 'unavailable' })
-  await assert.rejects(silent)
-  assert.equal(h.store.token, '')
-  const publicResult = h.api.api.activities()
-  h.respond(200, { items: [] })
-  assert.deepEqual(await publicResult, { items: [] })
+test('duplicate silent identities merge one exchange with captured first invitation', async () => {
+  const h = harness(); h.store.pendingInvite = 'FIRST'
+  const first = h.wechat().bootstrapIdentity()
+  h.store.pendingInvite = 'LATER'
+  const second = h.wechat().bootstrapIdentity()
+  assert.equal(h.logins.length, 1)
+  h.logins.shift().success({ code: 'test-code' }); await setImmediate()
+  assert.equal(h.queue.length, 1)
+  assert.deepEqual(h.queue[0].data, { code: 'test-code', inviteCode: 'FIRST' })
+  h.respond(200, { token: 'session', expiresAt: new Date(Date.now() + 3600000).toISOString(), member: sampleMember })
+  await Promise.all([first, second]); assert.equal(h.store.token, 'session'); assert.equal(h.store.identifying, false)
 })
 
 test('valid stored identity refreshes without a new WeChat exchange', async () => {
@@ -182,23 +257,18 @@ test('valid stored identity refreshes without a new WeChat exchange', async () =
   assert.equal(h.logins.length, 0)
 })
 
-test('expired server session is silently rebuilt without replaying business actions', async () => {
+test('expired server session silently reidentifies the existing account', async () => {
   const h = harness(); h.accept('expired')
   const result = h.wechat().bootstrapIdentity()
-  h.respond(401, { code: 'SESSION_REQUIRED', message: 'Expired' })
-  await setImmediate()
+  h.respond(401, { code: 'SESSION_REQUIRED', message: 'Expired' }); await setImmediate()
   assert.equal(h.logins.length, 1)
-  h.logins.shift().success({ code: 'new-code' })
-  await setImmediate()
-  assert.equal(h.queue[0].url, base + '/auth/wechat/session')
-  h.respond(200, { token: 'new', expiresAt: new Date(Date.now() + 3600000).toISOString(), member: sampleMember })
-  await result
-  assert.equal(h.store.token, 'new')
-  assert.equal(h.queue.length, 0)
+  h.logins.shift().success({ code: 'renewed' }); await setImmediate()
+  h.respond(200, { token: 'renewed-token', expiresAt: '2099-01-01', member: { ...sampleMember, profileComplete: true } })
+  await result; assert.equal(h.store.token, 'renewed-token'); assert.equal(h.store.member.profileComplete, true)
 })
 
 test('logout during WeChat code exchange cannot restore identity or submit a login', async () => {
-  const h = harness(); const result = h.wechat().loginWithWechat()
+  const h = harness(); const result = h.wechat().bootstrapIdentity()
   h.store.clear()
   h.logins.shift().success({ code: 'late-code' })
   await assert.rejects(result, error => error.code === 'STALE_REQUEST')
@@ -212,4 +282,15 @@ test('anonymous public response remains usable when silent login finishes meanwh
   h.respond(200, { items: [] })
   assert.deepEqual(await publicResult, { items: [] })
   assert.equal(h.store.token, 'new-session')
+})
+
+test('natural first entry and failed identification keep their first source through retry', async () => {
+  const h = harness(); h.store.captureInvite(); h.store.captureInvite('LATER')
+  assert.equal(h.store.pendingInvite, '')
+  const first = h.wechat().bootstrapIdentity(); h.logins.shift().fail()
+  await assert.rejects(first, /重试/)
+  h.store.captureInvite('LATER')
+  const retry = h.wechat().bootstrapIdentity(); h.logins.shift().success({ code: 'retry' }); await setImmediate()
+  assert.deepEqual(h.queue[0].data, { code: 'retry' })
+  h.respond(200, { token: 'visitor', expiresAt: '2099-01-01', member: sampleMember }); await retry
 })

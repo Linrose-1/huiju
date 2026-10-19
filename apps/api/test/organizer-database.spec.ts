@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from '../src/platform/legal.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
@@ -38,11 +39,12 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
           override async phone() { return '13800000000' }
         }
         const identity = new IdentityService(database, new FixtureWechat())
+        const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
         const organizer = new OrganizerService(database, identity)
         const publicActivities = new ActivityService(database, identity)
-        const owner = await identity.login(randomUUID())
-        const attendee = await identity.login(randomUUID())
-        const outsider = await identity.login(randomUUID())
+        const owner = await login(randomUUID())
+        const attendee = await login(randomUUID())
+        const outsider = await login(randomUUID())
         memberIds.push(owner.member.id, attendee.member.id, outsider.member.id)
         const ownerHeader = `Bearer ${owner.token}`
         const attendeeHeader = `Bearer ${attendee.token}`

@@ -98,6 +98,15 @@ onMounted(restore)
         class="sidebar"
         aria-label="后台导航"
       >
+        <router-link to="/analytics">
+          运营看板
+        </router-link>
+        <router-link to="/engagement">
+          会员活跃
+        </router-link>
+        <router-link to="/content">
+          运营文案
+        </router-link>
         <router-link to="/members">
           会员查询
         </router-link>
@@ -106,6 +115,9 @@ onMounted(restore)
         </router-link>
         <router-link to="/activities">
           活动管理
+        </router-link>
+        <router-link to="/circle">
+          学友圈管理
         </router-link>
         <router-link
           v-if="isSuperAdmin"
@@ -132,33 +144,44 @@ onMounted(restore)
 * { box-sizing: border-box; }
 body { margin: 0; }
 button, input, textarea { font: inherit; }
-h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.4; font-weight: 600; }
+h1 { margin: 0 0 6px; font-size: 22px; line-height: 1.4; font-weight: 600; }
+h2 { margin: 0 0 12px; font-size: 17px; line-height: 1.5; font-weight: 600; }
+h3 { margin: 24px 0 12px; font-size: 15px; line-height: 1.5; font-weight: 600; }
 p { line-height: 1.65; }
 .muted, .page-description { color: var(--huiju-muted); }
-.page-description { margin: 0 0 24px; font-size: 14px; }
-.app-header { display: flex; justify-content: space-between; align-items: center; min-height: 76px; padding: 16px 32px; border-bottom: 1px solid var(--huiju-border); background: white; gap: 16px; }
-.brand { font-size: 24px; font-weight: 700; white-space: nowrap; color: var(--huiju-green); }
-.brand span { margin-left: 12px; font-size: 14px; color: var(--huiju-muted); font-weight: 400; }
-.identity { display: flex; align-items: center; gap: 8px; font-size: 14px; flex-wrap: wrap; }
-.workspace { display: flex; min-height: calc(100vh - 76px); }
-.sidebar { flex: 0 0 192px; padding: 24px 16px; border-right: 1px solid var(--huiju-border); }
-.sidebar a { display: block; padding: 12px 16px; margin-bottom: 8px; border-radius: 8px; color: var(--huiju-muted); text-decoration: none; }
+.page-description { margin: 0 0 20px; font-size: 14px; }
+.app-header { display: flex; justify-content: space-between; align-items: center; min-height: 60px; padding: 0 24px; border-bottom: 1px solid var(--huiju-border); background: white; gap: 16px; }
+.brand { font-size: 20px; font-weight: 700; white-space: nowrap; color: var(--huiju-green); }
+.brand span { margin-left: 10px; font-size: 13px; color: var(--huiju-muted); font-weight: 400; }
+.identity { display: flex; align-items: center; gap: 4px; font-size: 13px; flex-wrap: wrap; }
+.workspace { display: flex; min-height: calc(100vh - 60px); }
+.sidebar { flex: 0 0 176px; padding: 20px 12px; border-right: 1px solid var(--huiju-border); }
+.sidebar a { display: block; padding: 10px 14px; margin-bottom: 4px; border-radius: 8px; color: var(--huiju-muted); text-decoration: none; font-size: 14px; }
 .sidebar a:hover, .sidebar .router-link-active { color: var(--huiju-green); background: #e7f0e9; }
 .sidebar .router-link-active { font-weight: 600; }
-.page-main { flex: 1; min-width: 0; padding: 32px; }
-.panel { background: white; border: 1px solid var(--huiju-border); border-radius: 12px; padding: 24px; }
-.toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+.page-main { flex: 1; min-width: 0; padding: 24px 28px; }
+.panel { background: white; border: 1px solid var(--huiju-border); border-radius: 12px; padding: 20px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
 .filters, .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 16px; margin-top: 20px; font-size: 14px; color: var(--huiju-muted); font-variant-numeric: tabular-nums; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 16px; font-size: 13px; color: var(--huiju-muted); font-variant-numeric: tabular-nums; }
 .auth-shell, .startup { min-height: 100vh; display: grid; align-content: center; justify-items: center; padding: 32px 20px; gap: 20px; }
 .auth-card { width: min(100%, 420px); }
 .password-card { max-width: 520px; margin: 0 auto; }
 .full-width { width: 100%; }
 .form-error { margin-bottom: 16px; }
-.feedback-content { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; margin: 8px 0; }
-.el-button { min-height: 40px; }
-.el-input__wrapper, .el-select__wrapper { min-height: 40px; }
+.feedback-content { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; margin: 4px 0; }
+.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.el-table .cell p { margin: 2px 0 0; }
+.el-table .cell .el-tag { margin: 2px 0; }
+.el-table .cell .el-button + .el-button { margin-left: 8px; }
+.el-dialog h2 { margin: 0 0 12px; }
+.el-dialog h3 { margin: 20px 0 10px; }
+.el-dialog .pagination { justify-content: flex-start; margin-top: 12px; }
+.el-drawer__body .el-avatar { margin-bottom: 12px; }
+.el-button { min-height: 32px; }
+.el-input__wrapper, .el-select__wrapper { min-height: 32px; }
 .el-table { --el-table-header-bg-color: #f6f8f6; --el-table-border-color: var(--huiju-border); }
 .el-dialog { max-width: calc(100vw - 32px); }
-@media (max-width: 760px) { .app-header { padding: 16px; align-items: flex-start; flex-direction: column; } .workspace { flex-direction: column; } .sidebar { flex-basis: auto; display: flex; padding: 12px 16px; gap: 8px; border-right: 0; border-bottom: 1px solid var(--huiju-border); } .sidebar a { margin: 0; } .page-main { padding: 20px 16px; } .panel { padding: 16px; } h1 { font-size: 22px; } }
+.el-dialog .el-dialog__body { max-height: 70vh; overflow-y: auto; }
+@media (max-width: 760px) { .app-header { padding: 12px 16px; align-items: flex-start; flex-direction: column; min-height: 0; } .workspace { flex-direction: column; } .sidebar { flex-basis: auto; display: flex; flex-wrap: wrap; padding: 10px 12px; gap: 4px; border-right: 0; border-bottom: 1px solid var(--huiju-border); } .sidebar a { margin: 0; } .page-main { padding: 16px; } .panel { padding: 16px; } h1 { font-size: 20px; } }
 </style>

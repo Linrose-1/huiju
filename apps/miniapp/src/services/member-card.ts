@@ -16,7 +16,7 @@ export function emptySettings(): CardSettings {
 
 // Preview stays in page memory and uses the same field whitelist as the public card.
 export function previewCard(member: Member, details: ProfileDetails, settings: CardSettings): MemberCard {
-  const result: MemberCard = { avatarUrl: member.profileComplete ? member.avatarUrl : null, displayName: member.profileComplete ? member.displayName! : '会员' + member.memberNumber }
+  const result: MemberCard = { avatarUrl: member.profileComplete ? member.avatarUrl : null, displayName: member.profileComplete ? member.displayName! : '游客' }
   for (const field of cardFields) {
     if (settings[field.setting] === true) result[field.key] = field.key === 'boundPhone' ? member.boundPhone : details[field.key]
   }

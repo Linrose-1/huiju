@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Header, Headers, HttpCode, Param, Patch, Post, StreamableFile } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { IdentityService } from './identity.js'
-import { AvatarInput, ErrorDto, LoginInput, MemberDto, OkDto, PhoneInput, ProfileInput, SessionDto } from './dto.js'
+import { AvatarInput, ErrorDto, LoginInput, MemberDto, OkDto, PhoneInput, ProfileInput, SessionDto, WechatIdentityInput } from './dto.js'
 
 @ApiTags('identity')
 @ApiResponse({
@@ -39,11 +39,17 @@ export class IdentityController {
 
   @ApiOperation({ security: [] })
   @HttpCode(200)
+  @Post('auth/wechat/identify')
+  @ApiOkResponse({ type: SessionDto })
+  identify(@Body() body: WechatIdentityInput) { return this.identity.identify(body.code, body.inviteCode) }
+
+  @ApiOperation({ security: [] })
+  @HttpCode(200)
   @Post('auth/wechat/session')
   @ApiOkResponse({ type: SessionDto })
   login(
     @Body()
-    body: LoginInput) { return this.identity.login(body.code, body.inviteCode) }
+    body: LoginInput) { return this.identity.login(body.code, body.inviteCode, body) }
 
   @Get('auth/session')
   @ApiOkResponse({ type: MemberDto })

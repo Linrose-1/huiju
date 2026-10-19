@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
+import type { DescriptionDelta } from './activity-description.js'
+import { DescriptionDeltaDto } from './activity-description-dto.js'
 import {
   Allow,
   ArrayMaxSize,
@@ -14,7 +16,7 @@ import {
   ValidateNested
 } from 'class-validator'
 
-export class LoginInput {
+export class WechatIdentityInput {
   @ApiProperty()
   @IsString()
   @Length(1, 512)
@@ -25,6 +27,11 @@ export class LoginInput {
   @IsString()
   @Length(1, 32)
   inviteCode?: string
+}
+
+export class LoginInput extends WechatIdentityInput {
+  @ApiProperty() @IsString() @Length(1, 64) termsVersion!: string
+  @ApiProperty() @IsString() @Length(1, 64) privacyVersion!: string
 }
 
 export class PhoneInput {
@@ -193,6 +200,8 @@ export class ActivityDto {
 
   @ApiProperty()
   description!: string
+  @ApiPropertyOptional({ type: DescriptionDeltaDto, nullable: true }) descriptionDelta?: DescriptionDelta | null
+  @ApiPropertyOptional({ type: String, nullable: true }) registrationNotice?: string | null
 
   @ApiProperty({
     nullable: true,

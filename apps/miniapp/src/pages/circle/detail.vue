@@ -74,7 +74,7 @@ async function submit() {
 }
 function goHome() { uni.switchTab({url:routes.circle}) }
 function preview(index: number) { if (post.value?.images.length) uni.previewImage({ current: index, urls: post.value.images.map(x => mediaUrl(x.url)) }) }
-onLoad(options => { id.value = String(options?.id || ''); pendingIntent = options?.intent === '1'; if (options?.inviteCode) session.pendingInvite = String(options.inviteCode) })
+onLoad(options => { id.value = String(options?.id || ''); pendingIntent = options?.intent === '1'; session.captureInvite(options?.inviteCode) })
 onShow(() => { visible = true; void load() })
 onPullDownRefresh(async () => {
   try { if (!sheet.value && !sending.value) await load() }

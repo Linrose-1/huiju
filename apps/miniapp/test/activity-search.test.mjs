@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { URL } from 'node:url'
+import { URL, URLSearchParams } from 'node:url'
 import { setImmediate } from 'node:timers/promises'
 import ts from 'typescript'
 const require=createRequire(import.meta.url),vue=require('vue')
@@ -14,17 +14,17 @@ const item=id=>({id,title:id,location:'深圳',startsAt:'2026-10-04',endsAt:'202
 const result=(ids=['a','b','c'])=>({status:'results',searchId:'search-a',conditions:['深圳'],question:null,items:ids.map(item),cursor:'next',hasMore:true,remainingToday:9,expiresAt:'2026-10-02T12:30:00Z'})
 function evaluate(code,deps,globals={}){const out={};new Function('require','exports',...Object.keys(globals),ts.transpileModule(code,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>name in deps?deps[name]:require(name),out,...Object.values(globals));return out}
 function harness(t,page='assistant/activity-search',overrides={}){
- const session=vue.reactive({token:'member-a',epoch:0,member:{id:'member-a',profileComplete:false,boundPhone:'13800000000'}}),hooks={},calls=[],observers=[]
- const api={searchActivities:async x=>{calls.push(['search',JSON.parse(JSON.stringify(x))]);return result()},moreActivitySearch:async()=>result(['d','e','f']),searchImpressions:async(...x)=>{calls.push(['impression',...x])},searchView:async(...x)=>{calls.push(['view',...x]);return {sourceToken:'direct-token'}},activity:async()=>({id:'a',registrationState:'open',questions:[]}),roster:async()=>({items:[],hasMore:false}),activityReaders:async()=>({items:[],total:0,hasMore:false}),myRegistration:async()=>{throw new ApiError('NOT_FOUND',404)},register:async(...x)=>{calls.push(['register',...x]);return {}},...overrides.api}
+ const session=vue.reactive({token:'member-a',epoch:0,member:{id:'member-a',profileComplete:true,boundPhone:'13800000000'}}),hooks={},calls=[],observers=[]
+ session.captureInvite=value=>{if(!session.token&&typeof value==='string')session.pendingInvite=value}; const api={searchActivities:async x=>{calls.push(['search',JSON.parse(JSON.stringify(x))]);return result()},moreActivitySearch:async()=>result(['d','e','f']),searchImpressions:async(...x)=>{calls.push(['impression',...x])},searchView:async(...x)=>{calls.push(['view',...x]);return {sourceToken:'direct-token'}},activity:async()=>({id:'a',registrationState:'open',questions:[]}),roster:async()=>({items:[],hasMore:false}),activityReaders:async()=>({items:[],total:0,hasMore:false}),myRegistration:async()=>{throw new ApiError('NOT_FOUND',404)},register:async(...x)=>{calls.push(['register',...x]);return {}},...overrides.api}
  const uni={stopPullDownRefresh(){},showToast(){},switchTab:x=>calls.push(['tab',x.url]),createIntersectionObserver:()=>{const observer={disconnect(){},relativeToViewport(){return this},observe(selector,fn){observers.push(fn)}};return observer}}
  let gate=true
- const deps={'vue':{...vue,getCurrentInstance:()=>null},'@dcloudio/uni-app':Object.fromEntries(['onLoad','onShow','onHide','onUnload','onShareAppMessage','onReachBottom','onPullDownRefresh'].map(name=>[name,fn=>hooks[name]=fn])),'@/services/api':{api,ApiError,errorMessage:e=>e.message,refreshMember:async()=>session.member},'@/stores/session':{useSessionStore:()=>session},'@/services/api/environment':{API_BASE_URL:'test',mediaUrl:x=>x},'@/services/navigation':{routes,navigate:(...x)=>calls.push(['navigate',...x]),requireLogin:async()=>!!session.token,searchLogin:()=>calls.push(['login']),requireProfile:async target=>{calls.push(['gate',target]);return gate},loginPage:target=>calls.push(['login',target])},'@/services/circle':{newRequestId:()=>`request-${Math.random()}`},'@/services/reading':{createReadingVisit:()=>({record:async()=>{}})},'@/services/presentation':{canEdit:()=>true}}
+ const deps={'vue':{...vue,getCurrentInstance:()=>null},'@dcloudio/uni-app':Object.fromEntries(['onLoad','onShow','onHide','onUnload','onShareAppMessage','onShareTimeline','onReachBottom','onPullDownRefresh'].map(name=>[name,fn=>hooks[name]=fn])),'@/services/api':{api,ApiError,errorMessage:e=>e.message,refreshMember:async()=>session.member},'@/stores/session':{useSessionStore:()=>session},'@/services/api/environment':{API_BASE_URL:'test',mediaUrl:x=>x},'@/services/navigation':{routes,navigate:(...x)=>calls.push(['navigate',...x]),requireLogin:async()=>!!session.token&&!!session.member?.profileComplete,searchLogin:()=>calls.push(['login']),requireProfile:async target=>{calls.push(['gate',target]);return gate},loginPage:target=>calls.push(['login',target])},'@/services/circle':{newRequestId:()=>`request-${Math.random()}`},'@/services/wechat':{showActivityShareMenu:()=>calls.push(['share-menu',{menus:['shareAppMessage','shareTimeline']}])},'@/services/reading':{createReadingVisit:()=>({record:async()=>{}})},'@/services/presentation':{canEdit:()=>true}}
  const exports=page.includes('activity-search')?'input,messages,result,items,busy,error,moreError,remaining,search,more,open,profile,ready':page==='activity/detail'?'id,searchId,recommendationToken,load,register,activity':'id,recommendationToken,load,submit,phone,allowed,returnTarget'
  const scope=vue.effectScope(),code=source('pages/'+page+'.vue').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
  const output=scope.run(()=>evaluate(code+'\nexport {'+exports+'}',deps,{uni}));t.after(()=>scope.stop())
  return {page:output,session,hooks,calls,observers,api,setGate:value=>{gate=value},async show(options={id:'a'}){hooks.onLoad?.(options);hooks.onShow?.();await setImmediate()}}
 }
-test('incomplete profiles search, three results and visible cards alone produce impressions',async t=>{
+test('complete members search, three results and visible cards alone produce impressions',async t=>{
  const h=harness(t);await h.show();h.page.input.value='深圳免费';await h.page.search();await setImmediate()
  assert.equal(h.page.items.value.length,3);assert.equal(h.calls.filter(x=>x[0]==='search').length,1);assert.equal(h.calls.filter(x=>x[0]==='impression').length,0)
  h.observers[0]({intersectionRatio:0});await setImmediate();assert.equal(h.calls.filter(x=>x[0]==='impression').length,0)
@@ -88,18 +88,27 @@ test('recommended detail confirms view only after loading and forwards source th
  const h=harness(t,'activity/detail');await h.show({id:'a',searchId:'search-a'});assert.deepEqual(h.calls.find(x=>x[0]==='view'),['view','search-a','a']);h.setGate(false);await h.page.register();assert.deepEqual(h.calls.at(-1),['gate','/pages/registration/form?id=a&recommendationToken=direct-token']);assert.ok(!h.hooks.onShareAppMessage().path.includes('searchId'));assert.ok(!h.hooks.onShareAppMessage().path.includes('direct-token'))
 })
 test('ordinary detail never confirms a recommendation view',async t=>{const h=harness(t,'activity/detail');await h.show();assert.equal(h.calls.some(x=>x[0]==='view'),false);await h.page.register();assert.deepEqual(h.calls.at(-1),['navigate','/pages/registration/form?id=a'])})
+test('timeline share carries the activity and current sharer only, without recommendation credentials',async t=>{
+ const h=harness(t,'activity/detail');h.session.member.inviteCode='HJYQM20261005000001';await h.show({id:'a',inviteCode:'original-sharer',searchId:'search-a'});h.page.activity.value.title='活动标题'
+ assert.deepEqual(h.calls.find(x=>x[0]==='share-menu'),['share-menu',{menus:['shareAppMessage','shareTimeline']}]);const shared=h.hooks.onShareTimeline();assert.equal(shared.title,'活动标题');assert.deepEqual(Object.fromEntries(new URLSearchParams(shared.query)),{id:'a',inviteCode:'HJYQM20261005000001'});assert.equal(shared.path,undefined);assert.ok(!shared.query.includes('search-a'));assert.ok(!shared.query.includes('direct-token'))
+ h.session.member.inviteCode='HJYQM20261005000002';assert.equal(new URLSearchParams(h.hooks.onShareTimeline().query).get('inviteCode'),'HJYQM20261005000002')
+})
+test('anonymous timeline landing retains invitation without login and resharing does not impersonate the inviter',async t=>{
+ const h=harness(t,'activity/detail');h.session.token='';h.session.member=null;await h.show({id:'a',inviteCode:'HJYQM20261005000001'});assert.equal(h.session.pendingInvite,'HJYQM20261005000001');assert.equal(h.page.activity.value.id,'a');assert.deepEqual(Object.fromEntries(new URLSearchParams(h.hooks.onShareTimeline().query)),{id:'a'});assert.equal(h.calls.some(x=>x[0]==='login'||x[0]==='gate'),false)
+})
+test('friend and timeline sharing encode values and whitelist the same activity query',async t=>{
+ const h=harness(t,'activity/detail');h.session.member.inviteCode='legacy code&x=1';await h.show({id:'a/b&x=2'});const timeline=h.hooks.onShareTimeline(),friend=h.hooks.onShareAppMessage();assert.equal(friend.path,routes.detail+'?'+timeline.query);assert.deepEqual(Object.fromEntries(new URLSearchParams(timeline.query)),{id:'a/b&x=2',inviteCode:'legacy code&x=1'})
+})
 test('failed attribution never blocks the real activity or ordinary registration path',async t=>{const h=harness(t,'activity/detail',{api:{searchView:async()=>{throw new Error('expired')}}});await h.show({id:'a',searchId:'old'});assert.equal(h.page.activity.value.id,'a');await h.page.register();assert.deepEqual(h.calls.at(-1),['navigate','/pages/registration/form?id=a'])})
 test('registration carries token through profile return and submission, but edit ignores token',async t=>{
  const h=harness(t,'registration/form');h.setGate(false);await h.show({id:'a',recommendationToken:'direct-token'});assert.equal(h.page.returnTarget(),'/pages/registration/form?id=a&recommendationToken=direct-token');h.setGate(true);await h.page.load();await h.page.submit();assert.equal(h.calls.find(x=>x[0]==='register')[2].recommendationToken,'direct-token')
  h.hooks.onLoad({id:'a',edit:'1',recommendationToken:'direct-token'});assert.equal(h.page.recommendationToken.value,'')
 })
-test('login-only returns incomplete member without mutating profile and ordinary mode stays gated',async()=>{
- const calls=[],session={token:'',member:{profileComplete:false},pendingInvite:''};let onLoad
- const deps={'@dcloudio/uni-app':{onLoad:f=>{onLoad=f}},'@/stores/session':{useSessionStore:()=>session},'@/services/api':{api:{profile:async()=>calls.push('profile')},errorMessage:e=>e.message,refreshMember:async()=>session.member},'@/services/wechat':{loginWithWechat:async()=>{session.token='t'}},'@/services/api/environment':{},'@/services/navigation':{routes:{...routes,login:'/pages/login/index'},finishProfile:x=>calls.push(x)}}
- const page=evaluate(source('pages/login/index.vue').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]+'\nexport {submit,loginOnly};',deps)
- await onLoad({mode:'login',returnTo:routes.activitySearch});await page.submit();assert.deepEqual(calls,[routes.activitySearch]);assert.equal(page.loginOnly.value,true)
- await onLoad({mode:'login',returnTo:routes.form+'?id=a'});assert.equal(page.loginOnly.value,false)
+test('incomplete visitors cannot call AI search and are offered profile completion',async t=>{
+ const h=harness(t);h.session.member.profileComplete=false;await h.show();h.page.input.value='深圳';await h.page.search()
+ assert.equal(h.page.ready.value,false);assert.equal(h.calls.some(x=>x[0]==='search'),false)
 })
+
 test('navigation does not reuse same activity with a different source context',()=>{
  const calls=[],uni=Object.fromEntries(['navigateBack','redirectTo','navigateTo','switchTab'].map(key=>[key,options=>{calls.push(key);options?.complete?.()}]))
  const nav=evaluate(source('services/navigation.ts'),{'@/services/api':{},'@/services/wechat':{},'@/stores/session':{}},{uni,getCurrentPages:()=>[{route:'pages/registration/form',options:{id:'a',recommendationToken:'old'}},{route:'pages/login/index'}]})

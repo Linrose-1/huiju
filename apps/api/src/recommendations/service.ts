@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { createHash } from 'node:crypto'
-import { IdentityService } from '../flow/identity.js'
+import { complete, IdentityService } from '../flow/identity.js'
 import { ReadingService } from '../flow/reading.js'
 import { RecommendationCandidatesService, type RecommendationCandidate } from '../flow/recommendation-candidates.js'
 import { fail } from '../common/errors.js'
@@ -39,8 +39,14 @@ export class ActivitySearchService {
     private readonly candidates: RecommendationCandidatesService, private readonly reading: ReadingService,
     private readonly provider: RecommendationProvider) {}
 
-  async create(input: ActivitySearchInput, header?: string): Promise<ActivitySearchResultDto> {
+  private async requireMember(header?: string) {
     const member = (await this.identity.require(header))!
+    if (!complete(member)) fail('PROFILE_INCOMPLETE', '请先完善手机号、头像和用户名称', 403)
+    return member
+  }
+
+  async create(input: ActivitySearchInput, header?: string): Promise<ActivitySearchResultDto> {
+    const member = await this.requireMember(header)
     if (input.messages.reduce((total, message) => total + message.length, 0) > 8000) fail('SEARCH_INPUT_TOO_LONG', '本次对话较长，请精简至 8000 字以内', 400)
     if (this.active >= 4) fail('SEARCH_BUSY', '当前检索较多，请稍后手动重试', 429)
     this.active++
@@ -92,7 +98,7 @@ export class ActivitySearchService {
   }
 
   async page(id: string, cursor: string | undefined, header?: string) {
-    const member = (await this.identity.require(header))!
+    const member = await this.requireMember(header)
     return this.pageFor(id.toLowerCase(), cursor, member.id)
   }
   private async pageFor(id: string, cursor: string | undefined, memberId: string): Promise<ActivitySearchResultDto> {
@@ -115,11 +121,11 @@ export class ActivitySearchService {
       items, cursor: hasMore ? searchCursor(row, scanned) : null, hasMore, remainingToday: await this.records.remaining(memberId), expiresAt: row.expiresAt.toISOString() }
   }
   async impressions(id: string, activityIds: string[], header?: string) {
-    const member = (await this.identity.require(header))!
+    const member = await this.requireMember(header)
     return this.records.impressions(id.toLowerCase(), member.id, activityIds.map(value => value.toLowerCase()))
   }
   async view(id: string, activityId: string, header?: string) {
-    const member = (await this.identity.require(header))!
+    const member = await this.requireMember(header)
     const normalized = activityId.toLowerCase()
     await this.records.read(id.toLowerCase(), member.id)
     if (!(await this.candidates.available(member.id, [normalized])).length) return { sourceToken: null }

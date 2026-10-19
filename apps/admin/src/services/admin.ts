@@ -8,6 +8,17 @@ export type MemberDetail = components['schemas']['AdminMemberDetailDto']
 export type FeedbackItem = components['schemas']['ModerationItemDto']
 export type AdminActivity = components['schemas']['AdminActivityDto']
 export type ActivityOperation = components['schemas']['ActivityModerationOperationDto']
+export type AnalyticsDashboard = components['schemas']['AnalyticsDashboardDto']
+export type AnalyticsEvent = components['schemas']['AnalyticsEventDto']
+export type AnalyticsMember = components['schemas']['AnalyticsMemberDto']
+export type ActivityReport = components['schemas']['ActivityReportDto']
+export type ActivityRegistration = components['schemas']['ActivityRegistrationDto']
+export type ContentHistory = components['schemas']['AuditDto']
+export type ContentEditor = components['schemas']['EditorDto']
+export type CirclePost = components['schemas']['CirclePostDto']
+export type CircleOperation = components['schemas']['CircleOperationDto']
+export type CircleCategory = 'all' | 'park' | 'operation' | 'service' | 'store'
+export type EngagementQuery = { days: 7 | 30; behavior: 'all' | 'new' | 'converted' | 'browse' | 'participate' | 'register' | 'attend' | 'publish' | 'comment' | 'review' | 'inactive' | 'silent'; profile: 'all' | 'complete' | 'incomplete'; inviterId?: string; offset: number }
 type AdminSession = components['schemas']['AdminSessionDto']
 
 const client = createApiClient('')
@@ -62,6 +73,21 @@ function acceptSession(value: AdminSession) {
   session.csrfToken = value.csrfToken
 }
 export const adminApi = {
+  circlePosts: (category: CircleCategory, offset: number) => unwrap(client.GET('/api/v1/admin/circle/posts', { ...options(), params: { query: { category, offset, limit: 20 } } })),
+  circleOperations: (id: string, offset: number) => unwrap(client.GET('/api/v1/admin/circle/posts/{id}/operations', { ...options(), params: { path: { id }, query: { offset, limit: 20 } } })),
+  removeCirclePost: (id: string, reason: string) => unwrap(client.POST('/api/v1/admin/circle/posts/{id}/remove', { ...options(), params: { path: { id }, header: csrfHeader() }, body: { reason } })),
+  restoreCirclePost: (id: string, reason: string) => unwrap(client.POST('/api/v1/admin/circle/posts/{id}/restore', { ...options(), params: { path: { id }, header: csrfHeader() }, body: { reason } })),
+  analytics: (days: 7 | 30) => unwrap(client.GET('/api/v1/admin/analytics', { ...options(), params: { query: { days } } })),
+  engagementEvents: (id: string, days: 7 | 30, offset: number) => unwrap(client.GET('/api/v1/admin/analytics/members/{id}/events', { ...options(), params: { path: { id }, query: { days, offset } } })),
+  engagement: (query: EngagementQuery) => unwrap(client.GET('/api/v1/admin/analytics/members', { ...options(), params: { query } })),
+  exportEngagement: (query: EngagementQuery) => unwrap(client.GET('/api/v1/admin/analytics/export', { ...options(), parseAs: 'text', params: { query } })),
+  activityReport: (id: string) => unwrap(client.GET('/api/v1/admin/activities/{id}/report', { ...options(), params: { path: { id } } })),
+  activityRegistrations: (id: string, offset: number, status: 'all' | 'active' | 'cancelled') => unwrap(client.GET('/api/v1/admin/activities/{id}/registrations', { ...options(), params: { path: { id }, query: { offset, status } } })),
+  content: () => unwrap(client.GET('/api/v1/admin/platform/content', options())),
+  saveContent: (body: { activityText: string; assistantText: string }) => unwrap(client.PATCH('/api/v1/admin/platform/content', { ...options(), params: { header: csrfHeader() }, body })),
+  contentHistory: (offset: number) => unwrap(client.GET('/api/v1/admin/platform/content/history', { ...options(), params: { query: { offset, limit: 20 } } })),
+  contentEditors: (offset: number) => unwrap(client.GET('/api/v1/admin/platform/editors', { ...options(), params: { query: { offset, limit: 20 } } })),
+  setContentEditor: (memberId: string, enabled: boolean) => unwrap(client.PUT('/api/v1/admin/platform/editors/{memberId}', { ...options(), params: { path: { memberId }, header: csrfHeader() }, body: { enabled } })),
   async restore() { acceptSession(await unwrap(client.GET('/api/v1/admin/auth/session', options()))) },
   async login(username: string, password: string) {
     acceptSession(await unwrap(client.POST('/api/v1/admin/auth/login', { ...options(), body: { username, password } })))

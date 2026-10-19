@@ -6,6 +6,7 @@ import {
   gt,
   isNull,
   like,
+  or,
   sql
 } from 'drizzle-orm'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -14,9 +15,11 @@ import { resolve } from 'node:path'
 import sharp from 'sharp'
 import { members, memberSessions, memberVisibilities, wechatIdentities } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
-import { memberNumberPrefix, nextMemberNumber } from './member-number.js'
+import { memberNumberPrefix, nextMemberNumber, memberInviteCode, inviteMemberNumber } from './member-number.js'
 import { WechatAdapter } from './wechat.js'
 import { AvatarInput, MemberDto } from './dto.js'
+import { LEGAL_VERSION, recordLegalConsent, requireLegalConsent } from '../platform/legal.js'
+import { legalConsents } from '../database/schema/platform.js'
 export type Member = typeof members.$inferSelect
 
 export function complete(member: Member) {
@@ -29,7 +32,7 @@ export function memberDto(member: Member): MemberDto {
   return {
     id: member.id,
     memberNumber: member.memberNumber,
-    inviteCode: member.inviteCode,
+    inviteCode: memberInviteCode(member.memberNumber, member.inviteCode),
     displayName: member.displayName,
     avatarUrl: member.avatarUrl,
     boundPhone: member.boundPhone,
@@ -71,7 +74,16 @@ export class IdentityService {
     private readonly wechat: WechatAdapter
   ) {}
 
-  async login(code: string, inviteCode?: string) {
+  async identify(code: string, inviteCode?: string) {
+    return this.establishSession(code, inviteCode)
+  }
+
+  async login(code: string, inviteCode?: string, consent?: { termsVersion: string; privacyVersion: string }) {
+    requireLegalConsent(consent)
+    return this.establishSession(code, inviteCode, consent)
+  }
+
+  private async establishSession(code: string, inviteCode?: string, consent?: { termsVersion: string; privacyVersion: string }) {
     const identity = await this.wechat.exchange(code)
     const db = this.database.db
     const find = async () => (await db
@@ -80,6 +92,7 @@ export class IdentityService {
       .where(and(eq(wechatIdentities.appId, identity.appId), eq(wechatIdentities.openId, identity.openId)))
       .limit(1))[0]
     let existing = await find()
+    let registered = false
     if (!existing) {
       try {
         existing = await db.transaction(async (tx) => {
@@ -91,10 +104,11 @@ export class IdentityService {
           if (!root) {
             fail('PLATFORM_NOT_READY', '平台身份尚未初始化，请联系运营人员', 503)
           }
+          const inviteNumber = inviteCode ? inviteMemberNumber(inviteCode) : null
           const inviter = inviteCode ? (await tx
             .select()
             .from(members)
-            .where(and(eq(members.inviteCode, inviteCode), eq(members.kind, 'member')))
+            .where(and(inviteNumber ? or(eq(members.memberNumber, inviteNumber), eq(members.inviteCode, inviteCode)) : eq(members.inviteCode, inviteCode), eq(members.kind, 'member')))
             .limit(1))[0] : undefined
           // Serialize number allocation across API processes using the existing root row.
           // Locking reads see the latest committed number even under REPEATABLE READ.
@@ -111,7 +125,7 @@ export class IdentityService {
               id,
               memberNumber,
               createdAt,
-              inviteCode: randomBytes(16).toString('hex'),
+              inviteCode: memberInviteCode(memberNumber, ''),
               inviterMemberId: inviter?.id ?? root.id
             })
           await tx
@@ -124,8 +138,10 @@ export class IdentityService {
           await tx
             .insert(memberVisibilities)
             .values({ memberId: id })
+          if (consent) await recordLegalConsent(tx, id, consent)
           return { memberId: id }
         })
+        registered = true
       } catch (error) {
         // The unique WeChat identity wins a concurrent first login. Read that
         // committed member instead of creating or rewriting an invitation.
@@ -169,6 +185,7 @@ export class IdentityService {
           tokenHash: this.sessionHash(token),
           expiresAt
         })
+      if (!registered && consent) await recordLegalConsent(tx, owner.id, consent)
       return owner
     })
     return {
@@ -214,8 +231,17 @@ export class IdentityService {
     return { ok: true }
   }
 
-  async profile(header: string | undefined, displayName: string) {
+  private async requireProfileConsent(header: string | undefined) {
     const member = (await this.require(header))!
+    const [consent] = await this.database.db.select({ id: legalConsents.id }).from(legalConsents)
+      .where(and(eq(legalConsents.memberId, member.id), eq(legalConsents.termsVersion, LEGAL_VERSION), eq(legalConsents.privacyVersion, LEGAL_VERSION)))
+      .limit(1)
+    if (!consent) fail('LEGAL_CONSENT_REQUIRED', '请阅读并同意当前版本的用户协议和隐私政策后完善资料', 403)
+    return member
+  }
+
+  async profile(header: string | undefined, displayName: string) {
+    const member = await this.requireProfileConsent(header)
     await this.database.db
       .update(members)
       .set({
@@ -227,7 +253,7 @@ export class IdentityService {
   }
 
   async phone(header: string | undefined, code: string) {
-    const member = (await this.require(header))!
+    const member = await this.requireProfileConsent(header)
     if (member.boundPhone) {
       fail('PHONE_ALREADY_BOUND', '手机号已绑定，首期暂不支持修改', 409)
     }
@@ -252,7 +278,7 @@ export class IdentityService {
   private directory() { return resolve(process.env.LOCAL_AVATAR_DIRECTORY ?? '.local-uploads/avatars') }
 
   async avatar(header: string | undefined, input: AvatarInput) {
-    const member = (await this.require(header))!
+    const member = await this.requireProfileConsent(header)
     const bytes = await validAvatar(input)
     const name = `${randomUUID()}.${input.mimeType === 'image/png' ? 'png' : 'jpg'}`
     await mkdir(this.directory(), { recursive: true })

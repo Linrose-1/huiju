@@ -18,7 +18,7 @@ export function cardSettings(row?: Partial<CardSettingsDto>): CardSettingsDto {
 export function publicCard(member: Member, settings: CardSettingsDto): MemberCardDto {
   const card: MemberCardDto = {
     avatarUrl: complete(member) ? member.avatarUrl : null,
-    displayName: complete(member) ? member.displayName! : `会员${member.memberNumber}`,
+    displayName: complete(member) ? member.displayName! : `游客${member.memberNumber}`,
   }
   for (const [setting, field] of Object.entries(visibilityFields)) {
     if (settings[setting as keyof CardSettingsDto]) card[field] = member[field]

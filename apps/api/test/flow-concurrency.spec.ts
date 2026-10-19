@@ -1,3 +1,5 @@
+import { LEGAL_VERSION } from '../src/platform/legal.js'
+import { legalConsents } from '../src/database/schema/platform.js'
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { and, eq, inArray, sql } from 'drizzle-orm'
@@ -15,7 +17,7 @@ import { WechatAdapter } from '../src/flow/wechat.js'
 // fixtures only in the explicitly authorized local development database.
 const enabled = process.env.HUIJU_DB_TEST === 'local-concurrency'
 const trackedTables = [
-  'members', 'wechat_identities', 'member_visibilities', 'member_sessions',
+  'members', 'wechat_identities', 'member_visibilities', 'member_sessions', 'legal_consents',
   'activities', 'registration_questions', 'registrations',
   'registration_answers', 'registration_operations',
 ] as const
@@ -65,14 +67,15 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
         }
       }
       const identity = new IdentityService(database, new FixtureWechat())
+      const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
       const service = new ActivityService(database, identity)
 
       // Independent pool connections actually compete on the identity unique key.
       // Only the upstream WeChat exchange is replaced; all persistence is MySQL.
       const initial = await Promise.allSettled([
-        identity.login(loginCodes[0], inviteCodes[0]),
-        identity.login(loginCodes[0], inviteCodes[1]),
-        identity.login(loginCodes[0], inviteCodes[0]),
+        login(loginCodes[0], inviteCodes[0]),
+        login(loginCodes[0], inviteCodes[1]),
+        login(loginCodes[0], inviteCodes[0]),
       ])
       expect(initial.every(result => result.status === 'fulfilled')).toBe(true)
       const sessions = initial.map(result => {
@@ -90,13 +93,13 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
       const [firstMember] = await db.select().from(members).where(eq(members.id, memberId))
       expect(inviterIds).toContain(firstMember.inviterMemberId)
       const oppositeInvite = firstMember.inviterMemberId === inviterIds[0] ? inviteCodes[1] : inviteCodes[0]
-      const latest = await identity.login(loginCodes[0], oppositeInvite)
+      const latest = await login(loginCodes[0], oppositeInvite)
       expect(latest.member.id).toBe(memberId)
       const [fixedMember] = await db.select().from(members).where(eq(members.id, memberId))
       expect(fixedMember.inviterMemberId).toBe(firstMember.inviterMemberId)
-      const second = await identity.login(loginCodes[1], inviteCodes[1])
+      const second = await login(loginCodes[1], inviteCodes[1])
       expect(second.member.memberNumber).not.toBe(firstMember.memberNumber)
-      const newMembers = await Promise.allSettled(Array.from({ length: 6 }, () => identity.login(randomUUID())))
+      const newMembers = await Promise.allSettled(Array.from({ length: 6 }, () => login(randomUUID())))
       expect(newMembers.every(result => result.status === 'fulfilled')).toBe(true)
       const numbers = newMembers.map(result => {
         if (result.status !== 'fulfilled') throw result.reason
@@ -161,6 +164,7 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
         const createdIdentities = await db.select({ memberId: wechatIdentities.memberId })
           .from(wechatIdentities).where(eq(wechatIdentities.appId, appId))
         for (const row of createdIdentities) {
+          await db.delete(legalConsents).where(eq(legalConsents.memberId, row.memberId))
           await db.delete(members).where(eq(members.id, row.memberId))
         }
         await db.delete(members).where(inArray(members.id, inviterIds))
