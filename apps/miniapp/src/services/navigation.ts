@@ -13,16 +13,25 @@ export const routes = {
   activity: '/pages/activity/index', assistant: '/pages/assistant/index', mine: '/pages/mine/index',
   login: '/pages/login/index', detail: '/pages/activity/detail', form: '/pages/registration/form', result: '/pages/registration/detail', registrations: '/pages/registration/index'
 }
-let navigating = false
+let navigating: { page: unknown } | null = null
 export function navigate(url: string, replace = false) {
-  if (navigating) return
-  navigating = true
-  const options = { url, complete: () => { navigating = false } }
-  if (replace) uni.redirectTo(options)
-  else uni.navigateTo(options)
+  const page = getCurrentPages().slice(-1)[0]
+  if (navigating && navigating.page === page) return
+  // 目标页 onShow 可能早于上一跳 complete；目标页的资料引导必须可以继续导航。
+  const request = { page }
+  navigating = request
+  const release = () => { if (navigating === request) navigating = null }
+  const options = { url, success: release, fail: () => { release(); uni.showToast({ title: '页面打开失败，请重试', icon: 'none' }) }, complete: release }
+  try {
+    if (replace) uni.redirectTo(options)
+    else uni.navigateTo(options)
+  } catch (error) { release(); throw error }
 }
 export function loginPage(returnTo = '') {
-  navigate(routes.login + (returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''))
+  const current = '/' + getCurrentPages().slice(-1)[0]?.route
+  // 替换尚不能使用的表单页；返回时回到浏览页，避免 onShow 再次弹回完善页。
+  const replace = [routes.editor, routes.form, routes.circleEditor].some(path => current === path && returnTo.split('?')[0] === path)
+  navigate(routes.login + (returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''), replace)
 }
 export async function requireLogin(): Promise<boolean> {
   await bootstrapIdentity()

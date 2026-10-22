@@ -1,5 +1,5 @@
 import { useSessionStore } from '@/stores/session'
-import { API_BASE_URL } from './environment'
+import { API_BASE_URL, NETWORK_DEBUG } from './environment'
 import type { ActivitySearchResult } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
@@ -38,7 +38,14 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET
         }
         if (response.statusCode >= 200 && response.statusCode < 300) resolve(response.data as T)
         else reject(new ApiError(body.code || 'REQUEST_FAILED', safeMessages[body.code || ''] || (typeof body.message === 'string' ? body.message : '请求未能完成，请稍后重试'), response.statusCode))
-      }, fail() { reject(new ApiError('NETWORK_ERROR', '网络连接失败，请检查网络后重试')) }
+      }, fail(error) {
+        if (NETWORK_DEBUG) console.warn('[API_NETWORK_FAILURE]', {
+          apiBase: API_BASE_URL,
+          method,
+          message: (error.errMsg || 'request:fail').replace(/https?:\/\/\S+/g, '[URL]').slice(0, 240),
+        })
+        reject(new ApiError('NETWORK_ERROR', '网络连接失败，请检查网络后重试'))
+      }
     })
   })
 }

@@ -4,7 +4,7 @@ import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { api, errorMessage } from '@/services/api'
 import { mediaUrl, LOCAL_TEST } from '@/services/api/environment'
-import { bootstrapIdentity, uploadAvatar } from '@/services/wechat'
+import { bootstrapIdentity, uploadAvatar, localTestCode } from '@/services/wechat'
 import { finishProfile, routes, navigate } from '@/services/navigation'
 import type { LegalDocuments } from '@/services/api/types'
 const session = useSessionStore(), name = ref(''), invite = ref(''), returnTo = ref(''), busy = ref(false), error = ref('')
@@ -103,7 +103,7 @@ function remindPhoneConsent() {
     if (!active || busy.value) return
     uni.showToast({ title: documents.value ? '请先阅读并同意用户协议和隐私政策' : '协议尚未就绪，请稍后或重新读取协议', icon: 'none', duration: 2500 })
 }
-function testPhone() { if (LOCAL_TEST) void perform(async () => { await ensureIdentity(); if (active && !session.member?.boundPhone) await api.phone('huiju-local-test') }) }
+function testPhone() { if (LOCAL_TEST) void perform(async () => { await ensureIdentity(); if (active && !session.member?.boundPhone) await api.phone(localTestCode()) }) }
 function testAvatar() {
     if (LOCAL_TEST) void perform(async () => { await ensureIdentity(); await api.avatar('iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAn0lEQVRoge2SQQkAQRDDKiPiKmP9cyLuEQYKEZCGhtfTRDdgA6pXZBfqXaIbsAHVK7IL9S7RDdiA6hXZhXqX6AZsQPWK7EK9S3QDNqB6RXah3iW6ARtQvSK7UO8S3YANqF6RXah3iW7ABlSvyC7Uu0Q3YAOqV2QX6l2iG7AB1SuyC/Uu0Q3YgOoV2YV6l+gGbED1iuxCvUt0AzagesU/fHBggNPKQZE8AAAAAElFTkSuQmCC', 'image/png') })
 }

@@ -14,10 +14,10 @@ function page(file, api, session = { token: '', epoch: 0, pendingInvite: '', mem
   const deps = { vue, '@dcloudio/uni-app': Object.fromEntries(['onLoad','onShow','onHide','onUnload'].map(key => [key, fn => { hooks[key] = fn }])),
     '@/stores/session': { useSessionStore: () => session }, '@/services/api': { api: client, refreshMember: async () => session.member, errorMessage: e => e.message },
     '@/services/wechat': { bootstrapIdentity: async () => { logins.push('identify'); if (!session.token) { session.token = 'new'; session.member = { displayName: '', profileComplete: false } } }, uploadAvatar: async () => {}, ...wechat },
-    '@/services/api/environment': { LOCAL_TEST: false },
+    '@/services/api/environment': { LOCAL_TEST: !!wechat.localTestCode },
     '@/services/navigation': { routes: { terms: '/terms', privacy: '/privacy', login: '/login', contentSettings: '/content', activitySearch: '/search' }, navigate: x => navigations.push(x), loginPage: x => navigations.push(x), finishProfile: x => navigations.push(x) } }
   const script = readFileSync(new URL('../src/pages/' + file + '.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const names = file === 'login/index' ? 'submit,phone,avatar,editName,selectedAvatar,name,invite,busy,agreed,documents,error,loadLegal,legalError,remindPhoneConsent' : 'save,ready,error,activityText,assistantText'
+  const names = file === 'login/index' ? 'submit,phone,testPhone,avatar,editName,selectedAvatar,name,invite,busy,agreed,documents,error,loadLegal,legalError,remindPhoneConsent' : 'save,ready,error,activityText,assistantText'
   const code = ts.transpileModule(script + '\nexport {' + names + '};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const exports = {}
   new Function('require','exports','uni',code)(name => deps[name] ?? require(name), exports, { showToast: x => toasts.push(x) })
@@ -33,6 +33,18 @@ test('silent identification and failed legal fetch never imply consent or save p
   assert.equal(h.consents.length, 0); assert.equal(h.state.agreed.value, false)
   h.state.agreed.value = true; h.state.editName({ detail: { value: '新名称' } }); await h.state.submit()
   assert.deepEqual(h.consents, [{ termsVersion: 'terms-dev', privacyVersion: 'privacy-dev' }]); assert.equal(profiles, 1)
+})
+
+test('local completion binds the selected visitor phone credential after explicit consent', async () => {
+  const phones = []
+  const h = page('login/index', { legalDocuments: async () => documents, phone: async code => phones.push(code) }, undefined, { localTestCode: () => 'huiju-local-test:visitor' })
+  await h.hooks.onLoad({}); await setImmediate()
+  h.state.testPhone(); await setImmediate()
+  assert.deepEqual(phones, [])
+  h.state.agreed.value = true
+  h.state.testPhone(); await setImmediate()
+  assert.deepEqual(phones, ['huiju-local-test:visitor'])
+  assert.equal(h.consents.length, 1)
 })
 
 test('leaving login discards late document response and never preselects consent', async () => {

@@ -43,18 +43,18 @@ onReachBottom(() => list.load(true)); onPullDownRefresh(() => list.load())
         </view>
       </view>
       <view class="circle-home-entries">
-        <view
+        <navigator
           class="circle-home-entry"
-          @click="navigate(routes.circleEditor)"
+          :url="routes.circleEditor"
         >
           <view class="circle-home-symbol">＋</view><view class="grow"><view class="circle-title">发布</view><text class="circle-muted">分享资源与机会</text></view><text>›</text>
-        </view>
-        <view
+        </navigator>
+        <navigator
           class="circle-home-entry"
-          @click="navigate(routes.circleMine)"
+          :url="routes.circleMine"
         >
           <view class="circle-home-symbol gold">▤</view><view class="grow"><view class="circle-title">我的帖子</view><text class="circle-muted">查看与管理</text></view><text>›</text>
-        </view>
+        </navigator>
       </view>
       <RequestState
         :loading="loading"
@@ -112,5 +112,6 @@ onReachBottom(() => list.load(true)); onPullDownRefresh(() => list.load())
 </template>
 <style lang="scss">@import './circle.scss';</style>
 <style scoped>
+.circle-home-entry{line-height:1.45;text-align:left;font-weight:400}.circle-home-entry>view,.circle-home-entry>text{pointer-events:none}
 .circle-home-hero{position:relative;height:275rpx;overflow:hidden;background:#eaf4ed}.circle-home-hero-image{position:absolute;right:0;top:0;width:65%;height:100%}.circle-home-hero-fade{position:absolute;inset:0;background:linear-gradient(90deg,#f2f8f3 15%,#f2f8f3dd 45%,#f2f8f300 80%)}.circle-home-hero-copy{position:relative;font-size:40rpx;line-height:1.5;padding:24rpx 40rpx;color:#124b35;letter-spacing:2rpx}.circle-home-hero-copy text{font-family:sans-serif;font-weight:400;font-size:23rpx;color:#7a8980;letter-spacing:0}.circle-home-line{height:4rpx;width:64rpx;background:#cba260;margin:16rpx 0 12rpx}.circle-home-entries{display:flex;gap:16rpx;margin-bottom:24rpx}.circle-home-entry{flex:1;min-width:0;background:#fff;border-radius:18rpx;padding:19rpx 16rpx;display:flex;align-items:center;gap:14rpx}.circle-home-entry .circle-title{font-size:30rpx}.circle-home-symbol{width:64rpx;height:64rpx;flex-shrink:0;border-radius:50%;background:#18573f;color:#fff;font-size:49rpx;text-align:center;line-height:59rpx}.circle-home-symbol.gold{background:#d5b268;font-size:40rpx}.home-title{margin:14rpx 0 10rpx}.home-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.circle-home .circle-avatar{width:54rpx;height:54rpx}
 </style>

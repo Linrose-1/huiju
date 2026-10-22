@@ -4,6 +4,8 @@
 
 ## 最小验证矩阵
 
+2026-10-20补充：`apps/miniapp/test/navigation.test.mjs`覆盖源页防重、目标页onShow继续引导、迟到回调不释放新导航锁及受保护表单替换／公开详情保留；`local-test-actor.test.mjs`、`session.test.mjs`与`scripts/local-test.test.mjs`覆盖显式测试模式身份切换、菜单六项上限、旧会话隔离、模拟凭证及普通模式拒绝。开发网络诊断仅在DEV模式输出脱敏传输错误，不记录请求正文、手机号、授权头或微信code；相关回归也在`session.test.mjs`。以上均为L1，不是微信真实身份或数据库验收。此前模拟身份的报名／意向工具链已验收，测试数据随后按授权清理，当前本地仅保留本人账号及演示内容，服务均已停止；重启、本人登录和真机证据分别记录，不为复跑普通测试自动重建夹具。
+
 2026-10-02智能活动推荐新增 `recommendation-provider.spec.ts`（模型载荷白名单与输出校验）、`recommendation-contract.spec.ts`（HTTP DTO／应用装配）、`recommendation-records.spec.ts`（额度、幂等、跨日、来源及清理）、`recommendation-service.spec.ts`（编排、隐私和分页）与 `recommendation-registration.spec.ts`（既有报名事务接入）。小程序 `activity-search.test.mjs` 覆盖登录、会话、展示、分页、重试与来源传递；`scripts/recommendation-cleanup.test.mjs` 覆盖维护命令的拒绝执行边界。全部使用替身或纯逻辑，不加载开发数据库凭据、不调用真实模型；实际运行结果见[10月实现记录](../implementation-log/2026-10.md)。
 
 推荐 `0009` 迁移仅生成，后续L2需要单独授权的隔离MySQL验证：多连接抢占／完成额度、跨日边界、事件与报名并发锁序、转换失败回滚、过期清理及普通报名兼容；真实模型质量、微信曝光回调与资料返回、真机及部署分别验收。不得将上述替身测试当成MySQL锁行为或推荐质量证明。

@@ -3,13 +3,39 @@ import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { api, errorMessage } from '@/services/api'
-import { mediaUrl } from '@/services/api/environment'
+import { mediaUrl, LOCAL_TEST } from '@/services/api/environment'
 import { navigate, routes, loginPage, requireProfile } from '@/services/navigation'
-import { bootstrapIdentity } from '@/services/wechat'
+import { bootstrapIdentity, switchLocalTestActor, getLocalTestActor, localTestActors } from '@/services/wechat'
 const session = useSessionStore(), count = ref<number | null>(null), organizedCount = ref<number | null>(null), error = ref(''), loading = ref(false)
 const unreadCount = ref(0)
 const canEditContent = ref(false)
+const switching = ref(false), testActorLabel = ref(LOCAL_TEST ? getLocalTestActor().label : '')
+let active = false
 let generation = 0
+async function chooseTestActor() {
+  if (!LOCAL_TEST || switching.value || !active) return
+  switching.value = true
+  try {
+    // 微信操作菜单最多六项；第六项展开其余两种测试身份。
+    const first = await uni.showActionSheet({ itemList: [...localTestActors.slice(0, 5).map(actor => actor.label), '更多测试身份…'] })
+    if (!active) return
+    let index = first.tapIndex
+    if (index === 5) {
+      const next = await uni.showActionSheet({ itemList: localTestActors.slice(5).map(actor => actor.label) })
+      if (!active) return
+      index = next.tapIndex + 5
+    }
+    const actor = localTestActors[index]
+    if (!actor) return
+    generation++
+    error.value = ''
+    testActorLabel.value = actor.label
+    await switchLocalTestActor(actor.key)
+    if (active) await load()
+  } catch (e) {
+    if (active && !(typeof (e as { errMsg?: unknown })?.errMsg === 'string' && (e as { errMsg: string }).errMsg.includes('cancel'))) error.value = errorMessage(e)
+  } finally { switching.value = false }
+}
 async function load() {
   const current = ++generation
   let token = session.token, epoch = session.epoch
@@ -51,9 +77,9 @@ finally {
     organizedCount.value = null
 } }
 watch(() => [session.token, session.epoch], () => { count.value = null; organizedCount.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false }, { flush: 'sync' })
-onShow(load)
-onHide(() => { generation++ })
-onUnload(() => { generation++ })
+onShow(() => { active = true; void load() })
+onHide(() => { active = false; generation++ })
+onUnload(() => { active = false; generation++ })
 </script>
 <template>
   <view>
@@ -96,6 +122,20 @@ onUnload(() => { generation++ })
       </view>
     </view>
     <view class="sheet mine-sheet">
+      <view
+        v-if="LOCAL_TEST"
+        class="local-test-tools"
+      >
+        <view class="small">本地模拟身份：{{ testActorLabel }}</view>
+        <button
+          class="text-button"
+          :disabled="switching"
+          @click="chooseTestActor"
+        >
+          {{ switching ? '正在切换…' : '切换测试身份' }}
+        </button>
+        <view class="muted small">仅本机测试，手机号与身份模拟，业务数据保存到本地数据库。</view>
+      </view>
       <view
         v-if="error"
         class="error"
@@ -253,6 +293,8 @@ onUnload(() => { generation++ })
   </view>
 </template>
 <style scoped>
+.local-test-tools { padding: 20rpx; margin-bottom: 22rpx; border: 1rpx dashed #b4c9bc; border-radius: 16rpx; background: #f1f7f3; }
+.local-test-tools button { min-height: 88rpx; color: #17553f; }
 .notification-title { display: flex; align-items: center; gap: 12rpx; }
 .unread-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 34rpx; height: 34rpx; padding: 0 9rpx; border-radius: 18rpx; color: #fff; background: #dc3c3c; font-size: 22rpx; line-height: 1; font-weight: 500; }
 .entry-arrow { flex-shrink: 0; font-family: Arial, sans-serif; font-size: 32rpx; font-weight: 400; line-height: 1; color: #78837c; }

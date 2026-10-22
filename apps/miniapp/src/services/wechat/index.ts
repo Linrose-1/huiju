@@ -1,7 +1,10 @@
 import { api, ApiError, refreshMember } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
 import { LOCAL_TEST } from '@/services/api/environment'
+import { localTestCode, selectLocalTestActor, type LocalTestActorKey } from '@/services/wechat/local-test-actor'
+export { getLocalTestActor, localTestActors, localTestCode } from '@/services/wechat/local-test-actor'
 let signingIn: { epoch: number; promise: Promise<void> } | null = null
+let switchingActor: Promise<void> | null = null
 export function chooseActivityLocation(): Promise<string | null> {
   return new Promise((resolve, reject) => {
     // #ifdef MP-WEIXIN
@@ -63,7 +66,7 @@ function identifyWithWechat(): Promise<void> {
   const inviteCode = session.pendingInvite
   session.identifying = true
   const promise = new Promise<string>((resolve, reject) => {
-    if (LOCAL_TEST) { resolve('huiju-local-test'); return }
+    if (LOCAL_TEST) { resolve(localTestCode()); return }
     // #ifdef MP-WEIXIN
     uni.login({ provider: 'weixin', success: result => result.code ? resolve(result.code) : reject(new Error('微信没有返回登录凭证，请重试')), fail: () => reject(new Error('微信登录未完成，请重试')) })
     // #endif
@@ -89,6 +92,17 @@ export async function bootstrapIdentity(): Promise<void> {
     catch (error) { if (!(error instanceof ApiError && error.status === 401)) throw error }
   }
   return identifyWithWechat()
+}
+export function switchLocalTestActor(key: LocalTestActorKey): Promise<void> {
+  if (!LOCAL_TEST) return Promise.reject(new Error('仅本地模拟测试可切换身份'))
+  if (switchingActor) return switchingActor
+  selectLocalTestActor(key)
+  const session = useSessionStore()
+  session.clear()
+  session.pendingInvite = ''
+  const promise = bootstrapIdentity().finally(() => { if (switchingActor === promise) switchingActor = null })
+  switchingActor = promise
+  return promise
 }
 export function showActivityShareMenu() {
   // #ifdef MP-WEIXIN
