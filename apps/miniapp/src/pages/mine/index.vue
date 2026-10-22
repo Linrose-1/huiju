@@ -253,7 +253,7 @@ onUnload(() => { active = false; generation++ })
               size="48rpx"
               color="#17543d"
             />
-          </view><view class="grow"><view class="tile-title">我的邀请码</view><view class="muted small">邀请同学加入会聚</view></view><text
+          </view><view class="grow"><view class="tile-title">我的邀请码</view><view class="muted small">邀请同学加入有聚点</view></view><text
             class="entry-arrow"
             aria-hidden="true"
           >

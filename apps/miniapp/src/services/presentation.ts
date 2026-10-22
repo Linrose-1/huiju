@@ -50,7 +50,7 @@ export function stateText(state: Activity['registrationState']) {
 export function canEdit(activity: Activity, registration: Registration) { return registration.status === 'active' && !['cancelled', 'removed'].includes(activity.registrationState) && Date.now() < Date.parse(activity.registrationDeadline) }
 export function canCancel(activity: Activity, registration: Registration) { return registration.status === 'active' && Date.now() < Date.parse(activity.startsAt) }
 export const feeNotice = '本活动为收费活动，请联系活动发起人了解具体收费事宜'
-export const feeDisclaimer = '会聚不参与本活动的收费、收款和退款，相关费用请直接与活动发起人确认'
+export const feeDisclaimer = '有聚点不参与本活动的收费、收款和退款，相关费用请直接与活动发起人确认'
 
 export function upcomingActivities(items: Activity[], now = Date.now()): Activity[] {
   return items.filter(item => Date.parse(item.startsAt) > now).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))

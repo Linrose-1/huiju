@@ -5,7 +5,7 @@
 ## 给服务器 Agent 的提示词
 
 ```text
-请将会聚项目的后端和管理后台部署到本服务器，供少量指定人员测试。小程序由我本地上传。
+请将有聚点项目的后端和管理后台部署到本服务器，供少量指定人员测试。小程序由我本地上传。
 仓库：https://github.com/Linrose-1/huiju.git，分支 main。若我另提供提交 SHA，以该 SHA 为部署版本并记录。
 先读 AGENTS.md、apps/api/AGENTS.md、apps/admin/AGENTS.md 和 infra/deploy/README.md。
 检查系统、现有项目目录和 Git 修改、Node/MySQL/Nginx/进程管理器、端口与磁盘，复用合适设施，不覆盖其他应用、服务器 .env、数据库和上传文件。

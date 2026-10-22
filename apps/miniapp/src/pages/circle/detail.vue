@@ -82,7 +82,7 @@ onPullDownRefresh(async () => {
 })
 onHide(() => { visible = false; clear() })
 onUnload(() => { visible = false; pendingIntent = false; clear() })
-onShareAppMessage(() => ({ title: post.value?.state === 'removed' ? '会聚学友圈' : post.value?.title || '会聚学友圈', path: circleSharePath(routes.circleDetail, id.value, session.member?.inviteCode) }))
+onShareAppMessage(() => ({ title: post.value?.state === 'removed' ? '有聚点学友圈' : post.value?.title || '有聚点学友圈', path: circleSharePath(routes.circleDetail, id.value, session.member?.inviteCode) }))
 </script>
 <template>
   <view class="circle-page circle-safe circle-detail">

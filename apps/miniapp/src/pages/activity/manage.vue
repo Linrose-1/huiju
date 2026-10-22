@@ -135,7 +135,7 @@ onHide(() => { shown = false; clear() })
 onUnload(() => { shown = false; clear(); stop() })
 onReachBottom(() => loadRoster(true))
 onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void load() })
-onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path: routes.detail+'?id='+encodeURIComponent(id.value)+(session.member?.inviteCode?'&inviteCode='+encodeURIComponent(session.member.inviteCode):'') }))
+onShareAppMessage(() => ({ title: activity.value?.title || '有聚点活动', path: routes.detail+'?id='+encodeURIComponent(id.value)+(session.member?.inviteCode?'&inviteCode='+encodeURIComponent(session.member.inviteCode):'') }))
 </script>
 <template>
   <view class="page-pad manage-page">

@@ -161,7 +161,7 @@ onUnload(() => { visible = false; clear(); stop() })
             type="person"
             size="32rpx"
             color="#173c3b"
-          /><text class="answer-label">用户名称</text><text>{{ session.member?.displayName || '会聚会员' }}</text>
+          /><text class="answer-label">用户名称</text><text>{{ session.member?.displayName || '有聚点会员' }}</text>
         </view>
         <view class="answer-row">
           <uni-icons

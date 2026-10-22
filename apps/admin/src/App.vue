@@ -47,7 +47,7 @@ onMounted(restore)
     v-if="!ready"
     class="startup"
   >
-    <h1>会聚管理后台</h1>
+    <h1>有聚点管理后台</h1>
     <template v-if="startupError">
       <el-alert
         :title="startupError"
@@ -74,7 +74,7 @@ onMounted(restore)
   >
     <header class="app-header">
       <div class="brand">
-        会聚 <span>管理后台</span>
+        有聚点 <span>管理后台</span>
       </div>
       <div class="identity">
         <span>{{ session.account.displayName }} · {{ isSuperAdmin ? '超级管理员' : '普通运营' }}</span>

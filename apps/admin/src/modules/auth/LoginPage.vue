@@ -22,7 +22,7 @@ async function submit() {
 <template>
   <section class="auth-card panel">
     <div class="brand">
-      会聚 <span>管理后台</span>
+      有聚点 <span>管理后台</span>
     </div>
     <h1 class="auth-title">
       欢迎登录

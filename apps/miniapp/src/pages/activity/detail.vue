@@ -154,8 +154,8 @@ onReachBottom(() => {
 function shareQuery() {
     return 'id=' + encodeURIComponent(id.value) + (session.member?.inviteCode ? '&inviteCode=' + encodeURIComponent(session.member.inviteCode) : '')
 }
-onShareAppMessage(() => ({ title: activity.value?.title || '会聚活动', path: routes.detail + '?' + shareQuery() }))
-onShareTimeline(() => ({ title: activity.value?.title || '会聚活动', query: shareQuery() }))
+onShareAppMessage(() => ({ title: activity.value?.title || '有聚点活动', path: routes.detail + '?' + shareQuery() }))
+onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', query: shareQuery() }))
 </script>
 <template>
   <view class="page-pad with-footer activity-detail">
@@ -216,7 +216,7 @@ onShareTimeline(() => ({ title: activity.value?.title || '会聚活动', query: 
               type="person"
               size="32rpx"
             />
-          </view><text>发起人</text><text class="organizer-name">{{ activity.organizer.displayName || '会聚会员' }}</text><uni-icons
+          </view><text>发起人</text><text class="organizer-name">{{ activity.organizer.displayName || '有聚点会员' }}</text><uni-icons
             type="arrow-right"
             size="28rpx"
             color="#818791"
@@ -322,7 +322,7 @@ onShareTimeline(() => ({ title: activity.value?.title || '会聚活动', query: 
                 size="36rpx"
                 color="#82968a"
               />
-            </view><text>{{ person.displayName || '会聚会员' }}</text>
+            </view><text>{{ person.displayName || '有聚点会员' }}</text>
           </view>
         </view>
         <ListMore

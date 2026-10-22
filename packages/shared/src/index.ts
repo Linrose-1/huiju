@@ -1,1 +1,1 @@
-export const PRODUCT_NAME = '会聚'
+export const PRODUCT_NAME = '有聚点'

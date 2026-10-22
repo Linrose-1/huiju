@@ -1034,7 +1034,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               type="checkmarkempty"
               size="32rpx"
               color="#164f41"
-            /><view><text class="review-label">活动声明</text><text class="review-muted">{{ form.feeType === 'free' ? '本活动为免费活动，会聚不收取任何费用。' : form.feeType === 'paid' ? feeDisclaimer + '。' : '请先确认活动费用模式' }}</text></view>
+            /><view><text class="review-label">活动声明</text><text class="review-muted">{{ form.feeType === 'free' ? '本活动为免费活动，有聚点不收取任何费用。' : form.feeType === 'paid' ? feeDisclaimer + '。' : '请先确认活动费用模式' }}</text></view>
           </view>
         </view>
       </view>

@@ -142,7 +142,7 @@ async function phone(event: { detail: { code?: string; errMsg?: string } }) {
         src="/static/huiju/campus.jpg"
         mode="aspectFill"
       />
-      <view class="brand-block"><text class="brand serif">会聚</text><view class="gold-line" /></view>
+      <view class="brand-block"><text class="brand serif">有聚点</text><view class="gold-line" /></view>
     </view>
     <view class="login-body">
       <view class="welcome">完善资料，成为会员</view>

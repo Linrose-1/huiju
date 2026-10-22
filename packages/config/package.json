@@ -2,5 +2,5 @@
   "name": "@huiju/config",
   "version": "0.1.0",
   "private": true,
-  "description": "会聚 workspace 的共享工程配置。"
+  "description": "有聚点 workspace 的共享工程配置。"
 }

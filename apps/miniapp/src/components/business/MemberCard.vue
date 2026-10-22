@@ -37,7 +37,7 @@ const storyFields = computed(() => visibleFields(['resources', 'needs', 'bio']))
         </view>
         <view class="identity-text">
           <view class="brand">
-            会聚
+            有聚点
           </view>
           <text class="display-name">
             {{ card.displayName }}

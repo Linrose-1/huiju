@@ -36,7 +36,7 @@ async function scanActivity() {
         if (!result || !current()) return
         const target = activityCodeTarget(result.path || '') || activityCodeTarget(result.result)
         if (!target) {
-            uni.showModal({ title: '无法识别活动', content: '请扫描会聚活动二维码，该二维码不是支持的活动链接。', showCancel: false })
+            uni.showModal({ title: '无法识别活动', content: '请扫描有聚点活动二维码，该二维码不是支持的活动链接。', showCancel: false })
             return
         }
         navigate(routes.detail + '?id=' + encodeURIComponent(target.id) + (target.inviteCode ? '&inviteCode=' + encodeURIComponent(target.inviteCode) : ''))

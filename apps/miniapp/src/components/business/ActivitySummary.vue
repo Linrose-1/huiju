@@ -66,7 +66,7 @@ defineProps<{
           type="person"
           size="18"
           color="#386b59"
-        /><text>发起人 {{ activity.organizer.displayName || '会聚会员' }}</text>
+        /><text>发起人 {{ activity.organizer.displayName || '有聚点会员' }}</text>
       </view>
     </view>
   </view>
