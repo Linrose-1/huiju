@@ -5,7 +5,7 @@ import { localTestCode, selectLocalTestActor, type LocalTestActorKey } from '@/s
 export { getLocalTestActor, localTestActors, localTestCode } from '@/services/wechat/local-test-actor'
 let signingIn: { epoch: number; promise: Promise<void> } | null = null
 let switchingActor: Promise<void> | null = null
-export function chooseActivityLocation(): Promise<string | null> {
+export function chooseActivityLocation(): Promise<{ location: string; latitude: number; longitude: number } | null> {
   return new Promise((resolve, reject) => {
     // #ifdef MP-WEIXIN
     uni.chooseLocation({
@@ -13,7 +13,9 @@ export function chooseActivityLocation(): Promise<string | null> {
         const address = result.address.trim(), name = result.name.trim()
         const location = !name || address.endsWith(name) ? address : [address, name].filter(Boolean).join(' ')
         if (!location || location.length > 500) { reject(new Error('选点地址为空或超过 500 字，请手动填写')); return }
-        resolve(location)
+        const { latitude, longitude } = result
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) { reject(new Error('地图位置无效，请重新选点')); return }
+        resolve({ location, latitude, longitude })
       },
       fail: result => result.errMsg?.includes('cancel') ? resolve(null) : reject(new Error('地图选点未完成，请检查位置权限后重试，也可手动填写地址')),
     })

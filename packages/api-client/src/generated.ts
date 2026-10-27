@@ -1447,6 +1447,10 @@ export interface components {
             registrationNotice?: string | null;
             coverUrl: string | null;
             location: string;
+            /** @description 微信地图 GCJ-02 纬度，旧活动可为空 */
+            locationLatitude?: number | null;
+            /** @description 微信地图 GCJ-02 经度，旧活动可为空 */
+            locationLongitude?: number | null;
             startsAt: string;
             endsAt: string;
             registrationDeadline: string;
@@ -1543,6 +1547,10 @@ export interface components {
             registrationNotice?: string | null;
             coverUrl?: string | null;
             location: string;
+            /** @description 微信地图 GCJ-02 纬度，与经度成对提供或清空 */
+            locationLatitude?: number | null;
+            /** @description 微信地图 GCJ-02 经度，与纬度成对提供或清空 */
+            locationLongitude?: number | null;
             consultationContact: string;
             startsAt: string;
             endsAt: string;
@@ -1563,6 +1571,10 @@ export interface components {
             registrationNotice?: string | null;
             coverUrl: string | null;
             location: string;
+            /** @description 微信地图 GCJ-02 纬度，旧活动可为空 */
+            locationLatitude?: number | null;
+            /** @description 微信地图 GCJ-02 经度，旧活动可为空 */
+            locationLongitude?: number | null;
             startsAt: string;
             endsAt: string;
             registrationDeadline: string;

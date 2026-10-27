@@ -1,0 +1,3 @@
+ALTER TABLE `activities` ADD `location_latitude` double;--> statement-breakpoint
+ALTER TABLE `activities` ADD `location_longitude` double;--> statement-breakpoint
+ALTER TABLE `activities` ADD CONSTRAINT `activities_location_coordinates_check` CHECK ((`activities`.`location_latitude` IS NULL AND `activities`.`location_longitude` IS NULL) OR (`activities`.`location_latitude` IS NOT NULL AND `activities`.`location_longitude` IS NOT NULL AND `activities`.`location_latitude` BETWEEN -90 AND 90 AND `activities`.`location_longitude` BETWEEN -180 AND 180));

@@ -397,23 +397,34 @@ test('invalid or oversized introduction and notice do not reach API',async()=>{
   h.page.form.description='文字';h.page.registrationNotice.value='字'.repeat(501);await h.page.submit();assert.equal(h.creates.length,0);assert.match(h.page.submitError.value,/500/)
 })
 test('map success fills address and can be supplemented manually; cancel and failure preserve address',async()=>{
-  let mode='success';const h=harness({chooseActivityLocation:async()=>{if(mode==='failure')throw Error('位置权限');return mode==='cancel'?null:'深圳会展中心'}})
+  let mode='success';const h=harness({chooseActivityLocation:async()=>{if(mode==='failure')throw Error('位置权限');return mode==='cancel'?null:{location:'深圳会展中心',latitude:22.5,longitude:114.1}}})
   await h.page.load();h.fill();await h.page.selectLocation();assert.equal(h.page.form.location,'深圳会展中心')
+  assert.equal(h.page.payload().locationLatitude,22.5);assert.equal(h.page.payload().locationLongitude,114.1)
+  mode='cancel';await h.page.selectLocation();assert.equal(h.page.payload().locationLatitude,22.5)
   h.page.form.location+=' 会议室203';mode='cancel';await h.page.selectLocation();assert.equal(h.page.form.location,'深圳会展中心 会议室203');assert.equal(h.page.locationError.value,'')
   mode='failure';await h.page.selectLocation();assert.match(h.page.locationError.value,/位置权限/);assert.equal(h.page.form.location,'深圳会展中心 会议室203');assert.equal(h.page.busy.value,false)
+  assert.equal(h.page.payload().locationLatitude,null);assert.equal(h.page.payload().locationLongitude,null)
+})
+
+test('stored map coordinates load, survive unchanged saves and clear on manual address edits',async()=>{
+  const h=harness({record:activity({locationLatitude:22.5,locationLongitude:114.1})})
+  h.page.id.value='activity-a';await h.page.load()
+  assert.equal(h.page.payload().locationLatitude,22.5);assert.equal(h.page.payload().locationLongitude,114.1)
+  h.page.form.location='新地址';assert.equal(h.page.payload().locationLatitude,null);assert.equal(h.page.payload().locationLongitude,null)
 })
 test('duplicate map taps and late selection after account switch or unload cannot overwrite form',async()=>{
   for(const action of ['switch','unload']){
     const d=deferred();let count=0;const h=harness({chooseActivityLocation:()=>{count++;return d.promise}})
     await h.page.load();h.fill();const pending=h.page.selectLocation();await h.page.selectLocation();assert.equal(count,1)
     if(action==='switch'){h.session.epoch++;h.session.token='token-b';h.page.form.location='新账号地址'}else h.unload()
-    d.resolve('旧结果');await pending;assert.notEqual(h.page.form.location,'旧结果')
+    d.resolve({location:'旧结果',latitude:22.5,longitude:114.1});await pending;assert.notEqual(h.page.form.location,'旧结果')
   }
 })
 test('started activity preserves rich introduction and notice on contact-only save',async()=>{
   const delta={ops:[{insert:'已开始',attributes:{bold:true}}]}
-  const h=harness({record:activity({lifecycle:'published',startsAt:'2020-01-01T00:00:00Z',endsAt:'2099-01-01T00:00:00Z',descriptionDelta:delta,registrationNotice:'原须知'})})
+  const h=harness({record:activity({lifecycle:'published',startsAt:'2020-01-01T00:00:00Z',endsAt:'2099-01-01T00:00:00Z',descriptionDelta:delta,registrationNotice:'原须知',locationLatitude:22.5,locationLongitude:114.1})})
   h.page.id.value='activity-a';await h.page.load();h.page.updateDescription({text:'非法修改',delta:null});await h.page.selectLocation()
   h.page.registrationNotice.value='非法修改';h.page.form.consultationContact='新微信'
   const input=h.page.payload();assert.equal(input.registrationNotice,'原须知');assert.deepEqual(input.descriptionDelta,delta);assert.equal(input.consultationContact,'新微信')
+  assert.equal(input.locationLatitude,22.5);assert.equal(input.locationLongitude,114.1)
 })

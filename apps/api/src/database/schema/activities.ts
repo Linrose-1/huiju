@@ -4,6 +4,7 @@ import {
   char,
   check,
   datetime,
+  double,
   index,
   int,
   json,
@@ -32,6 +33,8 @@ export const activities = mysqlTable(
     registrationNotice: varchar('registration_notice', { length: 500 }),
     coverUrl: varchar('cover_url', { length: 2048 }),
     location: varchar('location', { length: 500 }).notNull(),
+    locationLatitude: double('location_latitude'),
+    locationLongitude: double('location_longitude'),
     consultationContact: text('consultation_contact').notNull(),
     startsAt: datetime('starts_at', { mode: 'date', fsp: 3 }).notNull(),
     endsAt: datetime('ends_at', { mode: 'date', fsp: 3 }).notNull(),
@@ -71,6 +74,7 @@ export const activities = mysqlTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
+    check('activities_location_coordinates_check', sql`(${table.locationLatitude} IS NULL AND ${table.locationLongitude} IS NULL) OR (${table.locationLatitude} IS NOT NULL AND ${table.locationLongitude} IS NOT NULL AND ${table.locationLatitude} BETWEEN -90 AND 90 AND ${table.locationLongitude} BETWEEN -180 AND 180)`),
     index('activities_organizer_member_id_idx').on(table.organizerMemberId),
     index('activities_public_list_idx').on(
       table.lifecycle,

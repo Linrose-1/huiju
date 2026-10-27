@@ -212,6 +212,9 @@ export class ActivityDto {
   @ApiProperty()
   location!: string
 
+  @ApiPropertyOptional({ type: Number, nullable: true, description: '微信地图 GCJ-02 纬度，旧活动可为空' }) locationLatitude?: number | null
+  @ApiPropertyOptional({ type: Number, nullable: true, description: '微信地图 GCJ-02 经度，旧活动可为空' }) locationLongitude?: number | null
+
   @ApiProperty()
   startsAt!: string
 

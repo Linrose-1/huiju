@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator'
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, IsNumber, IsObject, IsOptional, IsString, IsUUID, Length, Matches, Max, Min, ValidateNested } from 'class-validator'
 import { ActivityDto, ActivityCountsDto, PublicMemberDto, RegistrationDto } from './dto.js'
 import type { DescriptionDelta } from './activity-description.js'
 import { DescriptionDeltaDto } from './activity-description-dto.js'
@@ -24,6 +24,8 @@ export class ActivityWriteInput {
   @ApiPropertyOptional({ type: String, nullable: true }) @IsOptional() @IsString() @Length(0, 500) registrationNotice?: string | null
   @ApiPropertyOptional({ type: String, nullable: true }) @IsOptional() @IsString() @Length(1, 2048) coverUrl?: string | null
   @ApiProperty() @IsString() @Length(1, 500) @Matches(/\S/) location!: string
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: -90, maximum: 90, description: '微信地图 GCJ-02 纬度，与经度成对提供或清空' }) @IsOptional() @IsNumber() @Min(-90) @Max(90) locationLatitude?: number | null
+  @ApiPropertyOptional({ type: Number, nullable: true, minimum: -180, maximum: 180, description: '微信地图 GCJ-02 经度，与纬度成对提供或清空' }) @IsOptional() @IsNumber() @Min(-180) @Max(180) locationLongitude?: number | null
   @ApiProperty() @IsString() @Length(1, 1000) @Matches(/\S/) consultationContact!: string
   @ApiProperty() @IsISO8601({ strict: true }) @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/) startsAt!: string
   @ApiProperty() @IsISO8601({ strict: true }) @Matches(/T.*(?:Z|[+-]\d{2}:\d{2})$/) endsAt!: string

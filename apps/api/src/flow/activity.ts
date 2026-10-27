@@ -117,6 +117,8 @@ export class ActivityService {
       registrationNotice: state === 'removed' ? null : activity.registrationNotice ?? null,
       coverUrl: state === 'removed' ? null : activity.coverUrl,
       location: state === 'removed' ? '' : activity.location,
+      locationLatitude: state === 'removed' ? null : activity.locationLatitude ?? null,
+      locationLongitude: state === 'removed' ? null : activity.locationLongitude ?? null,
       startsAt: activity.startsAt.toISOString(),
       endsAt: activity.endsAt.toISOString(),
       registrationDeadline: (activity.registrationDeadline ?? activity.startsAt).toISOString(),

@@ -9,9 +9,44 @@ const require = createRequire(import.meta.url)
 const { reactive, effectScope } = require('vue')
 const activity = { organizer: { memberId: 'organizer-id' }, feeType: 'free', consultationContact: 'private contact' }
 const registration = { status: 'active', contactPhone: 'private phone', answers: [{ questionId: 'q1', value: ['one', 'two'] }] }
+
+test('calendar defaults to one hour and calls native capability only after confirmation; duplicate clicks are locked', async t => {
+  const h = harness(t); await h.loaded()
+  h.page.showCalendar()
+  assert.equal(h.page.reminderIndex.value, 4)
+  assert.equal(h.calendars.length, 0)
+  h.page.reminderIndex.value = 2
+  const pending = h.page.saveCalendar(); await h.page.saveCalendar()
+  assert.equal(h.calendars.length, 1)
+  assert.equal(h.calendars[0].args[1], 2)
+  h.calendars[0].resolve(true); await pending
+  assert.equal(h.page.calendarOpen.value, false)
+  assert.equal(h.toasts.length, 1)
+})
+
+test('calendar cancellation remains retryable and old completion cannot change another session', async t => {
+  const h = harness(t); await h.loaded(); h.page.showCalendar()
+  const first = h.page.saveCalendar(); h.calendars[0].resolve(false); await first
+  assert.equal(h.toasts.length, 0)
+  assert.equal(h.page.calendarBusy.value, false)
+  const second = h.page.saveCalendar(); h.session.epoch++
+  h.calendars[1].resolve(true); await second
+  assert.equal(h.toasts.length, 0)
+  assert.equal(h.page.calendarOpen.value, false)
+})
+
+test('map failure is shown, retries work and duplicate navigation is prevented', async t => {
+  const h = harness(t); await h.loaded()
+  const first = h.page.openMap(); await h.page.openMap()
+  assert.equal(h.maps.length, 1)
+  h.maps[0].reject(new Error('活动尚未设置地图位置')); await first
+  assert.match(h.page.toolsError.value, /地图位置/)
+  const second = h.page.openMap(); h.maps[1].resolve(); await second
+  assert.equal(h.page.toolsError.value, '')
+})
 function harness(t) {
   const session = reactive({ token: 'a', epoch: 0, member: { displayName: 'member a' } })
-  const requests = [], modals = [], cancelled = [], navigated = []
+  const requests = [], modals = [], cancelled = [], navigated = [], calendars = [], maps = [], toasts = []
   let hide, unload
   const deps = {
     '@dcloudio/uni-app': { onLoad(fn) { fn({ id: 'activity-id' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn } },
@@ -24,15 +59,16 @@ function harness(t) {
     '@/services/presentation': { canEdit: () => true, canCancel: () => true },
     '@/services/navigation': { routes: { memberCard: '/pages/member/card' }, navigate: value => navigated.push(value), loginPage() {} },
     '@/stores/session': { useSessionStore: () => session },
-    '@/components/base/RequestState.vue': {}
+    '@/components/base/RequestState.vue': {},
+    '@/services/wechat/activity-tools': { defaultReminderIndex: 4, calendarReminders: [], addActivityCalendar: (...args) => new Promise((resolve, reject) => calendars.push({args, resolve, reject})), openActivityLocation: (...args) => new Promise((resolve, reject) => maps.push({args, resolve, reject})) }
   }
   const source = readFileSync(new URL('../src/pages/registration/detail.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source + '\nexport {load,cancel,organizer,answer,activity,registration,error,busy};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const code = ts.transpileModule(source + '\nexport {load,cancel,organizer,answer,activity,registration,error,busy,showCalendar,saveCalendar,calendarOpen,calendarBusy,reminderIndex,toolsError,openMap};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const page = {}, scope = effectScope()
-  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showModal: () => new Promise(resolve => modals.push(resolve)) }))
+  scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showToast: value => toasts.push(value), showModal: () => new Promise(resolve => modals.push(resolve)) }))
   t.after(() => scope.stop())
   const loaded = async () => { const pending = page.load(); requests.at(-1).resolve(registration); await pending }
-  return { session, page, requests, modals, cancelled, navigated, loaded, hide: () => hide(), unload: () => unload() }
+  return { session, page, requests, modals, cancelled, navigated, calendars, maps, toasts, loaded, hide: () => hide(), unload: () => unload() }
 }
 test('late private response cannot restore old account data; identity change clears immediately', async t => {
   const h = harness(t); await h.loaded()

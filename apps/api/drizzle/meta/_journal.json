@@ -85,6 +85,13 @@
       "when": 1791194883895,
       "tag": "0011_activity_content",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1793112524515,
+      "tag": "0012_activity_location",
+      "breakpoints": true
     }
   ]
 }

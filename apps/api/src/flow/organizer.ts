@@ -23,6 +23,12 @@ const coverName = /^[a-f0-9-]{36}_[a-f0-9-]{36}\.(png|jpg)$/
 const coverPrefix = '/api/v1/media/covers/'
 
 export function activityValues(input: ActivityWriteInput) {
+  const latitude = input.locationLatitude ?? null, longitude = input.locationLongitude ?? null
+  if ((latitude === null) !== (longitude === null)
+    || (latitude !== null && (typeof latitude !== 'number' || !Number.isFinite(latitude) || latitude < -90 || latitude > 90))
+    || (longitude !== null && (typeof longitude !== 'number' || !Number.isFinite(longitude) || longitude < -180 || longitude > 180))) {
+    fail('INVALID_ACTIVITY_LOCATION', '请重新选择有效的地图位置，经纬度须成对提供')
+  }
   const description = activityDescription(input.description, input.descriptionDelta)
   if ([input.title, input.location, input.consultationContact].some(value => !value?.trim())) fail('INVALID_ACTIVITY', '请填写完整的活动必填信息')
   const startsAt = new Date(input.startsAt)
@@ -47,7 +53,7 @@ export function activityValues(input: ActivityWriteInput) {
   }
   return {
     title: input.title.trim(), ...description, registrationNotice: activityRegistrationNotice(input.registrationNotice), coverUrl: input.coverUrl ?? null,
-    location: input.location.trim(), consultationContact: input.consultationContact.trim(),
+    location: input.location.trim(), locationLatitude: latitude, locationLongitude: longitude, consultationContact: input.consultationContact.trim(),
     startsAt, endsAt, registrationDeadline, capacity: input.capacity ?? null,
     feeType: input.feeType, feeAmountCents: input.feeAmountCents ?? null
   }
@@ -59,7 +65,10 @@ export function requireOrganizer(activity: Activity | undefined, memberId: strin
 }
 
 export function validateActivityEdit(activity: Activity, questions: Question[], input: ActivityWriteInput, now = new Date()) {
+  const preserveCoordinates = input.locationLatitude === undefined && input.locationLongitude === undefined && input.location.trim() === activity.location
   const values = activityValues({ ...input,
+    locationLatitude: preserveCoordinates ? activity.locationLatitude : input.locationLatitude,
+    locationLongitude: preserveCoordinates ? activity.locationLongitude : input.locationLongitude,
     descriptionDelta: input.descriptionDelta === undefined && input.description.trim() === activity.description ? activity.descriptionDelta : input.descriptionDelta,
     registrationNotice: input.registrationNotice === undefined ? activity.registrationNotice : input.registrationNotice,
   })
@@ -80,6 +89,7 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
       const original = activity[key as keyof typeof values]
       if (key === 'descriptionDelta') return JSON.stringify(value) !== JSON.stringify(original == null ? null : activityDescription(activity.description, activity.descriptionDelta).descriptionDelta)
       if (key === 'registrationNotice') return value !== (original ?? null)
+      if (key === 'locationLatitude' || key === 'locationLongitude') return value !== (original ?? null)
       // A missing deadline and the start time have identical meaning.
       if (key === 'registrationDeadline') return (value as Date | null)?.getTime() !== (activity.registrationDeadline ?? activity.startsAt).getTime()
         && (value as Date | null)?.getTime() !== activity.registrationDeadline?.getTime()
@@ -142,7 +152,7 @@ export class OrganizerService {
     return {
       id: activity.id, title: activity.title, description: activity.description, coverUrl: activity.coverUrl,
       descriptionDelta: activity.descriptionDelta ?? null, registrationNotice: activity.registrationNotice ?? null,
-      location: activity.location, consultationContact: activity.consultationContact,
+      location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: activity.consultationContact,
       startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(),
       registrationDeadline: (activity.registrationDeadline ?? activity.startsAt).toISOString(),
       capacity: activity.capacity, activeRegistrationCount: activity.activeRegistrationCount,

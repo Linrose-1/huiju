@@ -18,6 +18,32 @@ const base = { ...activityValues(input), organizerMemberId: 'owner', lifecycle: 
 const now = new Date('2030-01-01T00:00:00Z')
 
 describe('organizer write boundaries', () => {
+  it('accepts paired map coordinates including zero and rejects invalid pairs', async () => {
+    expect(activityValues(input).locationLatitude).toBeNull()
+    expect(activityValues({ ...input, locationLatitude: 0, locationLongitude: 0 })).toMatchObject({ locationLatitude: 0, locationLongitude: 0 })
+    for (const coordinates of [
+      { locationLatitude: 22 }, { locationLongitude: 114 },
+      { locationLatitude: null, locationLongitude: 114 },
+      { locationLatitude: 91, locationLongitude: 114 },
+      { locationLatitude: 22, locationLongitude: -181 },
+      { locationLatitude: Number.NaN, locationLongitude: 114 },
+    ]) expect(() => activityValues({ ...input, ...coordinates })).toThrow('地图位置')
+    expect((await validate(plainToInstance(ActivityWriteInput, { ...input, locationLatitude: '22', locationLongitude: 114 }))).length).toBeGreaterThan(0)
+  })
+
+  it('preserves coordinates for old clients with unchanged address and clears them for changed addresses', () => {
+    const located = { ...base, locationLatitude: 22.5, locationLongitude: 114.1 }
+    expect(validateActivityEdit(located, [], input, now).values).toMatchObject({ locationLatitude: 22.5, locationLongitude: 114.1 })
+    expect(validateActivityEdit(located, [], { ...input, location: '另一个地点' }, now).values).toMatchObject({ locationLatitude: null, locationLongitude: null })
+    expect(validateActivityEdit(located, [], { ...input, locationLatitude: null, locationLongitude: null }, now).values).toMatchObject({ locationLatitude: null, locationLongitude: null })
+    expect(() => validateActivityEdit(located, [], { ...input, locationLatitude: 23 }, now)).toThrow('地图位置')
+  })
+
+  it('locks map coordinates after activity start and preserves them for contact-only old clients', () => {
+    const located = { ...base, locationLatitude: 22.5, locationLongitude: 114.1 }
+    expect(validateActivityEdit(located, [], { ...input, consultationContact: '新联系方式' }, base.startsAt).values.locationLatitude).toBe(22.5)
+    expect(() => validateActivityEdit(located, [], { ...input, locationLatitude: 23, locationLongitude: 114.1 }, base.startsAt)).toThrow('已开始')
+  })
   it('validates time, fees, cover and choices', () => {
     expect(activityValues(input).registrationDeadline).toBeNull()
     const invalid: ActivityWriteInput[] = [

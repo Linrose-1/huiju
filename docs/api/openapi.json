@@ -9630,6 +9630,16 @@
           "location": {
             "type": "string"
           },
+          "locationLatitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "微信地图 GCJ-02 纬度，旧活动可为空"
+          },
+          "locationLongitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "微信地图 GCJ-02 经度，旧活动可为空"
+          },
           "startsAt": {
             "type": "string"
           },
@@ -10054,6 +10064,20 @@
           "location": {
             "type": "string"
           },
+          "locationLatitude": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -90,
+            "maximum": 90,
+            "description": "微信地图 GCJ-02 纬度，与经度成对提供或清空"
+          },
+          "locationLongitude": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -180,
+            "maximum": 180,
+            "description": "微信地图 GCJ-02 经度，与纬度成对提供或清空"
+          },
           "consultationContact": {
             "type": "string"
           },
@@ -10146,6 +10170,16 @@
           },
           "location": {
             "type": "string"
+          },
+          "locationLatitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "微信地图 GCJ-02 纬度，旧活动可为空"
+          },
+          "locationLongitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "微信地图 GCJ-02 经度，旧活动可为空"
           },
           "startsAt": {
             "type": "string"

@@ -28,7 +28,9 @@ const coverUrl = ref(''), coverError = ref(''), uploadingCover = ref(false)
 const descriptionDelta = ref<ActivityRichValue['delta']>(null)
 const richValid = ref(true), locationError = ref(''), selectingLocation = ref(false)
 const registrationNotice = ref('')
+const locationCoordinates = ref<{ latitude: number; longitude: number } | null>(null)
 const form = reactive({ title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+watch(() => form.location, () => { locationCoordinates.value = null }, { flush: 'sync' })
 const customDeadline = ref(false), questions = ref<DraftQuestion[]>([])
 let sequence = 0, initialized = false, formOwner = ''
 let generation = 0, disposed = false
@@ -43,7 +45,7 @@ const previewTime = computed(() => {
   return start && end ? activityTimeRangeWeekday(start, end) : '请补充活动时间'
 })
 const previewQuestionTypes = computed(() => [...new Set(questions.value.map(q => questionLabels[questionTypes.indexOf(q.type)]))].join('、'))
-watch([form, questions, coverUrl, descriptionDelta, registrationNotice], () => { reviewed.value = false }, { deep: true, flush: 'sync' })
+watch([form, questions, coverUrl, descriptionDelta, registrationNotice, locationCoordinates], () => { reviewed.value = false }, { deep: true, flush: 'sync' })
 const capacityLimited = ref(false)
 const editingQuestion = ref<DraftQuestion | null>(null)
 const questionError = ref('')
@@ -60,6 +62,7 @@ function dateParts(value: string) {
   return { date: `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`, time: `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}` }
 }
 function reset() {
+  locationCoordinates.value = null
   descriptionDelta.value = null
   registrationNotice.value = ''
   richValid.value = true
@@ -126,6 +129,7 @@ async function load() {
         coverUrl.value = activity.coverUrl || ''
         const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
+        locationCoordinates.value = activity.locationLatitude != null && activity.locationLongitude != null ? { latitude: activity.locationLatitude, longitude: activity.locationLongitude } : null
         customDeadline.value = activity.registrationDeadline !== activity.startsAt
       }
       // 首个报名后，以服务端已锁定的问题和金额为准，防止保留的草稿覆盖它们。
@@ -160,7 +164,7 @@ function payload(): ActivityWriteInput {
   if (source.value?.lifecycle === 'published' && Date.parse(source.value.startsAt) <= Date.now()) {
     if (!form.consultationContact.trim()) throw new Error('请填写咨询联系方式')
     const activity = source.value
-    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, location: activity.location, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
+    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
   if (!richValid.value || form.description.length > 10000) throw new Error('活动介绍格式无效或超过 10000 字，请调整后保存')
@@ -186,7 +190,7 @@ function payload(): ActivityWriteInput {
     if (options && (options.length < 1 || options.length > 100 || options.some(option => option.length > 200) || new Set(options).size !== options.length)) throw new Error(`第 ${index + 1} 题需填写 1–100 个不同选项，每行一个，每项不超过 200 字`)
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options }
   })
-  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null }
+  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null }
 }
 function updateDescription(value: ActivityRichValue) {
   if (busy.value || !editable.value || started.value) return
@@ -202,7 +206,10 @@ async function selectLocation() {
   locationError.value = ''
   try {
     const location = await chooseActivityLocation()
-    if (current() && location) form.location = location
+    if (current() && location) {
+      form.location = location.location
+      locationCoordinates.value = { latitude: location.latitude, longitude: location.longitude }
+    }
   } catch (e) { if (current()) locationError.value = errorMessage(e) }
   finally { if (current()) { busy.value = false; selectingLocation.value = false } }
 }
@@ -622,7 +629,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               color="#8b97aa"
             />
           </view>
-          <view class="field-note">地图选点后可补充楼栋、楼层或房间，也可直接手动填写</view>
+          <view class="field-note">{{ locationCoordinates ? '已设置导航位置；手动修改地址后需重新选点' : '尚未设置导航位置，请地图选点；仅手填地址无法导航' }}</view>
           <view
             v-if="locationError"
             class="error"

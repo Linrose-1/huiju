@@ -8,13 +8,39 @@ import { canEdit, canCancel, dateTime, fee, feeDisclaimer, registrationStatus, a
 import { navigate, routes, loginPage } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
+import { addActivityCalendar, openActivityLocation, calendarReminders, defaultReminderIndex } from '@/services/wechat/activity-tools'
 const id = ref(''), activity = ref<Activity | null>(null), registration = ref<Registration | null>(null), loading = ref(true), error = ref(''), busy = ref(false), actionError = ref('')
 const editable = computed(() => !!activity.value && !!registration.value && canEdit(activity.value, registration.value))
 const cancellable = computed(() => !!activity.value && !!registration.value && canCancel(activity.value, registration.value))
 const session = useSessionStore()
 const status = computed(() => activity.value && registration.value ? registrationStatus(activity.value, registration.value) : null)
 let generation = 0, visible = false
-function clear() { generation++; activity.value = null; registration.value = null; error.value = ''; actionError.value = ''; busy.value = false; loading.value = false }
+const calendarOpen = ref(false), reminderIndex = ref(defaultReminderIndex), calendarBusy = ref(false), locationBusy = ref(false), toolsError = ref('')
+function clear() { generation++; activity.value = null; registration.value = null; error.value = ''; actionError.value = ''; busy.value = false; loading.value = false; calendarOpen.value = false; calendarBusy.value = false; locationBusy.value = false; toolsError.value = '' }
+function showCalendar() {
+    if (!activity.value || calendarBusy.value) return
+    reminderIndex.value = defaultReminderIndex; toolsError.value = ''; calendarOpen.value = true
+}
+function changeReminder(event: { detail: { value: string | number } }) { reminderIndex.value = Number(event.detail.value) }
+async function saveCalendar() {
+    if (!activity.value || !calendarOpen.value || calendarBusy.value) return
+    const current = generation
+    calendarBusy.value = true; toolsError.value = ''
+    try {
+        const added = await addActivityCalendar(activity.value, reminderIndex.value)
+        if (current !== generation) return
+        if (added) { calendarOpen.value = false; uni.showToast({ title: '已添加到系统日历', icon: 'success' }) }
+    } catch (e) { if (current === generation) toolsError.value = errorMessage(e) }
+    finally { if (current === generation) calendarBusy.value = false }
+}
+async function openMap() {
+    if (!activity.value || locationBusy.value) return
+    const current = generation
+    locationBusy.value = true; toolsError.value = ''
+    try { await openActivityLocation(activity.value) }
+    catch (e) { if (current === generation) toolsError.value = errorMessage(e) }
+    finally { if (current === generation) locationBusy.value = false }
+}
 async function load() {
     const current = ++generation
     activity.value = null; registration.value = null; loading.value = false; error.value = ''
@@ -86,7 +112,12 @@ onUnload(() => { visible = false; clear(); stop() })
           暂无封面
         </view>
         <view class="summary-content">
-          <view class="summary-title">{{ activity.title }}</view>
+          <text
+            class="summary-title"
+            user-select
+          >
+            {{ activity.title }}
+          </text>
           <view class="tags">
             <text class="fee-tag">{{ activity.feeType==='paid' ? '收费活动 '+fee(activity) : '免费活动' }}</text><text
               class="registration-tag"
@@ -95,32 +126,61 @@ onUnload(() => { visible = false; clear(); stop() })
               {{ registration.status==='active'?'已报名':'已取消' }}
             </text>
           </view>
-          <view class="meta">
-            <view class="clock-icon" /><text>{{ activityTimeRangeWeekday(activity.startsAt, activity.endsAt) }}</text>
+          <view
+            class="meta"
+            @click="showCalendar"
+          >
+            <view class="clock-icon" /><text user-select>{{ activityTimeRangeWeekday(activity.startsAt, activity.endsAt) }}</text>
           </view>
-          <view class="meta">
+          <view
+            class="meta"
+            @click="openMap"
+          >
             <uni-icons
               type="location"
               size="32rpx"
               color="#173c3b"
-            /><text>{{ activity.location }}</text>
+            /><text user-select>{{ activity.location }}</text>
           </view>
+        </view>
+        <view class="summary-footer">
           <button
             v-if="activity.organizer"
             class="organizer-link"
             @click="organizer"
           >
-            <uni-icons
-              type="person"
-              size="32rpx"
-              color="#173c3b"
-            /><text>发起人 {{ activity.organizer.displayName }}</text><uni-icons
-              type="arrow-right"
-              size="26rpx"
-              color="#6b8588"
+            <image
+              v-if="activity.organizer.avatarUrl"
+              :src="mediaUrl(activity.organizer.avatarUrl)"
+              class="organizer-avatar"
+              mode="aspectFill"
             />
+            <view
+              v-else
+              class="organizer-avatar organizer-placeholder"
+            >
+              <uni-icons
+                type="person-filled"
+                size="30rpx"
+                color="#69887b"
+              />
+            </view>
+            <text class="organizer-label">发起人</text>
+            <text class="organizer-username">{{ activity.organizer.displayName }}</text>
+          </button>
+          <button
+            class="text-button detail-link"
+            @click="navigate(routes.detail+'?id='+encodeURIComponent(id))"
+          >
+            查看详情
           </button>
         </view>
+      </view>
+      <view
+        v-if="toolsError && !calendarOpen"
+        class="error"
+      >
+        {{ toolsError }}
       </view>
       <view class="detail-card">
         <view class="heading">报名状态</view>
@@ -138,7 +198,7 @@ onUnload(() => { visible = false; clear(); stop() })
           </view><view class="status-copy"><view class="status-title">{{ status.title }}</view><view class="muted">{{ status.description }}</view></view>
         </view>
         <view class="registered-at">
-          <view class="clock-icon" /><text>报名时间 {{ dateTime(registration.currentRegisteredAt) }}</text>
+          <view class="clock-icon" /><text user-select>报名时间 {{ dateTime(registration.currentRegisteredAt) }}</text>
         </view>
       </view>
       <view class="detail-card">
@@ -161,14 +221,14 @@ onUnload(() => { visible = false; clear(); stop() })
             type="person"
             size="32rpx"
             color="#173c3b"
-          /><text class="answer-label">用户名称</text><text>{{ session.member?.displayName || '有聚点会员' }}</text>
+          /><text class="answer-label">用户名称</text><text user-select>{{ session.member?.displayName || '有聚点会员' }}</text>
         </view>
         <view class="answer-row">
           <uni-icons
             type="phone"
             size="32rpx"
             color="#173c3b"
-          /><text class="answer-label">手机号</text><text>{{ registration.contactPhone }}</text>
+          /><text class="answer-label">手机号</text><text user-select>{{ registration.contactPhone }}</text>
         </view>
         <view
           v-for="question in activity.questions"
@@ -179,15 +239,24 @@ onUnload(() => { visible = false; clear(); stop() })
             type="compose"
             size="32rpx"
             color="#173c3b"
-          /><text class="answer-label">{{ question.prompt }}</text><text class="answer-value">{{ answer(question.id) }}</text>
+          /><text
+            class="answer-label"
+            user-select
+          >
+            {{ question.prompt }}
+          </text><text
+            class="answer-value"
+            user-select
+          >
+            {{ answer(question.id) }}
+          </text>
         </view>
       </view>
       <view class="detail-card">
         <view class="heading">活动咨询方式</view><view class="muted consultation-hint">如有任何问题，请联系活动发起人</view>
         <view class="consultation">
-          <button
+          <view
             class="contact-person"
-            @click="organizer"
           >
             <image
               v-if="activity.organizer?.avatarUrl"
@@ -203,8 +272,20 @@ onUnload(() => { visible = false; clear(); stop() })
                 size="44rpx"
                 color="#69887b"
               />
-            </view><view><view class="organizer-name">{{ activity.organizer?.displayName || '活动发起人' }} <text class="organizer-tag">发起人</text></view><view class="contact">{{ activity.consultationContact || '暂时无法取得咨询方式，请重试' }}</view></view>
-          </button>
+            </view><view>
+              <view
+                class="organizer-name"
+                @click="organizer"
+              >
+                {{ activity.organizer?.displayName || '活动发起人' }} <text class="organizer-tag">发起人</text>
+              </view><text
+                class="contact"
+                user-select
+              >
+                {{ activity.consultationContact || '暂时无法取得咨询方式，请重试' }}
+              </text>
+            </view>
+          </view>
           <button
             v-if="activity.consultationContact"
             class="copy-button"
@@ -234,6 +315,53 @@ onUnload(() => { visible = false; clear(); stop() })
         class="error"
       >
         {{ actionError }}
+      </view>
+      <view
+        v-if="calendarOpen"
+        class="calendar-mask"
+        @click="!calendarBusy && (calendarOpen=false)"
+      >
+        <view
+          class="calendar-dialog"
+          @click.stop
+        >
+          <view class="heading">加入系统日历</view>
+          <text user-select>{{ activity.title }}</text>
+          <view class="muted">{{ activityTimeRangeWeekday(activity.startsAt, activity.endsAt) }}</view>
+          <picker
+            :value="reminderIndex"
+            :range="calendarReminders"
+            range-key="label"
+            :disabled="calendarBusy"
+            @change="changeReminder"
+          >
+            <view class="reminder-picker">提醒时间：{{ calendarReminders[reminderIndex].label }} <text>修改 ›</text></view>
+          </picker>
+          <view class="muted">活动变更或取消后，请自行更新手机日历。</view>
+          <view
+            v-if="toolsError"
+            class="error"
+          >
+            {{ toolsError }}
+          </view>
+          <view class="calendar-actions">
+            <button
+              class="secondary"
+              :disabled="calendarBusy"
+              @click="calendarOpen=false"
+            >
+              取消
+            </button>
+            <button
+              class="primary"
+              :disabled="calendarBusy"
+              :loading="calendarBusy"
+              @click="saveCalendar"
+            >
+              确认添加
+            </button>
+          </view>
+        </view>
       </view>
       <view class="fixed-footer">
         <button
@@ -265,6 +393,8 @@ onUnload(() => { visible = false; clear(); stop() })
   </view>
 </template>
 <style scoped>
-.registration-detail{min-height:100vh;background:#f1f8f5;padding:24rpx 24rpx calc(156rpx + env(safe-area-inset-bottom));color:#16333c;font-size:28rpx}.detail-card{background:#fff;border-radius:20rpx;padding:22rpx;margin-bottom:16rpx}.summary{display:flex;align-items:stretch;gap:20rpx;padding:16rpx}.cover{width:208rpx;min-height:210rpx;height:240rpx;flex-shrink:0;border-radius:10rpx}.no-cover{display:flex;align-items:center;justify-content:center;background:#e7f0eb;color:#78918a;font-size:26rpx}.summary-content{flex:1;min-width:0}.summary-title{font-size:29rpx;font-weight:600;line-height:1.5;overflow-wrap:anywhere;margin-bottom:10rpx}.tags{display:flex;flex-wrap:wrap;gap:10rpx;margin-bottom:10rpx}.fee-tag,.registration-tag{padding:5rpx 12rpx;border-radius:8rpx;font-size:25rpx;background:#fff1e6;color:#f77624}.registration-tag{background:#e0f8ea;color:#06a862}.registration-tag.inactive{background:#edf0ee;color:#7c8b85}.meta,.organizer-link{display:flex;align-items:flex-start;gap:10rpx;line-height:1.6;font-size:26rpx;margin-top:8rpx}.meta text{flex:1;min-width:0;overflow-wrap:anywhere}.organizer-link{background:transparent;padding:0;text-align:left;color:#16333c;border-radius:0;min-height:44rpx}.organizer-link:after,.contact-person:after,.copy-button:after{border:0}.heading{font-size:32rpx;font-weight:600;line-height:1.5;margin-bottom:18rpx}.status{display:flex;align-items:center;gap:20rpx}.status-icon{width:70rpx;height:70rpx;flex-shrink:0;background:#cef6e1;border-radius:50%;display:flex;align-items:center;justify-content:center}.status-title{font-size:36rpx;font-weight:600;color:#128358;margin-bottom:5rpx}.muted{font-size:26rpx;color:#718b94;line-height:1.6}.status.warning .status-icon{background:#fff3dc}.status.warning .status-title{color:#b77925}.status.muted .status-icon{background:#eef1ef}.status.muted .status-title{color:#74817c}.registered-at{border-top:1rpx solid #dce7e4;margin-top:20rpx;padding-top:15rpx;display:flex;align-items:center;gap:12rpx;font-size:27rpx;line-height:1.6}.section-top{display:flex;justify-content:space-between;align-items:center;gap:12rpx;margin-bottom:16rpx}.section-top .heading{margin:0}.text-button{font-size:26rpx;padding:8rpx 0;color:#159764;flex-shrink:0}.answer-row{display:grid;grid-template-columns:32rpx 180rpx minmax(0,1fr);gap:12rpx;font-size:28rpx;line-height:1.65;margin:12rpx 0;overflow-wrap:anywhere}.answer-label{color:#6c8793}.answer-value{white-space:pre-wrap}.consultation-hint{margin-top:-10rpx;margin-bottom:20rpx}.consultation{display:flex;align-items:center;gap:12rpx}.contact-person{flex:1;min-width:0;display:flex;align-items:center;gap:14rpx;background:transparent;padding:0;text-align:left;line-height:1.6;color:inherit}.contact-person>view{min-width:0}.avatar{width:74rpx;height:74rpx;border-radius:50%;flex-shrink:0}.avatar-placeholder{display:flex;align-items:center;justify-content:center;background:#e8f2ed}.organizer-name{font-size:29rpx;font-weight:600;overflow-wrap:anywhere}.organizer-tag{font-size:23rpx;color:#149966;background:#e7f8ef;border-radius:5rpx;padding:3rpx 7rpx;white-space:nowrap;font-weight:400}.contact{font-size:25rpx;color:#6d8791;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:7rpx}.copy-button{flex-shrink:0;padding:0;background:transparent;font-size:24rpx;color:#6d8791;line-height:1.6}.copy-icon{width:68rpx;height:68rpx;border-radius:50%;background:#eaf8f1;display:flex;align-items:center;justify-content:center;margin:0 auto 8rpx}.notice-box{display:flex;align-items:flex-start;gap:12rpx;background:#fff5e9;border-radius:12rpx;padding:18rpx;color:#e76d19;font-size:26rpx;line-height:1.75}.notice-box>view{flex:1;min-width:0}.fixed-footer{gap:12rpx;padding:16rpx 26rpx calc(18rpx + env(safe-area-inset-bottom))}.fixed-footer button{font-size:30rpx;min-height:84rpx;border-radius:50rpx}.fixed-footer .secondary{flex:0.8}.fixed-footer .primary{flex:1.25;background:linear-gradient(110deg,#09a86b,#00885a)}
+.summary-title,.contact{display:block}.detail-link{text-align:left}.meta{min-height:48rpx}.consultation{flex-wrap:wrap}.consultation .contact-person{flex:0 0 100%}.copy-button{width:100%;min-height:76rpx;display:flex;align-items:center;justify-content:center;gap:12rpx;white-space:normal;overflow:visible}.copy-button .copy-icon{width:52rpx;height:52rpx;margin:0}.copy-button text{flex-shrink:0}.calendar-mask{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:32rpx}.calendar-dialog{width:100%;max-height:80vh;overflow-y:auto;background:#fff;border-radius:24rpx;padding:32rpx}.reminder-picker{padding:28rpx 0;display:flex;justify-content:space-between;color:#17815d}.calendar-actions{display:flex;gap:16rpx;margin-top:24rpx}.calendar-actions button{flex:1}
+.registration-detail{min-height:100vh;background:#f1f8f5;padding:24rpx 24rpx calc(156rpx + env(safe-area-inset-bottom));color:#16333c;font-size:28rpx}.detail-card{background:#fff;border-radius:20rpx;padding:22rpx;margin-bottom:16rpx}.summary{display:grid;grid-template-columns:208rpx minmax(0,1fr);align-items:start;gap:16rpx 20rpx;padding:16rpx}.cover{width:208rpx;min-height:210rpx;height:240rpx;flex-shrink:0;border-radius:10rpx}.no-cover{display:flex;align-items:center;justify-content:center;background:#e7f0eb;color:#78918a;font-size:26rpx}.summary-content{flex:1;min-width:0}.summary-title{font-size:29rpx;font-weight:600;line-height:1.5;overflow-wrap:anywhere;margin-bottom:10rpx}.tags{display:flex;flex-wrap:wrap;gap:10rpx;margin-bottom:10rpx}.fee-tag,.registration-tag{padding:5rpx 12rpx;border-radius:8rpx;font-size:25rpx;background:#fff1e6;color:#f77624}.registration-tag{background:#e0f8ea;color:#06a862}.registration-tag.inactive{background:#edf0ee;color:#7c8b85}.meta,.organizer-link{display:flex;align-items:flex-start;gap:10rpx;line-height:1.6;font-size:26rpx;margin-top:8rpx}.meta text{flex:1;min-width:0;overflow-wrap:anywhere}.organizer-link{background:transparent;padding:0;text-align:left;color:#16333c;border-radius:0;min-height:44rpx}.organizer-link:after,.contact-person:after,.copy-button:after{border:0}.heading{font-size:32rpx;font-weight:600;line-height:1.5;margin-bottom:18rpx}.status{display:flex;align-items:center;gap:20rpx}.status-icon{width:70rpx;height:70rpx;flex-shrink:0;background:#cef6e1;border-radius:50%;display:flex;align-items:center;justify-content:center}.status-title{font-size:36rpx;font-weight:600;color:#128358;margin-bottom:5rpx}.muted{font-size:26rpx;color:#718b94;line-height:1.6}.status.warning .status-icon{background:#fff3dc}.status.warning .status-title{color:#b77925}.status.muted .status-icon{background:#eef1ef}.status.muted .status-title{color:#74817c}.registered-at{border-top:1rpx solid #dce7e4;margin-top:20rpx;padding-top:15rpx;display:flex;align-items:center;gap:12rpx;font-size:27rpx;line-height:1.6}.section-top{display:flex;justify-content:space-between;align-items:center;gap:12rpx;margin-bottom:16rpx}.section-top .heading{margin:0}.text-button{font-size:26rpx;padding:8rpx 0;color:#159764;flex-shrink:0}.answer-row{display:grid;grid-template-columns:32rpx 180rpx minmax(0,1fr);gap:12rpx;font-size:28rpx;line-height:1.65;margin:12rpx 0;overflow-wrap:anywhere}.answer-label{color:#6c8793}.answer-value{white-space:pre-wrap}.consultation-hint{margin-top:-10rpx;margin-bottom:20rpx}.consultation{display:flex;align-items:center;gap:12rpx}.contact-person{flex:1;min-width:0;display:flex;align-items:center;gap:14rpx;background:transparent;padding:0;text-align:left;line-height:1.6;color:inherit}.contact-person>view{min-width:0}.avatar{width:74rpx;height:74rpx;border-radius:50%;flex-shrink:0}.avatar-placeholder{display:flex;align-items:center;justify-content:center;background:#e8f2ed}.organizer-name{font-size:29rpx;font-weight:600;overflow-wrap:anywhere}.organizer-tag{font-size:23rpx;color:#149966;background:#e7f8ef;border-radius:5rpx;padding:3rpx 7rpx;white-space:nowrap;font-weight:400}.contact{font-size:25rpx;color:#6d8791;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:7rpx}.copy-button{flex-shrink:0;padding:0;background:transparent;font-size:24rpx;color:#6d8791;line-height:1.6}.copy-icon{width:68rpx;height:68rpx;border-radius:50%;background:#eaf8f1;display:flex;align-items:center;justify-content:center;margin:0 auto 8rpx}.notice-box{display:flex;align-items:flex-start;gap:12rpx;background:#fff5e9;border-radius:12rpx;padding:18rpx;color:#e76d19;font-size:26rpx;line-height:1.75}.notice-box>view{flex:1;min-width:0}.fixed-footer{gap:12rpx;padding:16rpx 26rpx calc(18rpx + env(safe-area-inset-bottom))}.fixed-footer button{font-size:30rpx;min-height:84rpx;border-radius:50rpx}.fixed-footer .secondary{flex:0.8}.fixed-footer .primary{flex:1.25;background:linear-gradient(110deg,#09a86b,#00885a)}
 .clock-icon{position:relative;width:28rpx;height:28rpx;box-sizing:border-box;border:3rpx solid #173c3b;border-radius:50%;flex-shrink:0;margin:5rpx 2rpx}.clock-icon::before{content:"";position:absolute;left:10rpx;top:4rpx;width:3rpx;height:9rpx;background:#173c3b;border-radius:2rpx}.clock-icon::after{content:"";position:absolute;left:10rpx;top:10rpx;width:8rpx;height:3rpx;background:#173c3b;border-radius:2rpx;transform:rotate(25deg);transform-origin:left center}
+.summary-footer{grid-column:1 / -1;display:flex;align-items:center;justify-content:space-between;gap:20rpx}.summary-footer .organizer-link{flex:1;min-width:0;align-items:center;margin:0;gap:10rpx;min-height:64rpx}.organizer-avatar{width:48rpx;height:48rpx;border-radius:50%;flex-shrink:0}.organizer-placeholder{display:flex;align-items:center;justify-content:center;background:#e8f2ed}.organizer-label{color:#718b94;flex-shrink:0}.organizer-username{min-width:0;overflow-wrap:anywhere}.summary-footer .detail-link{margin-left:auto;flex-shrink:0;text-align:right;min-height:64rpx;display:flex;align-items:center}
 </style>
