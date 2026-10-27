@@ -60,6 +60,7 @@ function organizer() {
     const memberId = activity.value?.organizer?.memberId
     if (memberId) navigate(routes.memberCard + '?id=' + encodeURIComponent(memberId))
 }
+function viewRoster() { if (activity.value) navigate(routes.activityPeople + '?id=' + encodeURIComponent(id.value) + '&kind=roster') }
 async function cancel() {
     if (busy.value || !cancellable.value) return
     const current = generation, token = session.token, epoch = session.epoch, activityId = id.value
@@ -183,7 +184,15 @@ onUnload(() => { visible = false; clear(); stop() })
         {{ toolsError }}
       </view>
       <view class="detail-card">
-        <view class="heading">报名状态</view>
+        <view class="section-top">
+          <view class="heading">报名状态</view>
+          <button
+            class="text-button"
+            @click="viewRoster"
+          >
+            查看报名名单
+          </button>
+        </view>
         <view
           v-if="status"
           class="status"

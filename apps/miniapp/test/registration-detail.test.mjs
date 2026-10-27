@@ -10,6 +10,13 @@ const { reactive, effectScope } = require('vue')
 const activity = { organizer: { memberId: 'organizer-id' }, feeType: 'free', consultationContact: 'private contact' }
 const registration = { status: 'active', contactPhone: 'private phone', answers: [{ questionId: 'q1', value: ['one', 'two'] }] }
 
+test('roster entry opens the list page with the current activity context', async t => {
+  const h = harness(t)
+  h.page.viewRoster(); assert.deepEqual(h.navigated, [])
+  await h.loaded(); h.page.viewRoster()
+  assert.deepEqual(h.navigated, ['/pages/activity/people?id=activity-id&kind=roster'])
+})
+
 test('calendar defaults to one hour and calls native capability only after confirmation; duplicate clicks are locked', async t => {
   const h = harness(t); await h.loaded()
   h.page.showCalendar()
@@ -57,13 +64,13 @@ function harness(t) {
     }, ApiError: class extends Error {}, errorMessage: e => e.message },
     '@/services/api/environment': { mediaUrl: value => value },
     '@/services/presentation': { canEdit: () => true, canCancel: () => true },
-    '@/services/navigation': { routes: { memberCard: '/pages/member/card' }, navigate: value => navigated.push(value), loginPage() {} },
+    '@/services/navigation': { routes: { memberCard: '/pages/member/card', detail: '/pages/activity/detail', activityPeople: '/pages/activity/people' }, navigate: value => navigated.push(value), loginPage() {} },
     '@/stores/session': { useSessionStore: () => session },
     '@/components/base/RequestState.vue': {},
     '@/services/wechat/activity-tools': { defaultReminderIndex: 4, calendarReminders: [], addActivityCalendar: (...args) => new Promise((resolve, reject) => calendars.push({args, resolve, reject})), openActivityLocation: (...args) => new Promise((resolve, reject) => maps.push({args, resolve, reject})) }
   }
   const source = readFileSync(new URL('../src/pages/registration/detail.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source + '\nexport {load,cancel,organizer,answer,activity,registration,error,busy,showCalendar,saveCalendar,calendarOpen,calendarBusy,reminderIndex,toolsError,openMap};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const code = ts.transpileModule(source + '\nexport {load,cancel,organizer,answer,activity,registration,error,busy,showCalendar,saveCalendar,calendarOpen,calendarBusy,reminderIndex,toolsError,openMap,viewRoster};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showToast: value => toasts.push(value), showModal: () => new Promise(resolve => modals.push(resolve)) }))
   t.after(() => scope.stop())

@@ -8,6 +8,10 @@
       }
     },
     {
+      "path": "pages/activity/people",
+      "style": { "navigationBarTitleText": "活动名单", "enablePullDownRefresh": true }
+    },
+    {
       "path": "pages/assistant/activity-search",
       "style": {
         "navigationBarTitleText": "帮我找活动"

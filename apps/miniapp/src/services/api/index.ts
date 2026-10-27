@@ -36,7 +36,7 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET
           session.clear()
           if (auth === false && token) { request<T>(path, method, data, false).then(resolve, reject); return }
         }
-        if (response.statusCode >= 200 && response.statusCode < 300) resolve(response.data as T)
+        if (response.statusCode >= 200 && response.statusCode < 300) resolve((response.statusCode === 204 ? null : response.data) as T)
         else reject(new ApiError(body.code || 'REQUEST_FAILED', safeMessages[body.code || ''] || (typeof body.message === 'string' ? body.message : '请求未能完成，请稍后重试'), response.statusCode))
       }, fail(error) {
         if (NETWORK_DEBUG) console.warn('[API_NETWORK_FAILURE]', {
@@ -130,7 +130,11 @@ export const api = {
   activity: (id: string) => request<Activity>(`/activities/${encodeURIComponent(id)}`),
   roster: (id: string, query: ListQuery = {}) => request<PublicRoster>(`/activities/${encodeURIComponent(id)}/registrations?${listQuery(query)}`),
   register: (id: string, input: RegistrationInput) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations`, 'POST', input, true),
-  myRegistration: (id: string) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations/me`, 'GET', undefined, true),
+  myRegistration: async (id: string) => {
+    const registration = await request<Registration | null>(`/activities/${encodeURIComponent(id)}/registrations/me`, 'GET', undefined, true)
+    if (!registration) throw new ApiError('REGISTRATION_NOT_FOUND', '尚未报名此活动', 404)
+    return registration
+  },
   editRegistration: (id: string, answers: RegistrationInput['answers']) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations/me/answers`, 'POST', { answers }, true),
   cancel: (id: string) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations/me/cancel`, 'POST', {}, true),
   registrations: (query: ListQuery = {}) => request<RegistrationList>(`/members/me/registrations?${listQuery(query)}`, 'GET', undefined, true)

@@ -2,6 +2,7 @@ import { ApiError } from '@/services/api'
 import { bootstrapIdentity } from '@/services/wechat'
 import { useSessionStore } from '@/stores/session'
 export const routes = {
+  activityPeople: '/pages/activity/people',
   terms: '/pages/legal/terms', privacy: '/pages/legal/privacy', contentSettings: '/pages/platform/content',
   circle: '/pages/circle/index', circleDetail: '/pages/circle/detail', circleEditor: '/pages/circle/editor', circleMine: '/pages/circle/mine', circleIntents: '/pages/circle/intents',
   feedback: '/pages/activity/feedback',

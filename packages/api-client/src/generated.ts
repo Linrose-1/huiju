@@ -2603,6 +2603,13 @@ export interface operations {
                     "application/json": components["schemas"]["RegistrationDto"];
                 };
             };
+            /** @description 本人尚未报名此活动 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             400: {
                 headers: {
                     [name: string]: unknown;

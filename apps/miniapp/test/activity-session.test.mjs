@@ -12,14 +12,15 @@ class ApiError extends Error {
   constructor(code, message, status = 0) { super(message); this.code = code; this.status = status }
 }
 function harness(t, token = '', reading = {}, navigation = {}) {
-  const session = reactive({ token, epoch: 0 })
+  const session = reactive({ token, epoch: 0, captureInvite() {} })
   const calls = { activity: [], roster: [], myRegistration: [] }
   const api = Object.fromEntries(Object.keys(calls).map(method => [method, (...args) => new Promise((resolve, reject) => {
     calls[method].push({ token: session.token, args, resolve, reject })
   })]))
-  let unload, show
+  let unload, show, onLoadPage
+  const scrolls = []
   const dependencies = {
-    '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad() {}, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {}, onShareTimeline() {} },
+    '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { onLoadPage = fn }, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {}, onShareTimeline() {} },
     '@/services/reading': { createReadingVisit: reading.createVisit || (() => ({ record: async () => {} })) },
     '@/services/wechat': { showActivityShareMenu() {} },
     '@/services/api': { api: { ...api, activityReaders: reading.list || (async () => ({items:[], total:0, hasMore:false})) }, ApiError, errorMessage: e => e.message },
@@ -28,11 +29,11 @@ function harness(t, token = '', reading = {}, navigation = {}) {
   }
   const source = readFileSync(new URL('../src/pages/activity/detail.vue', import.meta.url), 'utf8')
     .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source + '\nexport {load,id,activity,registration,loading,error,readers,readersError,loadReaders,retryReaders,openMember,loadRegistration,registrationError,registrationKnown,registrationLoading,register,loadRoster,roster,rosterHasMore,rosterMoreError,retryRosterMore};', {
+  const code = ts.transpileModule(source + '\nexport {load,id,activity,registration,loading,error,readers,readersError,loadReaders,retryReaders,openMember,loadRegistration,registrationError,registrationKnown,registrationLoading,register,loadRoster,roster,rosterHasMore,rosterMoreError,openPeople};', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}, scope = effectScope()
-  scope.run(() => new Function('require', 'exports', 'uni', code)(name => dependencies[name] || require(name), page, { stopPullDownRefresh() {} }))
+  scope.run(() => new Function('require', 'exports', 'uni', code)(name => dependencies[name] || require(name), page, { stopPullDownRefresh() {}, pageScrollTo(options) { scrolls.push(options) } }))
   t.after(() => scope.stop())
   page.id.value = 'activity-a'
   async function publicResponse(title = 'Activity') {
@@ -41,8 +42,15 @@ function harness(t, token = '', reading = {}, navigation = {}) {
     calls.roster.shift().resolve({ items: [] })
     await setImmediate()
   }
-  return { page, session, calls, publicResponse, unload: () => unload(), show: () => show() }
+  return { page, session, calls, publicResponse, scrolls, open: options => { onLoadPage(options); show() }, unload: () => unload(), show: () => show() }
 }
+
+test('roster and readers navigate to separate list views for the current activity', t => {
+  const targets = []
+  const h = harness(t, '', {}, { routes: { activityPeople: '/pages/activity/people' }, navigate: target => targets.push(target) })
+  h.page.openPeople('roster'); h.page.openPeople('readers')
+  assert.deepEqual(targets, ['/pages/activity/people?id=activity-a&kind=roster', '/pages/activity/people?id=activity-a&kind=readers'])
+})
 
 test('public details finish before login, then late identity loads the existing registration', async t => {
   const h = harness(t)
@@ -252,7 +260,7 @@ test('public roster appends, preserves loaded rows on failure, retries raw offse
   assert.deepEqual(h.page.roster.value.map(item => item.memberId), ['a'])
   await h.page.loadRoster(true)
   assert.equal(h.calls.roster.length, 0)
-  h.page.retryRosterMore()
+  h.page.rosterMoreError.value = ''; void h.page.loadRoster(true)
   assert.equal(h.calls.roster[0].args[1].offset, 1)
   h.calls.roster.shift().resolve({ items: [{ memberId: 'a' }, { memberId: 'b' }], hasMore: true }); await setImmediate()
   assert.deepEqual(h.page.roster.value.map(item => item.memberId), ['a', 'b'])

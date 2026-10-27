@@ -41,7 +41,7 @@
 | `GET /activities`、`GET /activities/:id` | 公开活动列表、详情；列表每页10条，`offset` 翻页，`sort=upcoming` 按开始时间升序，其余按发布时间及创建时间倒序，`q` 搜索标题、介绍与地点；返回 `hasMore` |
 | `GET /activities/:id/registrations` | 公开名单，仅返回会员名片定位 ID、当前头像和名称 |
 | `POST /activities/:id/registrations` | 提交 `contactPhone`、`answers: [{ questionId, value }]`，报名或重新报名 |
-| `GET /activities/:id/registrations/me` | 查看本人报名联系方式及答案 |
+| `GET /activities/:id/registrations/me` | 查看本人报名联系方式及答案；有记录返回200，本人尚未报名返回204（无响应体），鉴权等真实异常仍返回错误 |
 | `POST /activities/:id/registrations/me/answers` | 修改本人答案；保留等价 `PATCH /activities/:id/registrations/me` |
 | `POST /activities/:id/registrations/me/cancel` | 取消本人报名，重复取消不重复释放名额 |
 | `GET /members/me/registrations` | 查询本人报名及对应活动 |

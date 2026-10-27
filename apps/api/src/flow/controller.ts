@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { Body, Controller, Get, Headers, HttpCode, HttpException, Param, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common'
+import { ApiBearerAuth, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { ActivityService } from './activity.js'
 import { ActivityListQuery } from './activity-list-dto.js'
 import { MyRegistrationQuery, PageQuery } from './pagination.js'
@@ -62,11 +62,23 @@ export class FlowController {
 
   @Get('activities/:id/registrations/me')
   @ApiOkResponse({ type: RegistrationDto })
-  mine(
+  @ApiNoContentResponse({ description: '本人尚未报名此活动' })
+  async mine(
     @Param('id', ParseUUIDPipe)
     id: string,
+    @Res({ passthrough: true }) response: { status(code: number): unknown },
     @Headers('authorization')
-    header?: string) { return this.activity.mine(id, header) }
+    header?: string) {
+    try { return await this.activity.mine(id, header) }
+    catch (error) {
+      const body = error instanceof HttpException ? error.getResponse() : null
+      if (error instanceof HttpException && error.getStatus() === 404 && typeof body === 'object' && body && 'code' in body && body.code === 'REGISTRATION_NOT_FOUND') {
+        response.status(204)
+        return
+      }
+      throw error
+    }
+  }
 
   @Get('members/me/registrations')
   @ApiOkResponse({ type: RegistrationListDto })

@@ -60,6 +60,17 @@ function harness(initialStorage = new Map(), localTest = false, networkDebug = f
   return { store, api, queue, logins, shares, locations, networkWarnings, storage, accept, respond, app, wechat: () => load('@/services/wechat/index') }
 }
 
+test('204 own-registration response remains the expected absent state without clearing login', async () => {
+  const h = harness(); h.accept('member-token')
+  const absent = h.api.api.myRegistration('activity')
+  h.respond(204, '')
+  await assert.rejects(absent, error => error.code === 'REGISTRATION_NOT_FOUND' && error.status === 404)
+  assert.equal(h.store.token, 'member-token')
+  const existing = h.api.api.myRegistration('activity')
+  h.respond(200, { id: 'registration', status: 'active' })
+  assert.equal((await existing).id, 'registration')
+})
+
 test('map selection is explicit, joins address and place name and handles cancel or permission failure', async () => {
   const h = harness(), wechat = h.wechat()
   assert.equal(h.locations.length, 0)

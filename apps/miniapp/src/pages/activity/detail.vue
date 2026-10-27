@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onShareTimeline, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onShareTimeline, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, PublicMember, Registration, ReadingList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -11,15 +11,16 @@ import { createReadingVisit } from '@/services/reading'
 import { showActivityShareMenu } from '@/services/wechat'
 import { activityRichTextNodes } from '@/services/activity-rich-text'
 import RequestState from '@/components/base/RequestState.vue'
-import ListMore from '@/components/base/ListMore.vue'
+
 const id = ref(''), activity = ref<Activity | null>(null), roster = ref<PublicMember[]>([]), registration = ref<Registration | null>(null), loading = ref(true), busy = ref(false), error = ref(''), rosterError = ref(''), expanded = ref(false)
-const rosterExpanded = ref(false), rosterLoading = ref(false), rosterHasMore = ref(false), rosterMoreError = ref('')
+const rosterLoading = ref(false), rosterHasMore = ref(false), rosterMoreError = ref('')
 const registrationLoading = ref(false), registrationError = ref(''), registrationKnown = ref(false)
 const searchId = ref(''), recommendationToken = ref('')
 let rosterOffset = 0, readersOffset = 0, registrationGeneration = 0
 const session = useSessionStore()
 let generation = 0
 let alive = true, shown = true
+
 const openingMember = ref(false)
 async function openMember(memberId: string) {
     if (openingMember.value || !memberId) return
@@ -33,7 +34,7 @@ async function openMember(memberId: string) {
 }
 let visit: ReturnType<typeof createReadingVisit> | null = null
 const readers = ref<ReadingList>({ items: [], total: 0, hasMore: false })
-const readersExpanded = ref(false), readersLoading = ref(false), readersError = ref('')
+const readersLoading = ref(false), readersError = ref('')
 function currentRequest() {
     const current = generation, token = session.token, epoch = session.epoch
     return () => alive && shown && current === generation && token === session.token && epoch === session.epoch
@@ -74,7 +75,6 @@ async function loadRoster(more = false) {
     } catch (e) { if (isCurrent()) { if (more) rosterMoreError.value = errorMessage(e); else rosterError.value = errorMessage(e) } }
     finally { if (isCurrent()) rosterLoading.value = false }
 }
-function retryRosterMore() { rosterMoreError.value = ''; void loadRoster(true) }
 async function loadRegistration(isCurrent = currentRequest()) {
     if (registrationLoading.value) return
     if (!session.token) { registrationKnown.value = true; return }
@@ -119,7 +119,9 @@ catch (e) {
 }
 finally {
     if (isCurrent())
-        { loading.value = false; uni.stopPullDownRefresh() }
+        {
+            loading.value = false; uni.stopPullDownRefresh()
+        }
 } }
 const stopWatchingSession = watch(() => [session.token, session.epoch], () => { searchId.value = ''; recommendationToken.value = ''; if (shown) void load() })
 onUnload(() => { alive = false; generation += 1; stopWatchingSession() })
@@ -143,14 +145,10 @@ onLoad(options => { showActivityShareMenu(); id.value = String(options?.id || ''
     loading.value = false
     error.value = '活动链接不完整，请从活动列表重新进入'
 } })
-onShow(() => { shown = true; visit = null; readersExpanded.value = false; rosterExpanded.value = false; void load() })
+onShow(() => { shown = true; visit = null; void load() })
 onHide(() => { shown = false; generation++; registrationGeneration++; registration.value = null; registrationKnown.value = false; registrationError.value = ''; registrationLoading.value = false; loading.value = false })
 onPullDownRefresh(load)
-onReachBottom(() => {
-    if (loading.value || error.value) return
-    if (rosterExpanded.value) void loadRoster(true)
-    if (readersExpanded.value) void loadReaders(true)
-})
+function openPeople(kind: 'roster' | 'readers') { navigate(routes.activityPeople + '?id=' + encodeURIComponent(id.value) + '&kind=' + kind) }
 function shareQuery() {
     return 'id=' + encodeURIComponent(id.value) + (session.member?.inviteCode ? '&inviteCode=' + encodeURIComponent(session.member.inviteCode) : '')
 }
@@ -272,19 +270,18 @@ onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', quer
           /><text class="meta-label">活动咨询</text><text class="meta-value">{{ activity.consultationContact || '报名成功后可查看活动咨询方式' }}</text>
         </view>
       </view>
-      <view class="card">
+      <view
+        id="activity-roster"
+        class="card"
+      >
         <view class="section-heading">
           <view class="section-title mark">已报名（{{ activity.activeRegistrationCount }}）</view>
           <button
-            v-if="roster.length > 8 || rosterHasMore"
+            v-if="roster.length > 0 || activity.activeRegistrationCount > 0"
             class="view-all"
-            @click="rosterExpanded=!rosterExpanded"
+            @click="openPeople('roster')"
           >
-            {{ rosterExpanded ? '收起' : '查看全部' }}<uni-icons
-              :type="rosterExpanded ? 'up' : 'right'"
-              size="28rpx"
-              color="#1d654e"
-            />
+            查看全部
           </button>
         </view><text
           v-if="rosterError"
@@ -306,7 +303,7 @@ onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', quer
           class="roster"
         >
           <view
-            v-for="person in (rosterExpanded ? roster : roster.slice(0,8))"
+            v-for="person in roster.slice(0,8)"
             :key="person.memberId"
             class="person"
             @click="openMember(person.memberId)"
@@ -325,24 +322,16 @@ onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', quer
             </view><text>{{ person.displayName || '有聚点会员' }}</text>
           </view>
         </view>
-        <ListMore
-          v-if="rosterExpanded"
-          :loading="rosterLoading"
-          :error="rosterMoreError"
-          :has-more="rosterHasMore"
-          :has-items="!!roster.length"
-          @retry="retryRosterMore"
-        />
       </view>
       <view class="card">
         <view class="section-heading">
           <view class="section-title mark">阅读留痕{{ readers.total ? '（'+readers.total+'）' : '' }}</view>
           <button
-            v-if="readers.total > 8"
+            v-if="readers.total > 0"
             class="view-all"
-            @click="readersExpanded=!readersExpanded"
+            @click="openPeople('readers')"
           >
-            {{ readersExpanded ? '收起' : '查看全部' }}
+            查看全部
           </button>
         </view>
         <view
@@ -350,7 +339,7 @@ onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', quer
           class="roster"
         >
           <view
-            v-for="person in (readersExpanded ? readers.items : readers.items.slice(0,8))"
+            v-for="person in readers.items.slice(0,8)"
             :key="person.memberId"
             class="person"
             @click="openMember(person.memberId)"
@@ -393,13 +382,6 @@ onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', quer
         >
           暂无会员阅读记录
         </text>
-        <ListMore
-          v-if="readersExpanded && !readersError"
-          :loading="readersLoading"
-          error=""
-          :has-more="readers.hasMore"
-          :has-items="!!readers.items.length"
-        />
       </view><view class="card">
         <view class="section-title mark">评论与点评</view><text class="muted small">交流活动想法，分享参与感受。</text><button
           class="view-all"

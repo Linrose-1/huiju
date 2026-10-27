@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import sharp from 'sharp'
 import type { AddressInfo } from 'node:net'
-import type { INestApplication } from '@nestjs/common'
+import { HttpException, type INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { AppModule } from '../src/app.module.js'
@@ -83,14 +83,30 @@ describe('real HTTP validation without database or WeChat calls', () => {
   let url: string
   const list = vi.fn().mockResolvedValue({items:[],hasMore:false})
   const write = vi.fn().mockResolvedValue({status:'active'})
+  const mine = vi.fn()
   beforeAll(async () => {
-    const module = await Test.createTestingModule({imports:[AppModule]}).overrideProvider(FlowDatabase).useValue({get db(){throw new Error('Database access forbidden in isolated test')}}).overrideProvider(ActivityService).useValue({list,write}).compile()
+    const module = await Test.createTestingModule({imports:[AppModule]}).overrideProvider(FlowDatabase).useValue({get db(){throw new Error('Database access forbidden in isolated test')}}).overrideProvider(ActivityService).useValue({list,write,mine}).compile()
     app = module.createNestApplication({logger:false})
     app.setGlobalPrefix('api/v1')
     await app.listen(0,'127.0.0.1')
     url = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/v1`
   })
   afterAll(async () => { await app?.close() })
+  it('returns 204 only for absent own registration, preserving real errors and existing records', async () => {
+    const endpoint = `${url}/activities/00000000-0000-4000-8000-000000000001/registrations/me`
+    mine.mockRejectedValueOnce(new HttpException({code:'REGISTRATION_NOT_FOUND',message:'尚未报名'},404))
+    const absent = await fetch(endpoint)
+    expect(absent.status).toBe(204)
+    expect(await absent.text()).toBe('')
+    for (const [status, code] of [[401,'SESSION_REQUIRED'],[404,'ACTIVITY_NOT_FOUND'],[503,'SERVICE_UNAVAILABLE']] as const) {
+      mine.mockRejectedValueOnce(new HttpException({code,message:code},status))
+      expect((await fetch(endpoint)).status).toBe(status)
+    }
+    mine.mockResolvedValueOnce({id:'registration',status:'active'})
+    const existing = await fetch(endpoint)
+    expect(existing.status).toBe(200)
+    expect(await existing.json()).toEqual({id:'registration',status:'active'})
+  })
   it('public browsing remains available without a session', async () => {
     const response = await fetch(`${url}/activities`)
     expect(response.status).toBe(200)
