@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Header, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, StreamableFile } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { AvatarInput } from './dto.js'
-import { ActivityWriteInput, AttendanceDto, CancelActivityInput, CoverUploadDto, ManagedActivityDto, ManagedActivityListDto, OrganizerRosterDto } from './organizer-dto.js'
+import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, CancelActivityInput, CoverUploadDto, ManagedActivityDto, ManagedActivityListDto, OrganizerRosterDto } from './organizer-dto.js'
 import { OrganizerService } from './organizer.js'
-import { MyActivityQuery, RosterQuery } from './pagination.js'
+import { MyActivityQuery, PageQuery, RosterQuery } from './pagination.js'
 
 @ApiTags('organizer')
 @ApiBearerAuth()
@@ -32,6 +32,9 @@ export class OrganizerController {
 
   @Get('members/me/activities') @ApiOkResponse({ type: ManagedActivityListDto })
   list(@Query() query: MyActivityQuery, @Headers('authorization') header?: string) { return this.organizer.list(header, query) }
+
+  @Get('members/me/activity-question-history') @ApiOkResponse({ type: ActivityQuestionHistoryDto })
+  questionHistory(@Query() query: PageQuery, @Headers('authorization') header?: string) { return this.organizer.questionHistory(header, query) }
 
   @Get('activities/:id/manage') @ApiOkResponse({ type: ManagedActivityDto })
   detail(@Param('id', ParseUUIDPipe) id: string, @Headers('authorization') header?: string) { return this.organizer.detail(id, header) }

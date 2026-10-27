@@ -1,6 +1,6 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL, NETWORK_DEBUG } from './environment'
-import type { ActivitySearchResult } from './types'
+import type { ActivitySearchResult, ActivityQuestionHistory } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
 export class ApiError extends Error {
@@ -130,6 +130,7 @@ export const api = {
   activity: (id: string) => request<Activity>(`/activities/${encodeURIComponent(id)}`),
   roster: (id: string, query: ListQuery = {}) => request<PublicRoster>(`/activities/${encodeURIComponent(id)}/registrations?${listQuery(query)}`),
   register: (id: string, input: RegistrationInput) => request<Registration>(`/activities/${encodeURIComponent(id)}/registrations`, 'POST', input, true),
+  activityQuestionHistory: (offset = 0) => request<ActivityQuestionHistory>(`/members/me/activity-question-history?offset=${offset}&limit=20`, 'GET', undefined, true),
   myRegistration: async (id: string) => {
     const registration = await request<Registration | null>(`/activities/${encodeURIComponent(id)}/registrations/me`, 'GET', undefined, true)
     if (!registration) throw new ApiError('REGISTRATION_NOT_FOUND', '尚未报名此活动', 404)

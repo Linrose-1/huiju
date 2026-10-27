@@ -9,6 +9,17 @@ export class CoverUploadDto {
   @ApiProperty() coverUrl!: string
 }
 
+export class ActivityQuestionHistoryItemDto {
+  @ApiProperty() prompt!: string
+  @ApiProperty({ enum: ['short_text', 'long_text', 'single', 'multiple'] })
+  type!: 'short_text' | 'long_text' | 'single' | 'multiple'
+  @ApiProperty({ type: [String], nullable: true }) options!: string[] | null
+}
+export class ActivityQuestionHistoryDto {
+  @ApiProperty({ type: [ActivityQuestionHistoryItemDto] }) items!: ActivityQuestionHistoryItemDto[]
+  @ApiProperty() hasMore!: boolean
+}
+
 export class QuestionWriteInput {
   @ApiPropertyOptional() @IsOptional() @IsUUID() id?: string
   @ApiProperty({ enum: ['short_text', 'long_text', 'single', 'multiple'] })

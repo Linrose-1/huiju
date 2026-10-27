@@ -62,7 +62,7 @@ test('AI draft input locks duplicate requests, preserves input on failure and st
 test('editor applies explicit AI fields but requires a fee choice when unknown', t => {
   const session = reactive({ token: 'token-a', epoch: 1, member: { id: 'member-a' } })
   const deps = {
-    '@dcloudio/uni-app': { onLoad(fn) { fn({ aiDraft: '1' }) }, onShow() {}, onUnload() {} },
+    '@dcloudio/uni-app': { onLoad(fn) { fn({ aiDraft: '1' }) }, onShow() {}, onHide() {}, onUnload() {} },
     '@/services/api': { api: {}, errorMessage: e => e.message, ApiError: class extends Error {} },
     '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/navigation': { routes: { editor: '/pages/activity/editor' }, requireProfile: async () => true },

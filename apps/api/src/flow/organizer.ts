@@ -12,7 +12,7 @@ import { registrationState } from './activity.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar } from './identity.js'
 import { AvatarInput } from './dto.js'
-import { ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
+import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
 import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 import { activityDescription, activityRegistrationNotice } from './activity-description.js'
 
@@ -180,6 +180,25 @@ export class OrganizerService {
       .where(and(where, query.status !== 'all' ? sql`${status} = ${query.status}` : undefined))
       .orderBy(desc(activities.createdAt), desc(activities.id)).limit(query.limit + 1).offset(query.offset)
     return { items: await Promise.all(rows.slice(0, query.limit).map(row => this.present(row))), hasMore: rows.length > query.limit, total: counts.all, counts }
+  }
+
+  async questionHistory(header?: string, query: PageQuery = new PageQuery()): Promise<ActivityQuestionHistoryDto> {
+    const member = (await this.identity.require(header))!
+    if (!complete(member)) fail('PROFILE_INCOMPLETE', '请先绑定手机号并设置头像、名称', 403)
+    // Group the full configuration before paging. A fixed-size digest avoids MySQL's
+    // max_sort_length truncation when grouping long prompts/options as text or JSON.
+    const configuration = sql`sha2(cast(json_array(${registrationQuestions.prompt}, ${registrationQuestions.type}, ${registrationQuestions.options}) as char), 256)`
+    const rows = await this.database.db.select({
+      prompt: sql<string>`min(${registrationQuestions.prompt})`,
+      type: sql<Question['type']>`min(${registrationQuestions.type})`,
+      options: sql`min(cast(${registrationQuestions.options} as char))`.mapWith((value: string) => JSON.parse(value) as string[]),
+    }).from(registrationQuestions)
+      .innerJoin(activities, eq(registrationQuestions.activityId, activities.id))
+      .where(eq(activities.organizerMemberId, member.id))
+      .groupBy(configuration)
+      .orderBy(desc(sql`max(${activities.updatedAt})`), desc(sql`max(${registrationQuestions.id})`))
+      .limit(query.limit + 1).offset(query.offset)
+    return { items: rows.slice(0, query.limit).map(row => ({ prompt: row.prompt, type: row.type, options: row.options ?? null })), hasMore: rows.length > query.limit }
   }
 
   private async questions(tx: Tx, id: string, input: ActivityWriteInput) {

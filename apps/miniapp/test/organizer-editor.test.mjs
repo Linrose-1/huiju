@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { setImmediate } from 'node:timers/promises'
 import { URL } from 'node:url'
 import { reactive } from 'vue'
 import ts from 'typescript'
@@ -37,7 +38,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     ...apiOverrides,
   }
   const dependencies = {
-    '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onUnload(callback) { onUnload = callback } },
+    '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onHide() {}, onUnload(callback) { onUnload = callback } },
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
     '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/presentation': { feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
@@ -49,7 +50,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeCover, coverUrl, coverError, uploadingCover, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeCover, coverUrl, coverError, uploadingCover, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -427,4 +428,52 @@ test('started activity preserves rich introduction and notice on contact-only sa
   h.page.registrationNotice.value='非法修改';h.page.form.consultationContact='新微信'
   const input=h.page.payload();assert.equal(input.registrationNotice,'原须知');assert.deepEqual(input.descriptionDelta,delta);assert.equal(input.consultationContact,'新微信')
   assert.equal(input.locationLatitude,22.5);assert.equal(input.locationLongitude,114.1)
+})
+
+
+test('common and historical fields copy only configuration, retain current ID and required choice', async () => {
+  const h = harness({ record: activity({ questions: [{ id: 'q1', type: 'short_text', prompt: '原题', required: true, options: null }] }) })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  const original = h.page.questions.value[0]
+  h.page.beginQuestion(original)
+  h.page.selectQuestionTemplate({ prompt: '行业', type: 'single', options: ['教育', '科技'] })
+  assert.equal(h.page.editingQuestion.value.id, 'q1')
+  assert.equal(h.page.editingQuestion.value.required, true)
+  assert.equal(original.prompt, '原题')
+  h.page.closeQuestion(); assert.equal(original.prompt, '原题')
+  h.page.beginQuestion()
+  assert.equal(h.page.editingQuestion.value.required, false)
+  for (const prompt of h.page.commonQuestions) {
+    h.page.selectQuestionTemplate({ prompt, type: 'short_text', options: null })
+    assert.equal(h.page.editingQuestion.value.prompt, prompt)
+  }
+  assert.ok(!h.page.commonQuestions.includes('手机号'))
+  h.page.saveQuestion()
+  assert.equal(h.page.payload().questions.length, 2)
+  h.unload()
+})
+
+test('history paginates, retains earlier entries on failure, retries and ignores closed or switched sessions', async () => {
+  const requests = []
+  const h = harness({ apiOverrides: { activityQuestionHistory: offset => { const pending = deferred(); requests.push({ offset, ...pending }); return pending.promise } } })
+  h.page.id.value = 'activity-a'; await h.page.load(); h.page.beginQuestion()
+  const first = h.page.loadQuestionHistory()
+  await h.page.loadQuestionHistory(); assert.equal(requests.length, 1)
+  requests[0].resolve({items:[{prompt:'公司',type:'short_text',options:null}],hasMore:true}); await first
+  const more = h.page.loadQuestionHistory(true)
+  requests[1].reject(new Error('断网')); await more
+  assert.equal(h.page.historyItems.value.length, 1)
+  h.page.retryQuestionHistory(); assert.equal(requests[2].offset, 1)
+  requests[2].resolve({items:[{prompt:'行业',type:'single',options:['A','B']}],hasMore:false})
+  await setImmediate()
+  assert.equal(h.page.historyItems.value.length, 2)
+  assert.equal(h.page.historyHasMore.value, false)
+  const old = h.page.loadQuestionHistory(); h.page.closeQuestion()
+  requests[3].resolve({items:[{prompt:'旧',type:'short_text',options:null}],hasMore:false}); await old
+  assert.equal(h.page.historyItems.value.length, 0)
+  h.page.beginQuestion(); const switched = h.page.loadQuestionHistory(); h.session.epoch++
+  requests[4].resolve({items:[{prompt:'旧账号',type:'short_text',options:null}],hasMore:false}); await switched
+  assert.equal(h.page.historyItems.value.length, 0)
+  assert.equal(h.page.historyOpen.value, false)
+  h.unload()
 })

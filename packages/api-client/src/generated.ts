@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/members/me/activity-question-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["OrganizerController_questionHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/activities/{id}/manage": {
         parameters: {
             query?: never;
@@ -1599,6 +1615,16 @@ export interface components {
             counts: components["schemas"]["ActivityCountsDto"];
             total: number;
             items: components["schemas"]["ManagedActivityDto"][];
+            hasMore: boolean;
+        };
+        ActivityQuestionHistoryItemDto: {
+            prompt: string;
+            /** @enum {string} */
+            type: "short_text" | "long_text" | "single" | "multiple";
+            options: string[] | null;
+        };
+        ActivityQuestionHistoryDto: {
+            items: components["schemas"]["ActivityQuestionHistoryItemDto"][];
             hasMore: boolean;
         };
         OrganizerRegistrationDto: {
@@ -3109,6 +3135,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedActivityListDto"];
+                };
+            };
+        };
+    };
+    OrganizerController_questionHistory: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityQuestionHistoryDto"];
                 };
             };
         };

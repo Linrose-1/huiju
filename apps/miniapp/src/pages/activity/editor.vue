@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { onLoad, onShow, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
-import type { ActivityWriteInput, ManagedActivity } from '@/services/api/types'
+import type { ActivityWriteInput, ManagedActivity, ActivityQuestionHistoryItem } from '@/services/api/types'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
 import { mediaUrl } from '@/services/api/environment'
 import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
@@ -49,6 +49,44 @@ watch([form, questions, coverUrl, descriptionDelta, registrationNotice, location
 const capacityLimited = ref(false)
 const editingQuestion = ref<DraftQuestion | null>(null)
 const questionError = ref('')
+const commonQuestions = ['姓名或昵称', '性别', '公司或组织']
+const historyOpen = ref(false), historyItems = ref<ActivityQuestionHistoryItem[]>([])
+const historyLoading = ref(false), historyError = ref(''), historyHasMore = ref(false)
+let historyGeneration = 0, historyOffset = 0
+function clearQuestionHistory() {
+  historyGeneration++; historyOpen.value = false; historyItems.value = []
+  historyLoading.value = false; historyError.value = ''; historyHasMore.value = false; historyOffset = 0
+}
+async function loadQuestionHistory(more = false) {
+  if (!editingQuestion.value || busy.value || locked.value || !editable.value || historyLoading.value || (more && (!historyHasMore.value || !!historyError.value))) return
+  if (!more) { clearQuestionHistory(); historyOpen.value = true }
+  const current = historyGeneration, token = session.token, epoch = session.epoch
+  const active = () => !disposed && historyOpen.value && !!editingQuestion.value && current === historyGeneration && token === session.token && epoch === session.epoch
+  historyLoading.value = true; historyError.value = ''
+  try {
+    const result = await api.activityQuestionHistory(historyOffset)
+    if (!active()) return
+    historyOffset += result.items.length
+    const known = new Set(historyItems.value.map(item => JSON.stringify([item.prompt, item.type, item.options])))
+    historyItems.value.push(...result.items.filter(item => {
+      const key = JSON.stringify([item.prompt, item.type, item.options])
+      if (known.has(key)) return false
+      known.add(key); return true
+    }))
+    historyHasMore.value = result.hasMore
+  } catch (e) { if (active()) historyError.value = errorMessage(e) }
+  finally { if (active()) historyLoading.value = false }
+}
+function showQuestionHistory() { if (!historyOpen.value) void loadQuestionHistory() }
+function retryQuestionHistory() { historyError.value = ''; void loadQuestionHistory(historyOffset > 0) }
+function selectQuestionTemplate(item: ActivityQuestionHistoryItem) {
+  if (!editingQuestion.value || busy.value || locked.value || !editable.value) return
+  // Preserve this activity's identity and required setting; copy only reusable configuration.
+  Object.assign(editingQuestion.value, { prompt: item.prompt, type: item.type, options: (item.options || []).join('\n') })
+  questionError.value = ''; clearQuestionHistory()
+}
+function closeQuestion() { editingQuestion.value = null; clearQuestionHistory() }
+
 const dragIndex = ref(-1), dragOffset = ref(0)
 let dragStartY = 0, dragRowHeight = 1, suppressSortMenu = false
 watch(() => form.capacity, value => { if (value || step.value === 0) capacityLimited.value = !!value }, { flush: 'sync' })
@@ -74,7 +112,7 @@ function reset() {
   step.value = 0
   reviewed.value = false
   dateField.value = null
-  editingQuestion.value = null
+  closeQuestion()
   dragIndex.value = -1
   dragOffset.value = 0
   capacityLimited.value = false
@@ -185,7 +223,7 @@ function payload(): ActivityWriteInput {
   if (form.feeType === 'paid' && (!/^\d+(\.\d{1,2})?$/.test(amount) || !feeAmountCents || feeAmountCents > 4294967295)) throw new Error('收费金额须大于 0，最多保留两位小数')
   const items = questions.value.map((question, index) => {
     const prompt = question.prompt.trim()
-    if (!prompt) throw new Error(`请填写第 ${index + 1} 题的题目`)
+    if (!prompt) throw new Error(`请填写第 ${index + 1} 项的填写项名称`)
     const options = question.type === 'single' || question.type === 'multiple' ? question.options.split('\n').map(item => item.trim()).filter(Boolean) : null
     if (options && (options.length < 1 || options.length > 100 || options.some(option => option.length > 200) || new Set(options).size !== options.length)) throw new Error(`第 ${index + 1} 题需填写 1–100 个不同选项，每行一个，每项不超过 200 字`)
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options }
@@ -244,13 +282,14 @@ function setCapacityLimited(limited: boolean) {
 }
 function beginQuestion(question?: DraftQuestion) {
   if (busy.value || locked.value || !editable.value || (!question && questions.value.length >= 100)) return
+  clearQuestionHistory()
   questionError.value = ''
   editingQuestion.value = question ? { ...question } : { key: ++sequence, prompt: '', type: 'short_text', required: false, options: '' }
 }
 function saveQuestion() {
   if (!editingQuestion.value || busy.value || locked.value || !editable.value) return
   const draft = { ...editingQuestion.value, prompt: editingQuestion.value.prompt.trim() }
-  if (!draft.prompt) { questionError.value = '请填写题目'; return }
+  if (!draft.prompt) { questionError.value = '请填写填写项名称'; return }
   if (draft.type === 'single' || draft.type === 'multiple') {
     const options = draft.options.split('\n').map(item => item.trim()).filter(Boolean)
     if (!options.length || options.length > 100 || options.some(item => item.length > 200) || new Set(options).size !== options.length) {
@@ -261,7 +300,7 @@ function saveQuestion() {
   const index = questions.value.findIndex(question => question.key === draft.key)
   if (index >= 0) questions.value[index] = draft
   else if (questions.value.length < 100) questions.value.push(draft)
-  editingQuestion.value = null
+  closeQuestion()
 }
 function removeQuestion(key: number) {
   if (busy.value || locked.value || !editable.value) return
@@ -344,7 +383,7 @@ async function confirmPublish() {
   await submit(source.value?.lifecycle !== 'published')
 }
 function showPublishInformation() {
-  uni.showModal({ title: '发布说明', content: '请核对活动时间、地点、咨询方式和报名设置。首次报名后，题目及费用模式和金额将锁定。' + feeDisclaimer + '。', showCancel: false })
+  uni.showModal({ title: '发布说明', content: '请核对活动时间、地点、咨询方式和报名设置。首次报名后，填写项及费用模式和金额将锁定。' + feeDisclaimer + '。', showCancel: false })
 }
 function switchValue(event: unknown): boolean {
   return (event as { detail: { value: boolean } }).detail.value
@@ -379,6 +418,7 @@ async function submit(publish = false) {
   } finally { if (request === generation && !disposed) busy.value = false }
 }
 const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
+  clearQuestionHistory()
   if (!formOwner || disposed) return
   generation++
   reset()
@@ -388,7 +428,8 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
 }, { flush: 'sync' })
 onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1' })
 onShow(load)
-onUnload(() => { disposed = true; generation++; stopSessionWatch() })
+onHide(clearQuestionHistory)
+onUnload(() => { clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
 </script>
 
 <template>
@@ -446,7 +487,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
         v-if="aiDraftApplied"
         class="notice"
       >
-        AI 草稿已填入，请核对全部内容。封面可手动设置，咨询联系方式需补齐；报名问题的题型、必填和选项也请逐一确认。
+        AI 草稿已填入，请核对全部内容。封面可手动设置，咨询联系方式需补齐；报名填写项的题型、必填和选项也请逐一确认。
       </view>
       <view
         v-if="!editable"
@@ -794,8 +835,8 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
           </view>
         </view>
         <view class="settings-card questions-card">
-          <view class="settings-heading"><text>报名信息收集</text><text class="helper sorting-note">{{ locked ? '已有报名，问题及顺序已锁定' : '拖动左侧图标可调整问题顺序' }}</text></view>
-          <view class="settings-description">添加自定义问题，收集参与者信息（至少保留手机号）</view>
+          <view class="settings-heading"><text>报名信息收集</text><text class="helper sorting-note">{{ locked ? '已有报名，填写项及顺序已锁定' : '拖动左侧图标可调整填写项顺序' }}</text></view>
+          <view class="settings-description">手机号已作为系统必填项；其他填写项可按需添加</view>
           <view class="question-list">
             <button
               class="question-row system-question"
@@ -823,7 +864,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               <button
                 class="question-handle"
                 :disabled="busy || locked || !editable"
-                aria-label="调整问题顺序"
+                aria-label="调整填写项顺序"
                 @touchstart.stop="startQuestionDrag(index,$event)"
                 @touchmove.stop.prevent="moveQuestionDrag($event)"
                 @touchend.stop="endQuestionDrag"
@@ -843,7 +884,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
               >
                 <view class="question-copy">
                   <view class="question-title">
-                    <text class="question-prompt">{{ index + 1 }}. {{ question.prompt || '未填写题目' }}</text><text
+                    <text class="question-prompt">{{ index + 1 }}. {{ question.prompt || '未填写名称' }}</text><text
                       class="require-badge"
                       :class="{ optional: !question.required }"
                     >
@@ -875,7 +916,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
             :disabled="busy || locked || !editable || questions.length >= 100"
             @click="beginQuestion()"
           >
-            <text class="plus">＋</text>添加问题
+            <text class="plus">＋</text>添加报名填写项
           </button>
         </view>
         <view class="settings-card notice-card">
@@ -1122,24 +1163,109 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
     <view
       v-if="editingQuestion"
       class="date-mask question-mask"
-      @click.self="editingQuestion = null"
+      @click="closeQuestion"
     >
-      <view class="date-sheet question-sheet">
+      <view
+        class="date-sheet question-sheet"
+        @click.stop
+      >
         <view class="date-sheet-title">
-          <text>{{ questions.some(q => q.key === editingQuestion?.key) ? '编辑问题' : '添加问题' }}</text><button
+          <text>{{ questions.some(q => q.key === editingQuestion?.key) ? '编辑报名填写项' : '添加报名填写项' }}</text><button
             class="close-question"
-            @click="editingQuestion = null"
+            @click="closeQuestion"
           >
             取消
           </button>
         </view>
-        <view class="question-form-label">题目 <text class="required">*</text></view><input
+        <view class="question-form-label">常用填写项</view>
+        <view class="question-presets">
+          <text class="phone-included">手机号 · 已包含</text>
+          <button
+            v-for="prompt in commonQuestions"
+            :key="prompt"
+            class="preset-button"
+            @click="selectQuestionTemplate({ prompt, type: 'short_text', options: null })"
+          >
+            {{ prompt }}
+          </button>
+        </view>
+        <view class="question-form-label">填写项名称 <text class="required">*</text></view><input
           v-model="editingQuestion.prompt"
           class="field"
-          placeholder="请输入题目"
+          placeholder="请输入填写项名称"
           :maxlength="1000"
           :cursor-spacing="130"
+          @focus="showQuestionHistory"
         >
+        <view
+          v-if="historyOpen"
+          class="question-history"
+        >
+          <view class="history-heading">
+            <text>本人历史填写项</text><button
+              class="history-action"
+              @click="clearQuestionHistory"
+            >
+              收起
+            </button>
+          </view>
+          <scroll-view
+            scroll-y
+            class="history-scroll"
+            @scrolltolower="loadQuestionHistory(true)"
+          >
+            <button
+              v-for="(item,index) in historyItems"
+              :key="index"
+              class="history-item"
+              @click="selectQuestionTemplate(item)"
+            >
+              <text>{{ item.prompt }}</text><text class="history-type">{{ questionLabels[questionTypes.indexOf(item.type)] }}</text>
+              <text
+                v-if="item.options?.length"
+                class="history-options"
+              >
+                {{ item.options.join('、') }}
+              </text>
+            </button>
+            <text
+              v-if="historyLoading"
+              class="history-state"
+            >
+              正在加载…
+            </text>
+            <view
+              v-else-if="historyError"
+              class="history-state"
+            >
+              {{ historyError }}<button
+                class="history-action"
+                @click="retryQuestionHistory"
+              >
+                重试
+              </button>
+            </view>
+            <text
+              v-else-if="!historyItems.length"
+              class="history-state"
+            >
+              暂无已保存的填写项，可直接填写名称
+            </text>
+            <button
+              v-else-if="historyHasMore"
+              class="history-action"
+              @click="loadQuestionHistory(true)"
+            >
+              加载更多
+            </button>
+            <text
+              v-else
+              class="history-state"
+            >
+              没有更多了
+            </text>
+          </scroll-view>
+        </view>
         <view class="question-form-options">
           <picker
             :range="questionLabels"
@@ -1179,7 +1305,7 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
           :disabled="busy || locked || !editable"
           @click="saveQuestion"
         >
-          保存问题
+          保存填写项
         </button>
       </view>
     </view>
@@ -1249,4 +1375,5 @@ onUnload(() => { disposed = true; generation++; stopSessionWatch() })
 
 /* 微信模拟器验收尺寸：750rpx设计宽度，正文28rpx，触控区至少80rpx。 */
 .activity-editor{padding-left:28rpx;padding-right:28rpx;padding-bottom:calc(150rpx + env(safe-area-inset-bottom));font-size:28rpx}.steps,.settings-page .steps,.confirmation-page .steps{margin-left:0;margin-right:0;gap:10rpx;height:80rpx;margin-bottom:20rpx}.step{font-size:28rpx;line-height:56rpx;padding:0 18rpx}.last-step{padding-right:18rpx}.step-line{min-width:12rpx}.form-card,.settings-card,.review-card{padding:22rpx 24rpx;margin-bottom:18rpx;border-radius:18rpx}.card-heading,.settings-heading,.review-heading{font-size:30rpx;line-height:44rpx;margin-bottom:14rpx}.helper{font-size:24rpx}.field{min-height:80rpx;height:80rpx;line-height:80rpx;font-size:28rpx}.icon-field input{font-size:28rpx;height:80rpx;line-height:80rpx}.activity-types{gap:16rpx}.type-option{gap:12rpx;padding:18rpx 16rpx;min-height:132rpx}.type-name{font-size:30rpx;white-space:normal}.type-note{font-size:24rpx;white-space:normal;letter-spacing:0;line-height:1.5}.radio-dot{width:30rpx;height:30rpx;margin-top:8rpx}.selected .radio-dot{border-width:9rpx}.cover-card .card-heading{flex-wrap:wrap}.cover-image,.cover-empty,.cover-button{height:190rpx}.format-toolbar{gap:24rpx;padding:0 18rpx;min-height:64rpx}.toolbar-note{font-size:22rpx}.description-input{height:180rpx;min-height:180rpx;font-size:28rpx}.event-times{gap:10rpx}.time-control{height:112rpx;padding:12rpx;gap:8rpx;font-size:24rpx}.time-copy{white-space:normal;line-height:1.5}.time-control:first-child::before{display:none}.end-time{padding-left:14rpx}.time-separator{font-size:26rpx}.icon-field{gap:16rpx}.field-note{font-size:24rpx;line-height:36rpx;margin-left:0;margin-top:10rpx}.two-column{grid-template-columns:minmax(0,1fr);gap:0}.two-column .form-card{padding:18rpx 24rpx}.two-column .field{height:80rpx;min-height:80rpx;line-height:80rpx}.deadline-control text{font-size:28rpx;letter-spacing:0}.contact-card{padding:20rpx 24rpx}.editor-footer,.settings-page .editor-footer{padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom))}.editor-footer button{height:84rpx;line-height:84rpx;font-size:28rpx;padding:0 16rpx}.footer-actions{gap:16rpx}.arrow{font-size:30rpx;margin-left:4rpx}.settings-options{grid-template-columns:minmax(0,1fr);gap:16rpx}.settings-option{height:80rpx;font-size:28rpx;gap:18rpx}.settings-option .radio-dot{width:30rpx;height:30rpx}.setting-value{display:flex;align-items:center;gap:20rpx}.setting-value>.helper{flex-shrink:0;width:110rpx;margin:0}.setting-input{flex:1;min-width:0;height:80rpx;font-size:28rpx}.setting-input input{font-size:28rpx}.settings-date{font-size:26rpx}.settings-date text{letter-spacing:0}.settings-description{font-size:28rpx}.settings-note{font-size:24rpx;line-height:1.5;margin-top:12rpx}.registration-switch{width:92rpx;height:52rpx;flex-shrink:0}.registration-switch view{width:48rpx;height:48rpx}.help-button{width:28rpx;height:28rpx;line-height:24rpx;font-size:22rpx}.questions-card .settings-heading{flex-wrap:wrap}.sorting-note{font-size:24rpx;margin-left:0;font-weight:400}.question-row{height:112rpx;margin-bottom:8rpx}.question-handle,.fixed-handle{width:58rpx;height:110rpx}.question-open{height:110rpx;gap:8rpx}.question-title{font-size:28rpx;line-height:40rpx;gap:8rpx}.question-subtitle{font-size:24rpx;line-height:36rpx}.require-badge{font-size:22rpx;line-height:30rpx;padding:2rpx 10rpx}.system-badge{font-size:22rpx;padding:4rpx 8rpx;margin-right:8rpx}.delete-question{width:42rpx;height:80rpx;margin-left:10rpx}.add-question-row{height:80rpx;font-size:28rpx}.notice-input textarea{font-size:26rpx;height:104rpx;min-height:104rpx}.notice-input>text{font-size:22rpx}.notice-input{padding-bottom:38rpx}.notice-unavailable{font-size:22rpx}.preview-cover{height:280rpx}.preview-title{font-size:32rpx}.preview-meta,.preview-organizer{font-size:28rpx;line-height:42rpx}.preview-description{font-size:28rpx;line-height:1.7}.preview-badges text{font-size:26rpx;line-height:34rpx}.organizer-avatar{width:56rpx;height:56rpx}.review-detail{gap:18rpx;margin:16rpx 0}.review-label{font-size:28rpx;line-height:42rpx}.review-muted{font-size:26rpx;line-height:40rpx}.review-agreement{font-size:24rpx;line-height:36rpx;flex-wrap:wrap}.review-footer .review-checkbox{width:36rpx;height:36rpx;line-height:34rpx}.review-footer .review-guidance{font-size:24rpx;line-height:36rpx;height:36rpx}.confirmation-page{padding-bottom:calc(210rpx + env(safe-area-inset-bottom))}.date-sheet .field{font-size:28rpx;height:80rpx;line-height:80rpx}.date-sheet .question-options-input{height:220rpx;line-height:1.6}.date-actions button,.save-question{font-size:28rpx;padding:20rpx}.date-sheet-title{font-size:30rpx}.question-form-label,.question-form-options,.close-question{font-size:28rpx}
+.question-presets{display:flex;flex-wrap:wrap;gap:12rpx;margin:12rpx 0 24rpx}.preset-button,.phone-included{font-size:24rpx;line-height:36rpx;padding:12rpx 18rpx;border-radius:10rpx;background:#edf7f1;color:#1d654e}.phone-included{background:#f1f3f4;color:#738379}.question-history{border:1rpx solid #dbe8e0;border-radius:12rpx;margin:12rpx 0 20rpx;background:#f8fcfa}.history-heading{display:flex;align-items:center;justify-content:space-between;padding:8rpx 16rpx;font-size:24rpx;color:#657a70}.history-scroll{max-height:280rpx;height:280rpx}.history-item{display:flex;flex-wrap:wrap;align-items:center;gap:12rpx;width:100%;padding:16rpx;text-align:left;background:transparent;border-radius:0;border-top:1rpx solid #e4ede7;font-size:26rpx;line-height:1.5}.history-item>text:first-child{flex:1;min-width:0;overflow-wrap:anywhere}.history-type{font-size:22rpx;color:#738379}.history-options{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:22rpx;color:#738379}.history-action{background:transparent;color:#1d654e;font-size:24rpx;padding:10rpx 16rpx;line-height:36rpx}.history-state{display:block;padding:18rpx;font-size:24rpx;line-height:1.5;color:#738379}
 </style>

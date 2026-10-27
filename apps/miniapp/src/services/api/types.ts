@@ -44,3 +44,6 @@ export type CircleWriteInput = components['schemas']['CircleWriteInput']
 export type CircleIntentList = components['schemas']['CircleIntentListDto']
 export type CircleIntent = components['schemas']['CircleIntentDto']
 export type CircleImage = components['schemas']['CircleImageDto']
+
+export type ActivityQuestionHistoryItem = components['schemas']['ActivityQuestionHistoryItemDto']
+export type ActivityQuestionHistory = components['schemas']['ActivityQuestionHistoryDto']
