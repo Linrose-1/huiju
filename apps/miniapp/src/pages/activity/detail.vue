@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onShareTimeline, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, PublicMember, Registration, ReadingList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -8,7 +9,6 @@ import { dateTime, fee, stateText, feeNotice, feeDisclaimer, activityTimeRangeWe
 import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { createReadingVisit } from '@/services/reading'
-import { showActivityShareMenu } from '@/services/wechat'
 import { activityRichTextNodes } from '@/services/activity-rich-text'
 import RequestState from '@/components/base/RequestState.vue'
 
@@ -141,7 +141,7 @@ catch (e) {
 finally {
     busy.value = false
 } }
-onLoad(options => { showActivityShareMenu(); id.value = String(options?.id || ''); searchId.value = String(options?.searchId || ''); session.captureInvite(options?.inviteCode); if (!id.value) {
+onLoad(options => { id.value = String(options?.id || ''); searchId.value = String(options?.searchId || ''); session.captureInvite(options?.inviteCode); if (!id.value) {
     loading.value = false
     error.value = '活动链接不完整，请从活动列表重新进入'
 } })
@@ -149,14 +149,26 @@ onShow(() => { shown = true; visit = null; void load() })
 onHide(() => { shown = false; generation++; registrationGeneration++; registration.value = null; registrationKnown.value = false; registrationError.value = ''; registrationLoading.value = false; loading.value = false })
 onPullDownRefresh(load)
 function openPeople(kind: 'roster' | 'readers') { navigate(routes.activityPeople + '?id=' + encodeURIComponent(id.value) + '&kind=' + kind) }
-function shareQuery() {
-    return 'id=' + encodeURIComponent(id.value) + (session.member?.inviteCode ? '&inviteCode=' + encodeURIComponent(session.member.inviteCode) : '')
-}
-onShareAppMessage(() => ({ title: activity.value?.title || '有聚点活动', path: routes.detail + '?' + shareQuery() }))
-onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', query: shareQuery() }))
+const { shareReady, shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => activity.value && activity.value.registrationState !== 'removed' ? {path: routes.detail, id: id.value, title: activity.value.title} : null, true)
+onShareAppMessage(shareMessage)
+onShareTimeline(shareTimeline)
 </script>
 <template>
   <view class="page-pad with-footer activity-detail">
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <RequestState
       :loading="loading"
       :error="error"
@@ -406,7 +418,8 @@ onShareTimeline(() => ({ title: activity.value?.title || '有聚点活动', quer
       <view class="fixed-footer">
         <button
           class="secondary share"
-          open-type="share"
+          :open-type="shareReady ? 'share' : undefined"
+          :disabled="!shareReady"
         >
           <uni-icons
             type="upload"

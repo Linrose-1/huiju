@@ -54,14 +54,15 @@ test('map failure is shown, retries work and duplicate navigation is prevented',
 function harness(t) {
   const session = reactive({ token: 'a', epoch: 0, member: { displayName: 'member a' } })
   const requests = [], modals = [], cancelled = [], navigated = [], calendars = [], maps = [], toasts = []
-  let hide, unload
+  let hide, unload, shareTarget
   const deps = {
-    '@dcloudio/uni-app': { onLoad(fn) { fn({ id: 'activity-id' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn } },
+    '@dcloudio/uni-app': { onShareAppMessage() {}, onLoad(fn) { fn({ id: 'activity-id' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn } },
     '@/services/api': { api: {
       activity: () => Promise.resolve(activity),
       myRegistration: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
       cancel: id => { cancelled.push(id); return Promise.resolve() }
     }, ApiError: class extends Error {}, errorMessage: e => e.message },
+    '@/services/wechat/page-share': { usePageShare: target => { shareTarget = target; return { shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} } } },
     '@/services/api/environment': { mediaUrl: value => value },
     '@/services/presentation': { canEdit: () => true, canCancel: () => true },
     '@/services/navigation': { routes: { memberCard: '/pages/member/card', detail: '/pages/activity/detail', activityPeople: '/pages/activity/people' }, navigate: value => navigated.push(value), loginPage() {} },
@@ -75,7 +76,7 @@ function harness(t) {
   scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { showToast: value => toasts.push(value), showModal: () => new Promise(resolve => modals.push(resolve)) }))
   t.after(() => scope.stop())
   const loaded = async () => { const pending = page.load(); requests.at(-1).resolve(registration); await pending }
-  return { session, page, requests, modals, cancelled, navigated, calendars, maps, toasts, loaded, hide: () => hide(), unload: () => unload() }
+  return { session, page, requests, modals, cancelled, navigated, calendars, maps, toasts, loaded, shareTarget: () => shareTarget(), hide: () => hide(), unload: () => unload() }
 }
 test('late private response cannot restore old account data; identity change clears immediately', async t => {
   const h = harness(t); await h.loaded()
@@ -113,4 +114,12 @@ test('unload rejects late private errors and answers remain dynamic', async t =>
   const pending = h.page.load(); h.unload(); h.requests.at(-1).reject(new Error('old failure')); await pending
   assert.equal(h.page.error.value, '')
   assert.equal(h.page.registration.value, null)
+})
+
+test('registration details share only their public activity target and disable removed content', async t => {
+  const h = harness(t); assert.equal(h.shareTarget(), null); await h.loaded()
+  const target = h.shareTarget(); assert.deepEqual(Object.keys(target).sort(), ['id', 'path', 'title'])
+  assert.equal(target.path, '/pages/activity/detail'); assert.equal(target.id, 'activity-id')
+  assert.doesNotMatch(JSON.stringify(target), /private|answers|contactPhone/)
+  h.page.activity.value = { ...activity, registrationState: 'removed' }; assert.equal(h.shareTarget(), null)
 })

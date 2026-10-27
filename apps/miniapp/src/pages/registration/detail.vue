@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onShareAppMessage, onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, Registration } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -83,9 +84,25 @@ onLoad(options => { id.value = String(options?.id || '') })
 onShow(() => { visible = true; void load() })
 onHide(() => { visible = false; clear() })
 onUnload(() => { visible = false; clear(); stop() })
+const { shareError, shareBusy, retryShare, shareMessage } = usePageShare(() => activity.value && activity.value.registrationState !== 'removed' ? {path: routes.detail, id: id.value, title: activity.value.title} : null, false)
+onShareAppMessage(shareMessage)
 </script>
 <template>
   <view class="registration-detail">
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <RequestState
       :loading="loading"
       :error="error"

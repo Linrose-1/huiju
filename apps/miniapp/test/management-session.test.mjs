@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url)
 const { reactive, effectScope } = require('vue')
 function harness(t, notification = false) {
   const session = reactive({ token: 'a', epoch: 0 }), requests = [], modals = [], mutations = [], navigated = []
-  let hide, unload
+  let hide, unload, shareTarget
   const pending = kind => new Promise((resolve, reject) => requests.push({ kind, resolve, reject }))
   const deps = {
     '@dcloudio/uni-app': { onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { fn({ id: 'activity-a' }) }, onShow() {}, onHide(fn) { hide = fn }, onUnload(fn) { unload = fn }, onShareAppMessage() {} },
@@ -19,6 +19,7 @@ function harness(t, notification = false) {
       cancelActivity: (id, reason) => { mutations.push(['cancel', id, reason]); return pending('cancel') },
       notifications: () => pending('notifications'), readNotification: id => { mutations.push(['read', id]); return pending('read') }
     }, ApiError: class extends Error {}, errorMessage: e => e.message },
+    '@/services/wechat/page-share': { usePageShare: target => { shareTarget = target; return { shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} } } },
     '@/services/api/environment': {}, '@/services/presentation': {},
     '@/services/navigation': { routes: { detail: '/detail' }, navigate: value => navigated.push(value), loginPage: value => navigated.push(value) },
     '@/stores/session': { useSessionStore: () => session }, '@/components/base/RequestState.vue': {}
@@ -37,7 +38,7 @@ function harness(t, notification = false) {
     else { latest('activity').resolve({ lifecycle, startsAt: '2099-01-01', endsAt: '2099-01-02', moderation: 'normal' }); latest('roster').resolve({ items: [{ contactPhone: 'private' }] }) }
     await promise
   }
-  return { page, session, requests, latest, loaded, modals, mutations, navigated, hide: () => hide(), unload: () => unload() }
+  return { page, session, requests, latest, loaded, modals, mutations, navigated, shareTarget: () => shareTarget(), hide: () => hide(), unload: () => unload() }
 }
 
 test('management clears private data synchronously and discards late stats/load results', async t => {
@@ -101,4 +102,12 @@ test('notification active read marks read and opens activity once, failed stale 
   assert.ok(item.readAt); assert.deepEqual(h.navigated, ['/detail?id=activity-a'])
   await h.loaded(); const failed = h.page.open(h.page.items.value[0]); h.unload(); h.latest('read').reject(new Error('old')); await failed
   assert.equal(h.page.actionError.value, ''); assert.equal(h.page.busy.value, false)
+})
+
+test('management shares only published public activity without roster data; drafts and removed content cannot share', async t => {
+  const h = harness(t); assert.equal(h.shareTarget(), null); await h.loaded('draft'); assert.equal(h.shareTarget(), null)
+  await h.loaded('published'); const target = h.shareTarget()
+  assert.deepEqual(Object.keys(target).sort(), ['id', 'path', 'title']); assert.equal(target.path, '/detail'); assert.equal(target.id, 'activity-a')
+  assert.doesNotMatch(JSON.stringify(target), /private|contactPhone|roster/)
+  h.page.activity.value.moderation = 'removed'; assert.equal(h.shareTarget(), null)
 })

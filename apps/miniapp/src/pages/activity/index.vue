@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
-import { onShow, onHide, onPullDownRefresh, onReachBottom, onLoad, onUnload } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onShow, onHide, onPullDownRefresh, onReachBottom, onLoad, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
 import type { Activity } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -105,9 +106,26 @@ onLoad(options => { useSessionStore().captureInvite(options?.inviteCode) })
 onShow(load)
 onPullDownRefresh(load)
 onReachBottom(more)
+const { shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => ({path: routes.activity, title: '有聚点活动'}), true)
+onShareAppMessage(shareMessage)
+onShareTimeline(shareTimeline)
 </script>
 <template>
   <view>
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <view class="hero">
       <image
         class="hero-image"

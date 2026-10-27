@@ -13,7 +13,6 @@ export function circleTime(value: string) {
   return `${time.getUTCFullYear()}年${time.getUTCMonth() + 1}月${time.getUTCDate()}日 ${String(time.getUTCHours()).padStart(2, '0')}:${String(time.getUTCMinutes()).padStart(2, '0')}`
 }
 export function newRequestId() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.floor(Math.random() * 16); return (c === 'x' ? r : (r & 3) | 8).toString(16) }) }
-export function circleSharePath(route: string, id: string, inviteCode?: string) { return route + '?id=' + encodeURIComponent(id) + (inviteCode ? '&inviteCode=' + encodeURIComponent(inviteCode) : '') }
 export function useCircleList<T extends { id: string }>(fetchPage: (offset: number) => Promise<{ items: T[]; hasMore: boolean }>) {
   const session = useSessionStore(), items = ref<T[]>([]) as Ref<T[]>
   const loading = ref(false), loadingMore = ref(false), error = ref(''), moreError = ref(''), hasMore = ref(false)

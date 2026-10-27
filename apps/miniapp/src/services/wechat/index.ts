@@ -106,11 +106,6 @@ export function switchLocalTestActor(key: LocalTestActorKey): Promise<void> {
   switchingActor = promise
   return promise
 }
-export function showActivityShareMenu() {
-  // #ifdef MP-WEIXIN
-  uni.showShareMenu({ menus: ['shareAppMessage', 'shareTimeline'] })
-  // #endif
-}
 export async function uploadAvatar(path: string) {
   const session = useSessionStore()
   const token = session.token, epoch = session.epoch

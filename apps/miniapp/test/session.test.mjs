@@ -94,13 +94,6 @@ test('map selection is explicit, joins address and place name and handles cancel
   await assert.rejects(request, /位置无效/)
 })
 
-test('activity sharing enables friend and timeline menus without exchanging identity', () => {
-  const h = harness()
-  h.wechat().showActivityShareMenu()
-  assert.deepEqual(h.shares, [{ menus: ['shareAppMessage', 'shareTimeline'] }])
-  assert.equal(h.logins.length, 0); assert.equal(h.queue.length, 0)
-})
-
 test('timeline first invitation survives later entry and silent identification records no consent', async () => {
   const h = harness(), inviteCode = 'HJYQM20261005000001'
   const entry = { query: { id: 'activity-a', inviteCode }, scene: 1154 }

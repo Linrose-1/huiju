@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { ref } from 'vue'
-import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { navigate, routes } from '@/services/navigation'
 import { api, errorMessage } from '@/services/api'
 const assistantText = ref('“学加”活动智能助手'), contentError = ref('')
@@ -14,9 +15,26 @@ async function loadContent() {
 onShow(loadContent); onHide(() => { contentGeneration++ }); onUnload(() => { contentGeneration++ })
 function browse() { navigate(routes.activitySearch) }
 function draftActivity() { navigate(routes.activityDraft) }
+const { shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => ({path: routes.assistant, title: '有聚点助手'}), true)
+onShareAppMessage(shareMessage)
+onShareTimeline(shareTimeline)
 </script>
 <template>
   <view>
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <view class="hero">
       <image
         class="hero-image"

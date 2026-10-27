@@ -1,12 +1,13 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage, refreshMember } from '@/services/api'
 import type { CirclePost } from '@/services/api/types'
 import { useSessionStore } from '@/stores/session'
 import { routes, navigate, requireProfile } from '@/services/navigation'
 import { mediaUrl } from '@/services/api/environment'
-import { categoryLabel, subtypeLabel, stateLabel, circleTime, circleSharePath, newRequestId } from '@/services/circle'
+import { categoryLabel, subtypeLabel, stateLabel, circleTime, newRequestId } from '@/services/circle'
 import RequestState from '@/components/base/RequestState.vue'
 const session = useSessionStore(), post = ref<CirclePost | null>(null), id = ref('')
 const loading = ref(false), error = ref(''), actionError = ref(''), sheet = ref(false), phone = ref(''), sending = ref(false)
@@ -82,10 +83,26 @@ onPullDownRefresh(async () => {
 })
 onHide(() => { visible = false; clear() })
 onUnload(() => { visible = false; pendingIntent = false; clear() })
-onShareAppMessage(() => ({ title: post.value?.state === 'removed' ? '有聚点学友圈' : post.value?.title || '有聚点学友圈', path: circleSharePath(routes.circleDetail, id.value, session.member?.inviteCode) }))
+const { shareReady, shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => post.value && post.value.state !== 'removed' ? {path: routes.circleDetail, id: id.value, title: post.value.title} : null, true)
+onShareAppMessage(shareMessage)
+onShareTimeline(shareTimeline)
 </script>
 <template>
   <view class="circle-page circle-safe circle-detail">
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <RequestState
       :loading="loading"
       :error="error"
@@ -173,7 +190,8 @@ onShareAppMessage(() => ({ title: post.value?.state === 'removed' ? '有聚点�
         <view class="circle-footer">
           <button
             class="btn-secondary detail-share"
-            open-type="share"
+            :open-type="shareReady ? 'share' : undefined"
+            :disabled="!shareReady"
           >
             分享
           </button><button

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
 import { useSessionStore } from '@/stores/session'
-import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShareAppMessage, onShareTimeline, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api } from '@/services/api'
 import type { CirclePost } from '@/services/api/types'
 import { routes, navigate } from '@/services/navigation'
@@ -18,9 +19,26 @@ const session = useSessionStore()
 watch(() => [session.token,session.epoch], () => { if(visible) void list.load() }, {flush:'sync'})
 onShow(() => { visible=true;void list.load() }); onHide(() => {visible=false;list.clear()}); onUnload(() => {visible=false;list.clear()})
 onReachBottom(() => list.load(true)); onPullDownRefresh(() => list.load())
+const { shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => ({path: routes.circle, title: '有聚点学友圈'}), true)
+onShareAppMessage(shareMessage)
+onShareTimeline(shareTimeline)
 </script>
 <template>
   <view class="circle-home">
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <view class="circle-home-hero">
       <image
         class="circle-home-hero-image"

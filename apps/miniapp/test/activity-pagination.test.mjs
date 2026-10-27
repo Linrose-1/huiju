@@ -13,9 +13,10 @@ function harness(t) {
   let bottom, hide
   const deps = {
     '@dcloudio/uni-app': {
-      onLoad() {}, onShow() {}, onHide(fn) { hide = fn }, onUnload() {}, onPullDownRefresh() {}, onReachBottom(fn) { bottom = fn }
+      onShareAppMessage() {}, onShareTimeline() {}, onLoad() {}, onShow() {}, onHide(fn) { hide = fn }, onUnload() {}, onPullDownRefresh() {}, onReachBottom(fn) { bottom = fn }
     },
     '@/services/api': { api: { activities: query => new Promise((resolve, reject) => requests.push({ query, resolve, reject })) }, errorMessage: e => e.message },
+    '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
     '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': {},
     '@/stores/session': {}, '@/services/wechat': {}, '@/services/activity-code': {}, '@/components/base/RequestState.vue': {}
   }

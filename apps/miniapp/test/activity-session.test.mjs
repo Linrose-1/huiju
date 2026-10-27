@@ -22,8 +22,8 @@ function harness(t, token = '', reading = {}, navigation = {}) {
   const dependencies = {
     '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { onLoadPage = fn }, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {}, onShareTimeline() {} },
     '@/services/reading': { createReadingVisit: reading.createVisit || (() => ({ record: async () => {} })) },
-    '@/services/wechat': { showActivityShareMenu() {} },
     '@/services/api': { api: { ...api, activityReaders: reading.list || (async () => ({items:[], total:0, hasMore:false})) }, ApiError, errorMessage: e => e.message },
+    '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
     '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': navigation,
     '@/stores/session': { useSessionStore: () => session },
   }

@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { URL } from 'node:url'
 import { createRequire } from 'node:module'
 import ts from 'typescript'
+import { loadPageShare } from './page-share-harness.mjs'
 import { reactive } from 'vue'
 const require = createRequire(import.meta.url)
 const source = path => readFileSync(new URL('../src/'+path, import.meta.url),'utf8')
@@ -20,10 +21,11 @@ const post=()=>({id:'post-a',category:'park',subtype:'rent',title:'园区资源'
 function harness(page='detail',overrides={}) {
   const session=reactive({token:'token-a',epoch:0,member:{profileComplete:true,boundPhone:'13800000000',inviteCode:'sharer-code'}}),hooks={},calls=[],sent=[],saved=[],uploaded=[]
   session.captureInvite=()=>{}
-  const uni={stopPullDownRefresh(){},showToast:options=>calls.push(['toast',options.title]),switchTab:options=>calls.push(['tab',options.url]),...overrides.uni}
+  const uni={hideShareMenu(){},showShareMenu(){},stopPullDownRefresh(){},showToast:options=>calls.push(['toast',options.title]),switchTab:options=>calls.push(['tab',options.url]),...overrides.uni}
   const api={circlePost:async()=>post(),circlePosts:async()=>({items:[],hasMore:false}),circleIntents:async()=>({items:[],hasMore:false}),endCirclePost:async id=>calls.push(['end',id]),submitCircleIntent:async(...args)=>{sent.push(args)},saveCirclePost:async(...args)=>{saved.push(args);return {...post(),isOwner:true}},uploadCircleImage:async(...args)=>{uploaded.push(args);return {id:'image-a'}},...overrides.api}
   const navigation={routes,navigate:(...args)=>calls.push(['navigate',...args]),loginPage:url=>calls.push(['login',url]),requireProfile:overrides.requireProfile||async function(){return session.member.profileComplete}}
-  const deps={'@/stores/session':{useSessionStore:()=>session},'@/services/api':{api,errorMessage:e=>e.message,refreshMember:async()=>session.member},'@/services/wechat':{bootstrapIdentity:overrides.bootstrapIdentity||(async()=>{})},'@/services/api/environment':{mediaUrl:x=>x},'@/services/navigation':navigation,'@/services/circle-images':{chooseCircleImages:overrides.chooseCircleImages||(async()=>overrides.pictures||[])},'@dcloudio/uni-app':Object.fromEntries(['onLoad','onShow','onHide','onUnload','onShareAppMessage','onReachBottom','onPullDownRefresh'].map(name=>[name,fn=>hooks[name]=fn]))}
+  const deps={'@/stores/session':{useSessionStore:()=>session},'@/services/api':{api,errorMessage:e=>e.message,refreshMember:async()=>session.member},'@/services/wechat':{bootstrapIdentity:overrides.bootstrapIdentity||(async()=>{})},'@/services/api/environment':{mediaUrl:x=>x},'@/services/navigation':navigation,'@/services/circle-images':{chooseCircleImages:overrides.chooseCircleImages||(async()=>overrides.pictures||[])},'@dcloudio/uni-app':Object.fromEntries(['onLoad','onShow','onHide','onUnload','onShareAppMessage','onShareTimeline','onReachBottom','onPullDownRefresh'].map(name=>[name,fn=>hooks[name]=fn]))}
+  deps['@/services/wechat/page-share']=loadPageShare(deps,uni)
   deps['@/services/circle']=evaluate(source('services/circle.ts'),deps,{uni})
   const text=source('pages/circle/'+page+'.vue').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const expose={detail:'id,post,sheet,phone,sending,error,actionError,confirmIntent,submit,load,closeSheet',editor:'id,post,title,body,category,storeName,images,pendingWrite,readyToken,busy,picking,error,actionError,save,pick,load',mine:'items,loading,preparing,error,actionError,end,load',intents:'id,post,items,loading,preparing,error,thumbnail,thumbnailError,load'}[page]
@@ -60,7 +62,7 @@ test('logout clears confirmation, contact and old response cannot restore conten
   const other=harness();await other.page.activate();await other.page.confirmIntent();other.session.token='token-b';assert.equal(other.page.sheet.value,false);assert.equal(other.page.phone.value,'')
 })
 test('share source is the actual sharer and return link omits submission flag',async()=>{
-  const h=harness();await h.page.activate();assert.equal(h.hooks.onShareAppMessage().path,'/pages/circle/detail?id=post-a&inviteCode=sharer-code');assert.equal(h.circle.circleSharePath(routes.circleDetail,'a/b','x y'),'/pages/circle/detail?id=a%2Fb&inviteCode=x%20y')
+  const h=harness();h.hooks.onShow();await tick();await h.page.activate();assert.equal(h.hooks.onShareAppMessage().path,'/pages/circle/detail?id=post-a&inviteCode=sharer-code')
 })
 test('editor requires title/body and store name, supports zero images',async()=>{
   const h=harness('editor');await h.page.activate();await h.page.save();assert.equal(h.saved.length,0)

@@ -25,7 +25,8 @@ function harness(t, path) {
       organizerRoster: (_id, query) => request('list', query), activityViewStats: async () => ({ views: 30, viewers: 20 })
     } },
     '@/services/my-activities': { activityFilters: [{ key: 'all', label: '全部' }, { key: 'upcoming', label: '未开始' }, { key: 'ended', label: '已结束' }] },
-    '@/services/navigation': {}, '@/services/api/environment': {}, '@/services/presentation': {},
+    '@/services/navigation': {}, '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
+    '@/services/api/environment': {}, '@/services/presentation': {},
   }
   const manage = path === 'activity/manage', notification = path === 'notification/index'
   const extra = manage ? 'load,loadRoster,selectFilter,roster,rosterMoreError,attendanceCount,activeCount,retryRosterMore'

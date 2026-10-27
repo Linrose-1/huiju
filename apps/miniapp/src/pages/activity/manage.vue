@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { usePageShare } from '@/services/wechat/page-share'
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow, onHide, onUnload, onShareAppMessage, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { onShareAppMessage, onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { ManagedActivity, OrganizerRegistration, ReadingStats } from '@/services/api/types'
 import { dateTime, fee, feeDisclaimer } from '@/services/presentation'
@@ -135,10 +136,25 @@ onHide(() => { shown = false; clear() })
 onUnload(() => { shown = false; clear(); stop() })
 onReachBottom(() => loadRoster(true))
 onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void load() })
-onShareAppMessage(() => ({ title: activity.value?.title || '有聚点活动', path: routes.detail+'?id='+encodeURIComponent(id.value)+(session.member?.inviteCode?'&inviteCode='+encodeURIComponent(session.member.inviteCode):'') }))
+const { shareReady, shareError, shareBusy, retryShare, shareMessage } = usePageShare(() => activity.value && activity.value.lifecycle !== 'draft' && activity.value.moderation !== 'removed' ? {path: routes.detail, id: id.value, title: activity.value.title} : null, false)
+onShareAppMessage(shareMessage)
 </script>
 <template>
   <view class="page-pad manage-page">
+    <view
+      v-if="shareError"
+      class="error"
+      role="alert"
+    >
+      <text>{{ shareError }}</text>
+      <button
+        class="text-button"
+        :disabled="shareBusy"
+        @click="retryShare"
+      >
+        {{ shareBusy ? '正在识别…' : '重试分享' }}
+      </button>
+    </view>
     <view
       v-if="!session.token"
       class="empty"
@@ -208,7 +224,8 @@ onShareAppMessage(() => ({ title: activity.value?.title || '有聚点活动', pa
             <button
               v-if="activity.lifecycle==='published' && activity.moderation==='normal'"
               class="primary share-action"
-              open-type="share"
+              :open-type="shareReady ? 'share' : undefined"
+              :disabled="!shareReady"
             >
               分享活动
             </button>

@@ -18,6 +18,7 @@ function harness(t) {
       managedActivity: () => pending('activity'), organizerRoster: () => pending('roster'), activityViewStats: async () => ({}),
       markAttendance: (activityId, registrationId) => { mutations.push([activityId, registrationId]); return pending('attendance') }
     }, ApiError: class extends Error {}, errorMessage: e => e.message },
+    '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
     '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': {},
     '@/stores/session': { useSessionStore: () => session }, '@/components/base/RequestState.vue': {}
   }
