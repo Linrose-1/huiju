@@ -26,7 +26,7 @@ function harness(t, pageName, names) {
     '@dcloudio/uni-app': Object.fromEntries(['onShow', 'onHide', 'onLoad', 'onUnload'].map(name => [name, fn => { hooks[name] = fn }])),
     '@/stores/session': { useSessionStore: () => session },
     '@/services/api': { api: { memberCard: queue(cards), profileDetails: queue(details), cardSettings: queue(settings), saveCardSettings: queue(saves), saveProfileDetails: queue(saves), profile: queue(namesSaved) }, refreshMember: queue(refreshes), errorMessage: e => e.message, ApiError: class extends Error {} },
-    '@/services/member-card': cardHelpers, '@/services/wechat': {}, '@/services/navigation': {}, '@/services/api/environment': {}
+    '@/services/member-card': cardHelpers, '@/services/wechat': {}, '@/services/wechat/member-qr': { chooseWechatQr: async () => null }, '@/services/navigation': {}, '@/services/api/environment': {}
   }
   const scope = effectScope()
   let page
@@ -34,7 +34,7 @@ function harness(t, pageName, names) {
   t.after(() => scope.stop())
   return { page, session, hooks, refreshes, cards, details, settings, saves, namesSaved, toasts, member }
 }
-const privateDetails = { realName: '真实姓名', email: 'private@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求' }
+const privateDetails = { wechatId: 'private_wechat', wechatQrUrl: '/api/v1/members/00112233-4455-6677-8899-aabbccddeeff/wechat-qr', personalTag: '产业链接者', realName: '真实姓名', email: 'private@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求' }
 test('preview defaults to avatar/name only and whitelists independently selected fields', () => {
   const member = { profileComplete: true, avatarUrl: '/a.png', displayName: '甲', boundPhone: '13800000001', memberNumber: '001', inviteCode: 'private-invite' }
   const settings = cardHelpers.emptySettings()
@@ -43,6 +43,19 @@ test('preview defaults to avatar/name only and whitelists independently selected
   for (const field of cardHelpers.cardFields) {
     const card = cardHelpers.previewCard(member, privateDetails, { ...settings, [field.setting]: true })
     assert.deepEqual(Object.keys(card).sort(), ['avatarUrl', 'displayName', field.key].sort())
+  }
+})
+
+test('WeChat ID, protected QR and personal tag use independent opt-in preview settings', () => {
+  const member = { profileComplete: true, displayName: '甲', avatarUrl: '/a.png' }
+  const fields = [['wechatId', 'showWechatId'], ['wechatQrUrl', 'showWechatQr'], ['personalTag', 'showPersonalTag']]
+  for (const [key, setting] of fields) {
+    const settings = cardHelpers.emptySettings()
+    assert.equal(settings[setting], false)
+    const card = cardHelpers.previewCard(member, privateDetails, { ...settings, [setting]: true })
+    assert.equal(card[key], privateDetails[key])
+    for (const [other] of fields) if (other !== key) assert.equal(Object.hasOwn(card, other), false)
+    assert.equal(Object.hasOwn(cardHelpers.previewCard(member, privateDetails, settings), key), false)
   }
 })
 test('direct card route blocks incomplete profiles and discards a late card after account change', async t => {

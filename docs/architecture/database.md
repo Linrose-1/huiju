@@ -140,3 +140,11 @@ erDiagram
 `0012_activity_location.sql`为activities新增可空double字段location_latitude、location_longitude，保存微信选点的GCJ-02坐标；CHECK约束要求同时为空或同时在纬度[-90,90]、经度[-180,180]范围内，服务端另校验有限数。旧记录为空，无自动回填。API对应locationLatitude/locationLongitude；旧客户端同址省略坐标保留原值，改址省略清空；显式双null清空。公开下架详情隐藏坐标。
 
 本机127.0.0.1:3306/huiju已获单独授权执行0012，迁移12→13，原业务数据校验和不变；真实服务事务回滚11项通过。远程尚未迁移，新API上线前必须先在获授权环境应用0012。回退应用可保留新列；不得将DDL视为可事务回滚，也不直接删列。详细证据见本月实现日志。
+
+## 0013 会员微信信息与名片标注（2026-10-28，仅本地已执行）
+
+members新增可空wechat_id varchar(100)、personal_tag varchar(50)、wechat_qr_file varchar(64)；member_visibilities新增show_wechat_id/show_wechat_qr/show_personal_tag布尔字段，默认false。仅ADD列，不回填、不删改旧数据；个性标注50字/默认不公开已获用户确认。
+
+二维码列只存内部文件名，不向API外露。文件放独立私有目录，经会员二维码鉴权路由读取；公开撤回立即阻断后续读取，不依赖不可猜URL。移除仅清引用，不自动删除历史图片。schema上线须先迁移再重启新API，旧结构不能运行新members全字段查询。回退优先恢复旧应用并保留新增列；DROP列及物理清理另行授权。
+
+2026-10-28按用户单独授权核对127.0.0.1:3306/huiju后执行0013，迁移13→14；原会员、可见性、活动和报名字段摘要不变。真实服务事务回滚8项通过；开发者工具经3018事务服务保存/上传/移除和开关验收后，members 47行、member_visibilities 1行完整摘要恢复，事务服务关闭。普通3012已更新且health正常；远程数据库尚未执行0013，新版本部署须另行授权并先迁移。

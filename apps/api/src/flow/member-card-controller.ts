@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Header, Headers, HttpCode, Param, ParseUUIDPipe, Post, StreamableFile } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiResponse, ApiTags } from '@nestjs/swagger'
-import { ErrorDto } from './dto.js'
-import { CardSettingsDto, MemberCardDto, ProfileDetailsDto, ProfileDetailsInput } from './member-card-dto.js'
+import { AvatarInput, ErrorDto } from './dto.js'
+import { CardSettingsDto, MemberCardDto, ProfileDetailsDto, ProfileDetailsInput, WechatQrDto } from './member-card-dto.js'
 import { MemberCardService } from './member-card.js'
 
 @ApiTags('会员资料与名片')
@@ -31,6 +31,23 @@ export class MemberCardController {
   @Post('me/card-settings') @HttpCode(200)
   @ApiOkResponse({ type: CardSettingsDto })
   saveSettings(@Body() body: CardSettingsDto, @Headers('authorization') header?: string) { return this.cards.saveSettings(body, header) }
+
+  @Post('me/wechat-qr') @HttpCode(200)
+  @ApiOkResponse({ type: WechatQrDto })
+  saveWechatQr(@Body() body: AvatarInput, @Headers('authorization') header?: string) { return this.cards.saveWechatQr(body, header) }
+
+  @Delete('me/wechat-qr') @HttpCode(200)
+  @ApiOkResponse({ type: WechatQrDto })
+  removeWechatQr(@Headers('authorization') header?: string) { return this.cards.removeWechatQr(header) }
+
+  @Get(':id/wechat-qr')
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  @ApiOkResponse({ content: { 'image/png': { schema: { type: 'string', format: 'binary' } }, 'image/jpeg': { schema: { type: 'string', format: 'binary' } } } })
+  async wechatQr(@Param('id', ParseUUIDPipe) id: string, @Headers('authorization') header?: string) {
+    const image = await this.cards.wechatQr(id, header)
+    return new StreamableFile(image.bytes, { type: image.type, disposition: 'inline', length: image.bytes.length })
+  }
 
   @Get(':id/card')
   @ApiOkResponse({ type: MemberCardDto })

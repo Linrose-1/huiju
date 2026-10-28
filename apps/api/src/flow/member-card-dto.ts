@@ -23,6 +23,12 @@ export class ProfileDetailsInput {
 
   @ApiProperty({ maxLength: 2000 }) @Transform(trim) @IsString() @MaxLength(2000)
   needs!: string
+
+  @ApiPropertyOptional({ maxLength: 100 }) @ValidateIf((_object, value) => value !== undefined)
+  @Transform(trim) @IsString() @MaxLength(100) wechatId?: string
+
+  @ApiPropertyOptional({ maxLength: 50 }) @ValidateIf((_object, value) => value !== undefined)
+  @Transform(trim) @IsString() @MaxLength(50) personalTag?: string
 }
 
 export class ProfileDetailsDto {
@@ -32,6 +38,9 @@ export class ProfileDetailsDto {
   @ApiProperty({ type: String, nullable: true }) bio!: string | null
   @ApiProperty({ type: String, nullable: true }) resources!: string | null
   @ApiProperty({ type: String, nullable: true }) needs!: string | null
+  @ApiProperty({ type: String, nullable: true }) wechatId!: string | null
+  @ApiProperty({ type: String, nullable: true }) personalTag!: string | null
+  @ApiProperty({ type: String, nullable: true }) wechatQrUrl!: string | null
 }
 
 export class CardSettingsDto {
@@ -42,6 +51,9 @@ export class CardSettingsDto {
   @ApiProperty() @IsBoolean() showBio!: boolean
   @ApiProperty() @IsBoolean() showResources!: boolean
   @ApiProperty() @IsBoolean() showNeeds!: boolean
+  @ApiPropertyOptional() @ValidateIf((_object, value) => value !== undefined) @IsBoolean() showWechatId?: boolean
+  @ApiPropertyOptional() @ValidateIf((_object, value) => value !== undefined) @IsBoolean() showWechatQr?: boolean
+  @ApiPropertyOptional() @ValidateIf((_object, value) => value !== undefined) @IsBoolean() showPersonalTag?: boolean
 }
 
 export class MemberCardDto {
@@ -54,4 +66,11 @@ export class MemberCardDto {
   @ApiPropertyOptional({ type: String, nullable: true }) bio?: string | null
   @ApiPropertyOptional({ type: String, nullable: true }) resources?: string | null
   @ApiPropertyOptional({ type: String, nullable: true }) needs?: string | null
+  @ApiPropertyOptional({ type: String, nullable: true }) wechatId?: string | null
+  @ApiPropertyOptional({ type: String, nullable: true }) personalTag?: string | null
+  @ApiPropertyOptional({ type: String, nullable: true }) wechatQrUrl?: string | null
+}
+
+export class WechatQrDto {
+  @ApiProperty({ type: String, nullable: true }) wechatQrUrl!: string | null
 }

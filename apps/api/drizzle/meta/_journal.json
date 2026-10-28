@@ -92,6 +92,13 @@
       "when": 1793112524515,
       "tag": "0012_activity_location",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1793125142567,
+      "tag": "0013_member_wechat_card",
+      "breakpoints": true
     }
   ]
 }

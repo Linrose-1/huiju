@@ -47,3 +47,5 @@ export type CircleImage = components['schemas']['CircleImageDto']
 
 export type ActivityQuestionHistoryItem = components['schemas']['ActivityQuestionHistoryItemDto']
 export type ActivityQuestionHistory = components['schemas']['ActivityQuestionHistoryDto']
+
+export type WechatQr = components['schemas']['WechatQrDto']

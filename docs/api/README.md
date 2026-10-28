@@ -186,3 +186,11 @@
 `GET /members/me/activity-question-history?offset=0&limit=20`：要求有效会话且手机号、主动头像、主动名称完整。仅查询本人已保存活动中的填写项（含草稿），按最近活动保存时间排序；名称、题型和选项完全相同的配置在分页前去重，默认每页20条、最多100条，返回`{items:[{prompt,type,options}],hasMore}`。
 
 不返回报名答案、联系方式、原活动/问题ID或必填设置。仅点弹层“保存填写项”尚未持久化；成功保存活动后才可跨活动复用。当前历史来自活动已保存配置，不额外保留已被所有活动删除或替换的旧配置快照。复用后只修改当前活动的副本，当前必填设置不被覆盖。
+
+### 个人资料微信信息与个性标注（0013，本地迁移与事务验收完成）
+
+- profile-details输入增加可选wechatId（100字符）/personalTag（50字符）；空白清空，旧客户端省略则保留，响应增加这两项及wechatQrUrl。二维码URL不能通过资料表单指定。
+- card-settings增加showWechatId/showWechatQr/showPersonalTag，默认false，旧客户端省略不覆盖新开关。名片只返回主人开启的字段；微信号/个性标注未填写前端不占位。三项均不影响资料完整度。
+- POST /members/me/wechat-qr沿用base64/mimeType输入，只接收实际可解码PNG/JPG、最大2MB，立即保存本人图片引用；DELETE同路由移除本人引用。两者返回{wechatQrUrl}，不删除磁盘历史文件。
+- GET /members/:id/wechat-qr返回二进制，需Bearer；本人可查看，他人需完整会员且主人开启showWechatQr。每次重查权限与引用；关闭公开或移除后旧链接无权访问。响应private/no-store、nosniff。图片不挂在公开media路由，LOCAL_MEMBER_QR_DIRECTORY默认.local-uploads/member-wechat-qr。
+- 客户端仅向当前API环境的此固定路由发送鉴权，下载临时文件用于展示/点击放大；不会把Bearer发往任意图片URL。上传/下载/预览隔离换号、迟到结果。

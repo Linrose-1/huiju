@@ -50,6 +50,9 @@ export const members = mysqlTable(
     resources: text('resources'),
     needs: text('needs'),
     bio: text('bio'),
+    wechatId: varchar('wechat_id', { length: 100 }),
+    personalTag: varchar('personal_tag', { length: 50 }),
+    wechatQrFile: varchar('wechat_qr_file', { length: 64 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 })
       .notNull()
       .default(sql`CURRENT_TIMESTAMP(3)`),
@@ -110,6 +113,9 @@ export const memberVisibilities = mysqlTable('member_visibilities', {
   showResources: boolean('show_resources').notNull().default(false),
   showNeeds: boolean('show_needs').notNull().default(false),
   showBio: boolean('show_bio').notNull().default(false),
+  showWechatId: boolean('show_wechat_id').notNull().default(false),
+  showWechatQr: boolean('show_wechat_qr').notNull().default(false),
+  showPersonalTag: boolean('show_personal_tag').notNull().default(false),
   updatedAt: timestamp('updated_at', { mode: 'date', fsp: 3 })
     .notNull()
     .default(sql`CURRENT_TIMESTAMP(3)`)

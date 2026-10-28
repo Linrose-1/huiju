@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import PrivateWechatQr from '@/components/business/PrivateWechatQr.vue'
 import type { MemberCard } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
 import { cardFields } from '@/services/member-card'
@@ -10,6 +11,7 @@ const visibleFields = (keys: readonly string[]) => keys.flatMap(key => {
 })
 const personalFields = computed(() => visibleFields(['realName', 'hometown', 'boundPhone', 'email']))
 const storyFields = computed(() => visibleFields(['resources', 'needs', 'bio']))
+function copyWechat() { if (props.card.wechatId) uni.setClipboardData({ data: props.card.wechatId, fail: () => uni.showToast({ title: '复制失败，请长按复制微信号', icon: 'none' }) }) }
 </script>
 <template>
   <view class="member-card">
@@ -42,6 +44,13 @@ const storyFields = computed(() => visibleFields(['resources', 'needs', 'bio']))
           <text class="display-name">
             {{ card.displayName }}
           </text>
+          <text
+            v-if="card.personalTag"
+            class="personal-tag"
+            user-select
+          >
+            {{ card.personalTag }}
+          </text>
         </view>
         <view class="hero-motto">
           <text>让专业的人</text><text>在一起</text>
@@ -52,6 +61,34 @@ const storyFields = computed(() => visibleFields(['resources', 'needs', 'bio']))
       </view>
     </view>
     <view class="card-content">
+      <view
+        v-if="card.wechatId || card.wechatQrUrl"
+        class="section"
+      >
+        <view class="section-heading">
+          <view class="heading-mark" /><text>微信联系</text><view class="heading-line" />
+        </view>
+        <view
+          v-if="card.wechatId"
+          class="wechat-row"
+        >
+          <text
+            user-select
+            class="wechat-id"
+          >
+            {{ card.wechatId }}
+          </text><button
+            class="text-button"
+            @click="copyWechat"
+          >
+            复制微信号
+          </button>
+        </view>
+        <PrivateWechatQr
+          v-if="card.wechatQrUrl"
+          :url="card.wechatQrUrl"
+        />
+      </view>
       <view
         v-if="personalFields.length"
         class="section personal-section"
@@ -116,7 +153,7 @@ const storyFields = computed(() => visibleFields(['resources', 'needs', 'bio']))
         </view>
       </view>
       <view
-        v-if="!personalFields.length && !storyFields.length"
+        v-if="!personalFields.length && !storyFields.length && !card.wechatId && !card.wechatQrUrl && !card.personalTag"
         class="section no-fields"
       >
         暂未公开更多资料
@@ -132,6 +169,8 @@ const storyFields = computed(() => visibleFields(['resources', 'needs', 'bio']))
   </view>
 </template>
 <style scoped>
+.personal-tag{display:block;margin-top:12rpx;color:#e8eee8;font-size:26rpx;line-height:1.6;overflow-wrap:anywhere}.wechat-row{display:flex;align-items:center;gap:16rpx;margin-bottom:20rpx}.wechat-id{flex:1;min-width:0;overflow-wrap:anywhere;font-size:28rpx}.wechat-row .text-button{font-size:25rpx;flex-shrink:0}
+
 .member-card{background:#eff7f3;color:#202e29}
 .identity-hero{position:relative;overflow:hidden;background:#0a513e;padding:48rpx 34rpx 48rpx;border-bottom:7rpx solid #ceb882;border-radius:0 0 50% 8% / 0 0 30rpx 12rpx}
 .hero-scenery{position:absolute;right:0;top:0;width:60%;height:100%;opacity:.36}

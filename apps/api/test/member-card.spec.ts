@@ -1,12 +1,16 @@
 import 'reflect-metadata'
 import { ValidationPipe } from '@nestjs/common'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import sharp from 'sharp'
 import { CardSettingsDto, ProfileDetailsInput } from '../src/flow/member-card-dto.js'
 import { cardSettings, MemberCardService, publicCard } from '../src/flow/member-card.js'
 import type { FlowDatabase } from '../src/flow/common.js'
 import type { IdentityService, Member } from '../src/flow/identity.js'
 
-const member = { id: 'owner', kind: 'member', memberNumber: '1001', avatarUrl: '/avatar.png', displayName: '当前名称', avatarSetByUser: true, nameSetByUser: true, boundPhone: '19900000001', realName: '姓名', email: 'a@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求', inviteCode: 'private' } as Member
+const member = { id: 'owner', kind: 'member', memberNumber: '1001', avatarUrl: '/avatar.png', displayName: '当前名称', avatarSetByUser: true, nameSetByUser: true, boundPhone: '19900000001', realName: '姓名', email: 'a@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求', inviteCode: 'private', wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrFile: null } as Member
 const all = { showRealName: true, showEmail: true, showBoundPhone: true, showHometown: true, showBio: true, showResources: true, showNeeds: true }
 const empty = { realName: '', email: '', hometown: '', bio: '', resources: '', needs: '' }
 const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })
@@ -76,16 +80,16 @@ describe('member card service authorization', () => {
 
   it('allows incomplete members to maintain their own profile, writing only the six fields', async () => {
     const f = fixture([], { ...member, boundPhone: null })
-    expect(await f.service.profile('session')).toEqual({ realName: '姓名', email: 'a@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求' })
-    expect(await f.service.saveProfile({ ...empty, bio: ' 新简介 ' }, 'session')).toEqual({ realName: null, email: null, hometown: null, bio: '新简介', resources: null, needs: null })
+    expect(await f.service.profile('session')).toEqual({ realName: '姓名', email: 'a@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求', wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrUrl: null })
+    expect(await f.service.saveProfile({ ...empty, bio: ' 新简介 ' }, 'session')).toEqual({ realName: null, email: null, hometown: null, bio: '新简介', resources: null, needs: null, wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrUrl: null })
     expect(f.writes).toHaveLength(1)
     expect(f.requireIdentity).toHaveBeenCalledWith('session')
   })
 
   it('returns private defaults for missing rows and upserts only the seven settings', async () => {
-    const f = fixture([[]])
+    const f = fixture([[], [all]])
     expect(await f.service.settings('session')).toEqual(cardSettings())
-    expect(await f.service.saveSettings(all, 'session')).toEqual(all)
+    expect(await f.service.saveSettings(all, 'session')).toEqual(cardSettings(all))
     expect(f.writes).toEqual([{ values: { memberId: member.id, ...all }, update: { set: all } }])
   })
 
@@ -105,5 +109,91 @@ describe('member card service authorization', () => {
 
   it('returns not found for missing target', async () => {
     await expect(fixture([[]]).service.card('missing', 'session')).rejects.toMatchObject({ response: { code: 'NOT_FOUND' } })
+  })
+})
+
+const qrDirectories: string[] = []
+afterEach(async () => {
+  vi.unstubAllEnvs()
+  for (const directory of qrDirectories.splice(0)) await rm(directory, { recursive: true, force: true })
+})
+async function qrDirectory() {
+  const directory = await mkdtemp(join(tmpdir(), 'huiju-member-qr-'))
+  qrDirectories.push(directory); vi.stubEnv('LOCAL_MEMBER_QR_DIRECTORY', directory)
+  return directory
+}
+
+describe('optional WeChat identity, personal tag and private QR', () => {
+  it('validates optional text without accepting null, overlong values or QR paths', async () => {
+    expect((await validateProfile({ ...empty, wechatId: '  wx_rose  ', personalTag: ' 保持好奇 ' })).wechatId).toBe('wx_rose')
+    for (const [key, max] of [['wechatId', 100], ['personalTag', 50]] as const) {
+      expect((await validateProfile({ ...empty, [key]: '字'.repeat(max) }))[key]).toHaveLength(max)
+      for (const value of [null, 1, '字'.repeat(max + 1)]) await expect(validateProfile({ ...empty, [key]: value })).rejects.toThrow()
+    }
+    for (const field of ['wechatQrUrl', 'wechatQrFile']) await expect(validateProfile({ ...empty, [field]: '/private.png' })).rejects.toThrow()
+    for (const key of ['showWechatId', 'showWechatQr', 'showPersonalTag']) {
+      for (const value of [null, 'true', 1]) await expect(validateSettings({ ...all, [key]: value })).rejects.toThrow()
+    }
+  })
+
+  it('defaults all new fields to hidden and reveals only enabled fields without internal file names', () => {
+    const target = { ...member, wechatQrFile: '00000000-0000-4000-8000-000000000001.png' }
+    const hidden = publicCard(target, cardSettings())
+    expect(hidden).not.toHaveProperty('wechatId'); expect(hidden).not.toHaveProperty('personalTag'); expect(hidden).not.toHaveProperty('wechatQrUrl')
+    expect(publicCard(target, cardSettings({ showWechatId: true }))).toEqual({ ...hidden, wechatId: 'rose_wechat' })
+    const visible = publicCard(target, cardSettings({ showWechatQr: true, showPersonalTag: true }))
+    expect(visible).toEqual({ ...hidden, personalTag: '保持好奇', wechatQrUrl: '/api/v1/members/owner/wechat-qr' })
+    expect(JSON.stringify(visible)).not.toContain(target.wechatQrFile)
+  })
+
+  it('preserves new fields and visibility when an older client omits them', async () => {
+    const f = fixture([[{ ...all, showWechatId: true, showPersonalTag: true, showWechatQr: true }]])
+    const saved = await f.service.saveProfile(empty, 'session')
+    expect(saved.wechatId).toBe(member.wechatId); expect(saved.personalTag).toBe(member.personalTag)
+    expect(f.writes[0]).not.toHaveProperty('wechatId'); expect(f.writes[0]).not.toHaveProperty('personalTag')
+    const settings = await f.service.saveSettings(all, 'session')
+    expect(settings.showWechatQr).toBe(true)
+    expect(f.writes[1]).toEqual({ values: { memberId: member.id, ...all }, update: { set: all } })
+    await f.service.saveProfile({ ...empty, wechatId: '', personalTag: '' }, 'session')
+    expect(f.writes[2]).toMatchObject({ wechatId: null, personalTag: null })
+  })
+
+  it('uploads validated PNG privately, binds only the caller and removes only the reference', async () => {
+    const directory = await qrDirectory(), f = fixture()
+    const bytes = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#ffffff' } }).png().toBuffer()
+    const result = await f.service.saveWechatQr({ base64: bytes.toString('base64'), mimeType: 'image/png' }, 'session')
+    expect(result).toEqual({ wechatQrUrl: '/api/v1/members/owner/wechat-qr' })
+    const file = (f.writes[0] as { wechatQrFile: string }).wechatQrFile
+    expect(file).toMatch(/^[a-f0-9-]{36}\.png$/)
+    expect(await readFile(join(directory, file))).toEqual(bytes)
+    expect(await f.service.removeWechatQr('session')).toEqual({ wechatQrUrl: null })
+    expect(f.writes[1]).toEqual({ wechatQrFile: null })
+    expect(await readFile(join(directory, file))).toEqual(bytes)
+    for (const input of [{ base64: bytes.toString('base64'), mimeType: 'image/jpeg' }, { base64: Buffer.alloc(2 * 1024 * 1024 + 1).toString('base64'), mimeType: 'image/png' }]) {
+      await expect(f.service.saveWechatQr(input, 'session')).rejects.toMatchObject({ response: { code: 'INVALID_IMAGE' } })
+    }
+    expect(f.writes).toHaveLength(2)
+  })
+
+  it('rechecks QR visibility and membership on every read, including old URLs', async () => {
+    const directory = await qrDirectory(), file = '00000000-0000-4000-8000-000000000001.png'
+    await writeFile(join(directory, file), Buffer.from('private-image'))
+    const target = { ...member, id: 'target', wechatQrFile: file }
+    const f = fixture([[target], [{ showWechatQr: true }], [target], [{ showWechatQr: false }]])
+    expect((await f.service.wechatQr('target', 'session')).bytes.toString()).toBe('private-image')
+    await expect(f.service.wechatQr('target', 'session')).rejects.toMatchObject({ response: { code: 'NOT_FOUND' } })
+    const visitor = fixture([], { ...member, boundPhone: null })
+    await expect(visitor.service.wechatQr('target', 'session')).rejects.toMatchObject({ response: { code: 'PROFILE_INCOMPLETE' } })
+    expect(visitor.db.select).not.toHaveBeenCalled()
+    const owner = fixture([[{ ...target, id: member.id }]], { ...member, boundPhone: null })
+    expect((await owner.service.wechatQr(member.id, 'session')).type).toBe('image/png')
+    expect(owner.db.select).toHaveBeenCalledTimes(1)
+    await expect(fixture([[{ ...target, wechatQrFile: '../escape.png' }]], target).service.wechatQr('target', 'session')).rejects.toMatchObject({ response: { code: 'NOT_FOUND' } })
+  })
+
+  it('denies all QR operations without identity and never writes or queries data', async () => {
+    const f = fixture(); f.requireIdentity.mockRejectedValue(new Error('SESSION_REQUIRED'))
+    for (const operation of [() => f.service.saveWechatQr({ base64: '', mimeType: 'image/png' }), () => f.service.removeWechatQr(), () => f.service.wechatQr('target')]) await expect(operation()).rejects.toThrow('SESSION_REQUIRED')
+    expect(f.db.select).not.toHaveBeenCalled(); expect(f.db.update).not.toHaveBeenCalled()
   })
 })

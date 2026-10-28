@@ -1,6 +1,9 @@
 import type { CardSettings, Member, MemberCard, ProfileDetails } from './api/types'
 
 export const cardFields = [
+  { key: 'wechatId', setting: 'showWechatId', label: '微信号', icon: 'chat' },
+  { key: 'wechatQrUrl', setting: 'showWechatQr', label: '微信二维码', icon: 'scan' },
+  { key: 'personalTag', setting: 'showPersonalTag', label: '个性标注', icon: 'compose' },
   { key: 'realName', setting: 'showRealName', label: '真实姓名', icon: 'person' },
   { key: 'email', setting: 'showEmail', label: '邮箱', icon: 'email' },
   { key: 'boundPhone', setting: 'showBoundPhone', label: '绑定手机号', icon: 'phone' },
@@ -11,7 +14,7 @@ export const cardFields = [
 ] as const
 
 export function emptySettings(): CardSettings {
-  return { showRealName: false, showEmail: false, showBoundPhone: false, showHometown: false, showBio: false, showResources: false, showNeeds: false }
+  return { showWechatId: false, showWechatQr: false, showPersonalTag: false, showRealName: false, showEmail: false, showBoundPhone: false, showHometown: false, showBio: false, showResources: false, showNeeds: false }
 }
 
 // Preview stays in page memory and uses the same field whitelist as the public card.

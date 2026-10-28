@@ -3406,6 +3406,314 @@
         ]
       }
     },
+    "/api/v1/members/me/wechat-qr": {
+      "post": {
+        "operationId": "MemberCardController_saveWechatQr",
+        "parameters": [
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AvatarInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatQrDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "会员资料与名片"
+        ]
+      },
+      "delete": {
+        "operationId": "MemberCardController_removeWechatQr",
+        "parameters": [
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WechatQrDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "会员资料与名片"
+        ]
+      }
+    },
+    "/api/v1/members/{id}/wechat-qr": {
+      "get": {
+        "operationId": "MemberCardController_wechatQr",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "会员资料与名片"
+        ]
+      }
+    },
     "/api/v1/members/{id}/card": {
       "get": {
         "operationId": "MemberCardController_card",
@@ -10767,6 +11075,18 @@
           "needs": {
             "type": "string",
             "nullable": true
+          },
+          "wechatId": {
+            "type": "string",
+            "nullable": true
+          },
+          "personalTag": {
+            "type": "string",
+            "nullable": true
+          },
+          "wechatQrUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -10775,7 +11095,10 @@
           "hometown",
           "bio",
           "resources",
-          "needs"
+          "needs",
+          "wechatId",
+          "personalTag",
+          "wechatQrUrl"
         ]
       },
       "ProfileDetailsInput": {
@@ -10804,6 +11127,14 @@
           "needs": {
             "type": "string",
             "maxLength": 2000
+          },
+          "wechatId": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "personalTag": {
+            "type": "string",
+            "maxLength": 50
           }
         },
         "required": [
@@ -10838,6 +11169,15 @@
           },
           "showNeeds": {
             "type": "boolean"
+          },
+          "showWechatId": {
+            "type": "boolean"
+          },
+          "showWechatQr": {
+            "type": "boolean"
+          },
+          "showPersonalTag": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -10848,6 +11188,18 @@
           "showBio",
           "showResources",
           "showNeeds"
+        ]
+      },
+      "WechatQrDto": {
+        "type": "object",
+        "properties": {
+          "wechatQrUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "wechatQrUrl"
         ]
       },
       "MemberCardDto": {
@@ -10885,6 +11237,18 @@
             "nullable": true
           },
           "needs": {
+            "type": "string",
+            "nullable": true
+          },
+          "wechatId": {
+            "type": "string",
+            "nullable": true
+          },
+          "personalTag": {
+            "type": "string",
+            "nullable": true
+          },
+          "wechatQrUrl": {
             "type": "string",
             "nullable": true
           }

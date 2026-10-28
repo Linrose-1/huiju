@@ -1,6 +1,6 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL, NETWORK_DEBUG } from './environment'
-import type { ActivitySearchResult, ActivityQuestionHistory } from './types'
+import type { ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
 export class ApiError extends Error {
@@ -97,6 +97,8 @@ export const api = {
   createReview: (id: string, content: string, score: number) => request<{ok: boolean}>(`/activities/${encodeURIComponent(id)}/reviews`, 'POST', { content, score }, true),
   editReview: (id: string, content: string, score: number) => request<{ok: boolean}>(`/reviews/${encodeURIComponent(id)}/edit`, 'POST', { content, score }, true),
   deleteReview: (id: string) => request<{ok: boolean}>(`/reviews/${encodeURIComponent(id)}/delete`, 'POST', {}, true),
+  uploadWechatQr: (base64: string, mimeType: 'image/png' | 'image/jpeg') => request<WechatQr>('/members/me/wechat-qr', 'POST', { base64, mimeType }, true),
+  removeWechatQr: () => request<WechatQr>('/members/me/wechat-qr', 'DELETE', undefined, true),
   profileDetails: () => request<ProfileDetails>('/members/me/profile-details', 'GET', undefined, true),
   saveProfileDetails: (input: ProfileDetailsInput) => request<ProfileDetails>('/members/me/profile-details', 'POST', input, true),
   cardSettings: () => request<CardSettings>('/members/me/card-settings', 'GET', undefined, true),
