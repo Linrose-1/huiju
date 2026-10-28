@@ -1,9 +1,13 @@
 <script setup lang="ts">
+import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref } from 'vue'
 import { onShareAppMessage, onShareTimeline, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { navigate, routes } from '@/services/navigation'
 import { api, errorMessage } from '@/services/api'
+const adActive = ref(false), adRefresh = ref(0)
+onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
+
 const assistantText = ref('“学加”活动智能助手'), contentError = ref('')
 let contentGeneration = 0
 async function loadContent() {
@@ -35,18 +39,24 @@ onShareTimeline(shareTimeline)
         {{ shareBusy ? '正在识别…' : '重试分享' }}
       </button>
     </view>
-    <view class="hero">
-      <image
-        class="hero-image"
-        src="/static/huiju/campus.jpg"
-        mode="aspectFill"
-      />
-      <view class="hero-fade" />
-      <view class="hero-text">
-        <view class="hero-copy serif">{{ assistantText }}</view>
-        <view class="hero-sub">说出想法，帮你发起活动，也帮你找到想参加的活动</view>
+    <HomeAdvertising
+      placement="assistant"
+      :active="adActive"
+      :refresh="adRefresh"
+    >
+      <view class="hero">
+        <image
+          class="hero-image"
+          src="/static/huiju/campus.jpg"
+          mode="aspectFill"
+        />
+        <view class="hero-fade" />
+        <view class="hero-text">
+          <view class="hero-copy serif">{{ assistantText }}</view>
+          <view class="hero-sub">说出想法，帮你发起活动，也帮你找到想参加的活动</view>
+        </view>
       </view>
-    </view>
+    </HomeAdvertising>
     <view class="sheet">
       <view
         v-if="contentError"
@@ -111,7 +121,8 @@ onShareTimeline(shareTimeline)
   </view>
 </template>
 <style scoped>
-.hero{height:252rpx}
+.sheet{margin-top:0}
+.hero{height:375rpx}
 .hero-text{position:relative;padding:40rpx 38rpx 0}
 .hero-copy{font-size:40rpx;letter-spacing:1rpx;padding:0}
 .hero-sub{font-size:24rpx;color:#5c7268;margin-top:20rpx;letter-spacing:0;line-height:1.5}

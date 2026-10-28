@@ -194,3 +194,14 @@
 - POST /members/me/wechat-qr沿用base64/mimeType输入，只接收实际可解码PNG/JPG、最大2MB，立即保存本人图片引用；DELETE同路由移除本人引用。两者返回{wechatQrUrl}，不删除磁盘历史文件。
 - GET /members/:id/wechat-qr返回二进制，需Bearer；本人可查看，他人需完整会员且主人开启showWechatQr。每次重查权限与引用；关闭公开或移除后旧链接无权访问。响应private/no-store、nosniff。图片不挂在公开media路由，LOCAL_MEMBER_QR_DIRECTORY默认.local-uploads/member-wechat-qr。
 - 客户端仅向当前API环境的此固定路由发送鉴权，下载临时文件用于展示/点击放大；不会把Bearer发往任意图片URL。上传/下载/预览隔离换号、迟到结果。
+### 首页广告与介绍内容（0014）
+
+公开GET /advertising/ads?placement=activity|circle|assistant&offset=0&limit=20，返回items/total/hasMore，只含广告与介绍均已上架条目；按sortOrder、createdAt、id排序。GET /advertising/introductions/:id仅返回公开字段及展示图片，草稿/下架404。GET /advertising/background只返回imageUrl，不返回版本或源图字段。
+
+后台/admin/advertising提供ads与introductions分页查询、创建、按ID读取/PUT更新及POST :id/status；GET/PUT background；POST images。角色沿用AdminService，所有写操作核对Origin/CSRF并审计；更新与状态操作携带version，冲突409不覆盖他人修改。普通会员Bearer不能代替后台Cookie。
+
+图片purpose为source/wide/tall/detail，base64 PNG/JPG最大5MB、实际解码验证；wide强制3:1、tall强制2:1，去除元数据。原图通过/admin/advertising/images/:id鉴权读取，公开/advertising/images/:id拒绝source；本模块只接受已上传素材ID，不允许任意URL或会员私有媒体。上传JSON体积上限相应为8MB。源图与裁剪关系保留，后台管理员共用本模块素材池。
+
+0014迁移包含5张新表；2026-10-28已获单独授权在本机huiju执行，远程未执行，验收情况见实现日志。无删除业务接口、不物理删除历史图、不含排期/用户投放/审批/智米。
+
+2026-10-28比例调整：wide始终3:1、tall始终2:1；位置映射改为活动/助手使用tall，学友圈使用wide，我的背景校验wide。介绍封面仍校验tall，字段及接口不变。

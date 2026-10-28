@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
 import { onShareAppMessage, onShareTimeline, onShow, onHide, onPullDownRefresh, onReachBottom, onLoad, onUnload } from '@dcloudio/uni-app'
@@ -11,6 +12,10 @@ import { useSessionStore } from '@/stores/session'
 import { scanActivityCode } from '@/services/wechat'
 import { activityCodeTarget } from '@/services/activity-code'
 import RequestState from '@/components/base/RequestState.vue'
+const adActive = ref(false), adRefresh = ref(0)
+onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
+onPullDownRefresh(() => { adRefresh.value++ })
+
 const items = ref<Activity[]>([]), loading = ref(false), loadingMore = ref(false), hasMore = ref(false)
 const error = ref(''), moreError = ref(''), search = ref(''), tab = ref('最新')
 let generation = 0, offset = 0, searchTimer: ReturnType<typeof globalThis.setTimeout> | undefined
@@ -126,13 +131,20 @@ onShareTimeline(shareTimeline)
         {{ shareBusy ? '正在识别…' : '重试分享' }}
       </button>
     </view>
-    <view class="hero">
-      <image
-        class="hero-image"
-        src="/static/huiju/campus.jpg"
-        mode="aspectFill"
-      /><view class="hero-fade" /><view class="hero-copy serif">{{ activityText }}</view>
-    </view><view class="sheet">
+    <HomeAdvertising
+      placement="activity"
+      :active="adActive"
+      :refresh="adRefresh"
+    >
+      <view class="hero">
+        <image
+          class="hero-image"
+          src="/static/huiju/campus.jpg"
+          mode="aspectFill"
+        /><view class="hero-fade" /><view class="hero-copy serif">{{ activityText }}</view>
+      </view>
+    </HomeAdvertising>
+    <view class="sheet">
       <view
         v-if="contentError"
         class="error"
@@ -282,6 +294,8 @@ onShareTimeline(shareTimeline)
 </template>
 
 <style scoped>
+.sheet{margin-top:0}
+.hero{height:375rpx}
 .search{background:#f2f4f2;border-radius:12rpx;padding:0 22rpx;height:64rpx}.search input{font-size:28rpx}.tabs{margin:26rpx 6rpx 22rpx;gap:12rpx}.tab-group{gap:32rpx}.tab{position:relative;font-size:25rpx;padding:16rpx 0;color:#535654;white-space:nowrap}.tab.selected{font-weight:600;color:#10533c}.tab.selected::after{content:'';position:absolute;height:4rpx;width:34rpx;background:#166145;bottom:0;left:50%;transform:translateX(-50%);border-radius:5rpx}.create{font-size:23rpx!important;padding:13rpx 19rpx!important;white-space:nowrap}.create-content{display:flex;align-items:center;justify-content:center;gap:8rpx;height:34rpx}.create-symbol{position:relative;flex:none;width:34rpx;height:34rpx;border-radius:50%;background:#fff}.create-symbol-horizontal,.create-symbol-vertical{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#0b6847;border-radius:2rpx}.create-symbol-horizontal{width:17rpx;height:3rpx}.create-symbol-vertical{width:3rpx;height:17rpx}.create-text{display:block;height:34rpx;line-height:34rpx}.search .scan-button{display:flex;align-items:center;justify-content:center;gap:8rpx;flex-shrink:0;height:64rpx;min-width:112rpx;padding:0 0 0 14rpx;margin-left:6rpx;border-radius:0;border-left:1rpx solid #dce6df;background:transparent;color:#24684f;font-size:26rpx;line-height:64rpx}
 .activity-card{padding:16rpx;border:1rpx solid #e8e9e5;background:#fff;border-radius:20rpx;display:flex;gap:20rpx;margin-bottom:18rpx;position:relative;overflow:hidden;box-shadow:0 8rpx 28rpx #153f2910}
 .cover-wrap{position:relative;width:210rpx;flex:none}.cover{display:block;width:210rpx;height:100%;min-height:265rpx;border-radius:14rpx}.no-cover{background:linear-gradient(145deg,#c8dfd2,#eaf2e7);color:#416c55;font-size:27rpx;letter-spacing:2rpx;display:flex;align-items:center;justify-content:center}.cover-tag{position:absolute;top:12rpx;left:12rpx;z-index:2;font-size:22rpx;padding:5rpx 12rpx;box-shadow:0 3rpx 10rpx #0000001a}

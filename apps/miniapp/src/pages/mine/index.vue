@@ -9,6 +9,18 @@ import { bootstrapIdentity, switchLocalTestActor, getLocalTestActor, localTestAc
 const session = useSessionStore(), count = ref<number | null>(null), organizedCount = ref<number | null>(null), error = ref(''), loading = ref(false)
 const unreadCount = ref(0)
 const canEditContent = ref(false)
+const backgroundUrl = ref(''), backgroundError = ref(''), backgroundFailed = ref(false)
+let backgroundGeneration = 0
+async function loadBackground() {
+  const current = ++backgroundGeneration
+  backgroundError.value = ''; backgroundFailed.value = false; backgroundUrl.value = ''
+  try {
+    const result = await api.advertisingBackground()
+    if (current === backgroundGeneration) backgroundUrl.value = result.imageUrl || ''
+  } catch (e) { if (current === backgroundGeneration) backgroundError.value = errorMessage(e) }
+}
+onShow(loadBackground)
+onHide(() => { backgroundGeneration++ }); onUnload(() => { backgroundGeneration++ })
 const switching = ref(false), testActorLabel = ref(LOCAL_TEST ? getLocalTestActor().label : '')
 let active = false
 let generation = 0
@@ -86,8 +98,9 @@ onUnload(() => { active = false; generation++ })
     <view class="mine-hero">
       <image
         class="hero-image"
-        src="/static/huiju/campus.jpg"
+        :src="backgroundFailed ? '/static/huiju/campus.jpg' : mediaUrl(backgroundUrl) || '/static/huiju/campus.jpg'"
         mode="aspectFill"
+        @error="backgroundFailed = true"
       /><view class="mine-fade" /><view class="identity row">
         <view class="avatar portrait">
           <image
@@ -120,6 +133,18 @@ onUnload(() => { active = false; generation++ })
           </text>
         </button>
       </view>
+    </view>
+    <view
+      v-if="backgroundError || backgroundFailed"
+      class="background-retry"
+    >
+      背景暂未加载，已显示默认图片
+      <button
+        class="text-button"
+        @click="loadBackground"
+      >
+        重试
+      </button>
     </view>
     <view class="sheet mine-sheet">
       <view
@@ -293,23 +318,24 @@ onUnload(() => { active = false; generation++ })
   </view>
 </template>
 <style scoped>
+.background-retry{display:flex;align-items:center;justify-content:center;gap:10rpx;color:#63786b;font-size:24rpx}.background-retry .text-button{font-size:24rpx}
 .local-test-tools { padding: 20rpx; margin-bottom: 22rpx; border: 1rpx dashed #b4c9bc; border-radius: 16rpx; background: #f1f7f3; }
 .local-test-tools button { min-height: 88rpx; color: #17553f; }
 .notification-title { display: flex; align-items: center; gap: 12rpx; }
 .unread-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 34rpx; height: 34rpx; padding: 0 9rpx; border-radius: 18rpx; color: #fff; background: #dc3c3c; font-size: 22rpx; line-height: 1; font-weight: 500; }
 .entry-arrow { flex-shrink: 0; font-family: Arial, sans-serif; font-size: 32rpx; font-weight: 400; line-height: 1; color: #78837c; }
 .edit .entry-arrow { color: #275842; font-size: 30rpx; }
-.mine-hero { position: relative; height: 390rpx; overflow: hidden; background: #eaf2f1; }
+.mine-hero { position: relative; height: 250rpx; overflow: hidden; background: #eaf2f1; }
 .mine-fade { position: absolute; inset: 0; background: linear-gradient(180deg, #ffffffeb, #ffffffb8 30%, #ffffff08 85%); }
-.identity { position: relative; padding: 38rpx 34rpx; gap: 28rpx; align-items: flex-start; }
-.portrait { width: 148rpx; height: 148rpx; border: 2rpx solid #ffffffb3; }
+.identity { position: relative; padding: 24rpx 34rpx; gap: 24rpx; align-items: flex-start; }
+.portrait { width: 128rpx; height: 128rpx; border: 2rpx solid #ffffffb3; }
 .identity .grow { padding-top: 6rpx; }
-.name { margin: 6rpx 0 12rpx; padding-right: 164rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 40rpx; line-height: 1.25; color: #154e39; }
+.name { margin: 6rpx 0 8rpx; padding-right: 164rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 36rpx; line-height: 1.25; color: #154e39; }
 .member-number { font-size: 22rpx; line-height: 1.6; color: #717989; margin-bottom: 12rpx; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .complete { font-size: 24rpx; line-height: 1.5; color: #27634d; display: flex; align-items: center; gap: 10rpx; }
 .edit { display: flex; align-items: center; justify-content: center; gap: 6rpx; flex-shrink: 0; min-height: 88rpx; padding: 14rpx 22rpx; font-size: 24rpx; line-height: 1.4; background: #f0f7f3ed; color: #174e3d; border: 1rpx solid #d5e3db; white-space: nowrap; }
-.identity .edit { position: absolute; right: 32rpx; top: 38rpx; min-height: 88rpx; padding: 14rpx 18rpx; font-size: 23rpx; }
-.mine-sheet { margin-top: -20rpx; min-height: 65vh; padding: 26rpx 32rpx calc(32rpx + env(safe-area-inset-bottom)); border-radius: 46rpx 46rpx 0 0; background: #fdfdfc; }
+.identity .edit { position: absolute; right: 32rpx; top: 24rpx; min-height: 88rpx; padding: 14rpx 18rpx; font-size: 23rpx; }
+.mine-sheet { margin-top: 0; min-height: 65vh; padding: 26rpx 32rpx calc(32rpx + env(safe-area-inset-bottom)); border-radius: 46rpx 46rpx 0 0; background: #fdfdfc; }
 .namecard { min-height: 164rpx; padding: 28rpx 22rpx; border: 1rpx solid #e8e6df; border-radius: 16rpx; background: #fcfbf8; margin-bottom: 22rpx; gap: 18rpx; }
 .namecard-icon { position: relative; width: 142rpx; height: 108rpx; flex-shrink: 0; }
 .namecard-halo { position: absolute; right: 6rpx; top: 0; width: 80rpx; height: 80rpx; border-radius: 50%; background: #f1e4d1; }

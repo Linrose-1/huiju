@@ -21,7 +21,7 @@ export type CircleCategory = 'all' | 'park' | 'operation' | 'service' | 'store'
 export type EngagementQuery = { days: 7 | 30; behavior: 'all' | 'new' | 'converted' | 'browse' | 'participate' | 'register' | 'attend' | 'publish' | 'comment' | 'review' | 'inactive' | 'silent'; profile: 'all' | 'complete' | 'incomplete'; inviterId?: string; offset: number }
 type AdminSession = components['schemas']['AdminSessionDto']
 
-const client = createApiClient('')
+export const client = createApiClient('')
 export const session = reactive({ account: null as AdminAccount | null, csrfToken: '', epoch: 0, initialized: false })
 export const isSuperAdmin = computed(() => session.account?.role === 'super_admin')
 export function clearSession() {
@@ -45,7 +45,7 @@ const messages: Record<string, string> = {
   ADMIN_CSRF_REJECTED: '会话校验失败，请刷新页面后重试。',
 }
 type Result<T> = { data?: T; error?: unknown; response: Response }
-async function unwrap<T>(request: Promise<Result<T>>, epoch = session.epoch): Promise<T> {
+export async function unwrap<T>(request: Promise<Result<T>>, epoch = session.epoch): Promise<T> {
   let result: Result<T>
   try { result = await request } catch {
     if (epoch !== session.epoch) throw new StaleRequestError()
@@ -65,7 +65,7 @@ async function unwrap<T>(request: Promise<Result<T>>, epoch = session.epoch): Pr
   }
   return result.data
 }
-const options = () => ({ credentials: 'include' as const, headers: { 'X-CSRF-Token': session.csrfToken } })
+export const options = () => ({ credentials: 'include' as const, headers: { 'X-CSRF-Token': session.csrfToken } })
 const csrfHeader = () => ({ 'X-CSRF-Token': session.csrfToken })
 function acceptSession(value: AdminSession) {
   session.epoch += 1

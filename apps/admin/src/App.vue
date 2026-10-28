@@ -107,6 +107,9 @@ onMounted(restore)
         <router-link to="/content">
           运营文案
         </router-link>
+        <router-link to="/advertising">
+          首页广告
+        </router-link>
         <router-link to="/members">
           会员查询
         </router-link>

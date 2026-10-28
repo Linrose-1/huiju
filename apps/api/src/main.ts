@@ -7,7 +7,7 @@ import { createOpenApiDocument } from './openapi.js'
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
   app.setGlobalPrefix('api/v1')
-  app.useBodyParser('json', { limit: '3mb' })
+  app.useBodyParser('json', { limit: '8mb' })
 
   SwaggerModule.setup('api/docs', app, () => createOpenApiDocument(app))
 

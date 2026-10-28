@@ -1,5 +1,6 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL, NETWORK_DEBUG } from './environment'
+import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
 import type { ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
@@ -70,6 +71,9 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  advertising: (placement: 'activity' | 'circle' | 'assistant', offset = 0) => request<AdvertisingPublicAdList>(`/advertising/ads?placement=${placement}&offset=${offset}&limit=20`, 'GET', undefined, 'none'),
+  advertisingIntroduction: (id: string) => request<AdvertisingIntroduction>('/advertising/introductions/' + encodeURIComponent(id), 'GET', undefined, 'none'),
+  advertisingBackground: () => request<AdvertisingBackground>('/advertising/background', 'GET', undefined, 'none'),
   platformContent: () => request<import('./types').PlatformContent>('/platform/content'),
   savePlatformContent: (input: { activityText: string; assistantText: string }) => request<import('./types').PlatformContent>('/platform/content', 'POST', input, true),
   legalDocuments: () => request<import('./types').LegalDocuments>('/platform/legal', 'GET', undefined, 'none'),

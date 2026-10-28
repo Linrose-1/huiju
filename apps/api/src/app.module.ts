@@ -9,8 +9,9 @@ import { AdminModule } from './admin/admin.module.js'
 import { AiModule } from './ai/ai.module.js'
 import { CircleModule } from './circle/circle.module.js'
 import { PlatformModule } from './platform/platform.module.js'
+import { AdvertisingModule } from './advertising/advertising.module.js'
 @Module({
-  imports: [ActivitiesModule, FeedbackModule, AdminModule, AiModule, CircleModule, PlatformModule],
+  imports: [ActivitiesModule, FeedbackModule, AdminModule, AiModule, CircleModule, PlatformModule, AdvertisingModule],
   controllers: [HealthController],
   providers: [{provide:APP_FILTER,useClass:SafeExceptionFilter},{provide:APP_PIPE,useValue:new ValidationPipe({transform:true,whitelist:true,forbidNonWhitelisted:true})}],
 })

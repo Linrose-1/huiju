@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
 import { useSessionStore } from '@/stores/session'
@@ -10,6 +11,10 @@ import { mediaUrl } from '@/services/api/environment'
 import { useCircleList, circleCategories, categoryLabel, subtypeLabel, stateLabel } from '@/services/circle'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
+const adActive = ref(false), adRefresh = ref(0)
+onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
+onPullDownRefresh(() => { adRefresh.value++ })
+
 const category = ref('all'), filters = [{ key: 'all', label: '全部' }, ...circleCategories]
 const list = useCircleList<CirclePost>(offset => api.circlePosts({ offset, category: category.value }))
 const { items, loading, loadingMore, error, moreError, hasMore } = list
@@ -39,15 +44,21 @@ onShareTimeline(shareTimeline)
         {{ shareBusy ? '正在识别…' : '重试分享' }}
       </button>
     </view>
-    <view class="circle-home-hero">
-      <image
-        class="circle-home-hero-image"
-        src="/static/huiju/circle-park.jpg"
-        mode="aspectFill"
-      />
-      <view class="circle-home-hero-fade" />
-      <view class="circle-home-hero-copy serif"><view>连接园区伙伴，</view><view>共享资源机会</view><view class="circle-home-line" /><text>资源互通 · 合作共赢 · 园区更好</text></view>
-    </view>
+    <HomeAdvertising
+      placement="circle"
+      :active="adActive"
+      :refresh="adRefresh"
+    >
+      <view class="circle-home-hero">
+        <image
+          class="circle-home-hero-image"
+          src="/static/huiju/circle-park.jpg"
+          mode="aspectFill"
+        />
+        <view class="circle-home-hero-fade" />
+        <view class="circle-home-hero-copy serif"><view>连接园区伙伴，</view><view>共享资源机会</view><view class="circle-home-line" /><text>资源互通 · 合作共赢 · 园区更好</text></view>
+      </view>
+    </HomeAdvertising>
     <view class="circle-page">
       <view class="circle-chips">
         <view
@@ -131,5 +142,5 @@ onShareTimeline(shareTimeline)
 <style lang="scss">@import './circle.scss';</style>
 <style scoped>
 .circle-home-entry{line-height:1.45;text-align:left;font-weight:400}.circle-home-entry>view,.circle-home-entry>text{pointer-events:none}
-.circle-home-hero{position:relative;height:275rpx;overflow:hidden;background:#eaf4ed}.circle-home-hero-image{position:absolute;right:0;top:0;width:65%;height:100%}.circle-home-hero-fade{position:absolute;inset:0;background:linear-gradient(90deg,#f2f8f3 15%,#f2f8f3dd 45%,#f2f8f300 80%)}.circle-home-hero-copy{position:relative;font-size:40rpx;line-height:1.5;padding:24rpx 40rpx;color:#124b35;letter-spacing:2rpx}.circle-home-hero-copy text{font-family:sans-serif;font-weight:400;font-size:23rpx;color:#7a8980;letter-spacing:0}.circle-home-line{height:4rpx;width:64rpx;background:#cba260;margin:16rpx 0 12rpx}.circle-home-entries{display:flex;gap:16rpx;margin-bottom:24rpx}.circle-home-entry{flex:1;min-width:0;background:#fff;border-radius:18rpx;padding:19rpx 16rpx;display:flex;align-items:center;gap:14rpx}.circle-home-entry .circle-title{font-size:30rpx}.circle-home-symbol{width:64rpx;height:64rpx;flex-shrink:0;border-radius:50%;background:#18573f;color:#fff;font-size:49rpx;text-align:center;line-height:59rpx}.circle-home-symbol.gold{background:#d5b268;font-size:40rpx}.home-title{margin:14rpx 0 10rpx}.home-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.circle-home .circle-avatar{width:54rpx;height:54rpx}
+.circle-home-hero{position:relative;height:250rpx;overflow:hidden;background:#eaf4ed}.circle-home-hero-image{position:absolute;right:0;top:0;width:65%;height:100%}.circle-home-hero-fade{position:absolute;inset:0;background:linear-gradient(90deg,#f2f8f3 15%,#f2f8f3dd 45%,#f2f8f300 80%)}.circle-home-hero-copy{position:relative;font-size:40rpx;line-height:1.5;padding:24rpx 40rpx;color:#124b35;letter-spacing:2rpx}.circle-home-hero-copy text{font-family:sans-serif;font-weight:400;font-size:23rpx;color:#7a8980;letter-spacing:0}.circle-home-line{height:4rpx;width:64rpx;background:#cba260;margin:16rpx 0 12rpx}.circle-home-entries{display:flex;gap:16rpx;margin-bottom:24rpx}.circle-home-entry{flex:1;min-width:0;background:#fff;border-radius:18rpx;padding:19rpx 16rpx;display:flex;align-items:center;gap:14rpx}.circle-home-entry .circle-title{font-size:30rpx}.circle-home-symbol{width:64rpx;height:64rpx;flex-shrink:0;border-radius:50%;background:#18573f;color:#fff;font-size:49rpx;text-align:center;line-height:59rpx}.circle-home-symbol.gold{background:#d5b268;font-size:40rpx}.home-title{margin:14rpx 0 10rpx}.home-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.circle-home .circle-avatar{width:54rpx;height:54rpx}
 </style>

@@ -49,3 +49,7 @@ export type ActivityQuestionHistoryItem = components['schemas']['ActivityQuestio
 export type ActivityQuestionHistory = components['schemas']['ActivityQuestionHistoryDto']
 
 export type WechatQr = components['schemas']['WechatQrDto']
+
+export type AdvertisingPublicAdList = components['schemas']['AdvertisingPublicAdListDto']
+export type AdvertisingIntroduction = components['schemas']['AdvertisingPublicIntroductionDto']
+export type AdvertisingBackground = components['schemas']['AdvertisingPublicBackgroundDto']

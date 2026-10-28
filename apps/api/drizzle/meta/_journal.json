@@ -99,6 +99,13 @@
       "when": 1793125142567,
       "tag": "0013_member_wechat_card",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "5",
+      "when": 1793157787204,
+      "tag": "0014_advertising",
+      "breakpoints": true
     }
   ]
 }

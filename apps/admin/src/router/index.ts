@@ -11,6 +11,7 @@ import EngagementPage from '../modules/analytics/EngagementPage.vue'
 import ContentPage from '../modules/content/ContentPage.vue'
 import ActivitiesPage from '../modules/activities/ActivitiesPage.vue'
 import CirclePage from '../modules/circle/CirclePage.vue'
+import AdvertisingPage from '../modules/advertising/AdvertisingPage.vue'
 
 export { allowedRoute } from '../services/access'
 
@@ -20,6 +21,7 @@ export const router = createRouter({
     { path: '/analytics', component: AnalyticsPage },
     { path: '/engagement', component: EngagementPage },
     { path: '/content', component: ContentPage },
+    { path: '/advertising', component: AdvertisingPage },
     { path: '/login', component: LoginPage },
     { path: '/password', component: PasswordPage },
     { path: '/feedback', component: FeedbackPage },
