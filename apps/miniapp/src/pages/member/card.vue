@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage, refreshMember } from '@/services/api'
 import type { MemberCard as Card } from '@/services/api/types'
-import { routes, loginPage } from '@/services/navigation'
+import { routes, loginPage, navigate } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
 import MemberCard from '@/components/business/MemberCard.vue'
@@ -63,8 +63,20 @@ onUnload(() => { generation++; stop() })
       v-if="card"
       :card="card"
     />
+    <view
+      v-if="card && id !== session.member?.id"
+      class="connection-entry"
+    >
+      <button
+        class="secondary"
+        @click="navigate(routes.connection+'?id='+encodeURIComponent(id))"
+      >
+        查看我与 TA 的人脉链路
+      </button>
+    </view>
   </view>
 </template>
 <style scoped>
 .card-page{min-height:100vh;background:#eff7f3}.profile-gate{margin:40rpx 26rpx 0;text-align:center;background:#fff;border-radius:24rpx;padding:42rpx 30rpx}.gate-heading{font-size:32rpx;font-weight:600;margin:20rpx 0}.gate-copy{font-size:26rpx;color:#7b8982;line-height:1.7;margin-bottom:30rpx}.profile-gate button{font-size:29rpx;min-height:82rpx}
+.connection-entry{margin:0 26rpx;padding:24rpx 0 calc(32rpx + env(safe-area-inset-bottom))}.connection-entry .secondary{font-size:28rpx;min-height:88rpx}
 </style>

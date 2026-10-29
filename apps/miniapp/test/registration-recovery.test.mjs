@@ -39,7 +39,7 @@ function formHarness({ existing = null, lookupError = null } = {}) {
   const source = readFileSync(new URL('../src/pages/registration/form.vue', import.meta.url), 'utf8')
     .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const page = evaluate(source + '\nexport { load, submit, id, allowed, loading, error, phone };', {
-    '@dcloudio/uni-app': { onLoad() {}, onShow() {} },
+    '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onHide() {}, onUnload() {} },
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
     '@/services/presentation': { canEdit: () => true },
     '@/services/navigation': {

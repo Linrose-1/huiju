@@ -1,5 +1,7 @@
 import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL, NETWORK_DEBUG } from './environment'
+import type { SpecialInviteCode, SpecialInviteList, SpecialInviteVerified } from './types'
+import type { FellowList, ConnectionPath } from './types'
 import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
 import type { ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
@@ -71,6 +73,8 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  fellows: (query: ListQuery = {}) => request<FellowList>(`/members/me/fellows?${listQuery(query)}`, 'GET', undefined, true),
+  connectionPath: (id: string, cursor = 0) => request<ConnectionPath>(`/members/${encodeURIComponent(id)}/connection-path?cursor=${cursor}&limit=20`, 'GET', undefined, true),
   advertising: (placement: 'activity' | 'circle' | 'assistant', offset = 0) => request<AdvertisingPublicAdList>(`/advertising/ads?placement=${placement}&offset=${offset}&limit=20`, 'GET', undefined, 'none'),
   advertisingIntroduction: (id: string) => request<AdvertisingIntroduction>('/advertising/introductions/' + encodeURIComponent(id), 'GET', undefined, 'none'),
   advertisingBackground: () => request<AdvertisingBackground>('/advertising/background', 'GET', undefined, 'none'),
@@ -117,7 +121,10 @@ export const api = {
   publishActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/publish`, 'POST', {}, true),
   managedActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/manage`, 'GET', undefined, true),
   organizedActivities: (query: ListQuery = {}) => request<ManagedActivityList>(`/members/me/activities?${listQuery(query)}`, 'GET', undefined, true),
-  organizerRoster: (id: string, query: ListQuery = {}) => request<OrganizerRoster>(`/activities/${encodeURIComponent(id)}/registrations/manage?${listQuery(query)}`, 'GET', undefined, true),
+  organizerRoster: (id: string, query: ListQuery & { registrationId?: string } = {}) => request<OrganizerRoster>(`/activities/${encodeURIComponent(id)}/registrations/manage?${listQuery(query)}${query.registrationId ? '&registrationId=' + encodeURIComponent(query.registrationId) : ''}`, 'GET', undefined, true),
+  specialInviteCodes: (id: string, query: ListQuery = {}) => request<SpecialInviteList>(`/activities/${encodeURIComponent(id)}/special-invite-codes?${listQuery(query)}`, 'GET', undefined, true),
+  createSpecialInvite: (id: string, phone: string) => request<SpecialInviteCode>(`/activities/${encodeURIComponent(id)}/special-invite-codes`, 'POST', { phone }, true),
+  verifySpecialInvite: (id: string, code: string) => request<SpecialInviteVerified>(`/activities/${encodeURIComponent(id)}/special-invite-codes/verify`, 'POST', { code }, true),
   cancelActivity: (id: string, reason: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/cancel`, 'POST', { reason }, true),
   notifications: (query: ListQuery = {}) => request<NotificationList>(`/members/me/notifications?${listQuery(query)}`, 'GET', undefined, true),
   readNotification: (id: string) => request<{ok: boolean}>(`/members/me/notifications/${encodeURIComponent(id)}/read`, 'POST', {}, true),

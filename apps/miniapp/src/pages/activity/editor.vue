@@ -7,7 +7,10 @@ import { loginPage, navigate, requireProfile, routes } from '@/services/navigati
 import { mediaUrl } from '@/services/api/environment'
 import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
-import { chooseCover, chooseActivityLocation } from '@/services/wechat'
+import { chooseActivityImagePath, readActivityImage, chooseActivityLocation } from '@/services/wechat'
+import ActivityCoverCropper from '@/components/business/ActivityCoverCropper.vue'
+import ActivityImageGallery from '@/components/business/ActivityImageGallery.vue'
+import { activityImages, imageSlotsPayload } from '@/services/activity-images'
 import ActivityRichEditor from '@/components/business/ActivityRichEditor.vue'
 import { activityRichTextNodes } from '@/services/activity-rich-text'
 import type { ActivityRichValue } from '@/services/activity-rich-text'
@@ -24,7 +27,11 @@ const aiDraftApplied = ref(false)
 const aiDraftMissing = ref(false)
 let fromAi = false
 const source = ref<ManagedActivity | null>(null)
-const coverUrl = ref(''), coverError = ref(''), uploadingCover = ref(false)
+const coverUrl = ref(''), coverSourceUrl = ref(''), coverError = ref('')
+const extraImages = ref(['', '']), uploadingIndex = ref(-1)
+const cropper = ref<InstanceType<typeof ActivityCoverCropper> | null>(null)
+const imageSlots = computed(() => [coverUrl.value, ...extraImages.value])
+const previewImages = computed(() => imageSlots.value.filter(Boolean))
 const descriptionDelta = ref<ActivityRichValue['delta']>(null)
 const richValid = ref(true), locationError = ref(''), selectingLocation = ref(false)
 const registrationNotice = ref('')
@@ -45,7 +52,7 @@ const previewTime = computed(() => {
   return start && end ? activityTimeRangeWeekday(start, end) : '请补充活动时间'
 })
 const previewQuestionTypes = computed(() => [...new Set(questions.value.map(q => questionLabels[questionTypes.indexOf(q.type)]))].join('、'))
-watch([form, questions, coverUrl, descriptionDelta, registrationNotice, locationCoordinates], () => { reviewed.value = false }, { deep: true, flush: 'sync' })
+watch([form, questions, coverUrl, coverSourceUrl, extraImages, descriptionDelta, registrationNotice, locationCoordinates], () => { reviewed.value = false }, { deep: true, flush: 'sync' })
 const capacityLimited = ref(false)
 const editingQuestion = ref<DraftQuestion | null>(null)
 const questionError = ref('')
@@ -106,9 +113,9 @@ function reset() {
   richValid.value = true
   locationError.value = ''
   selectingLocation.value = false
-  coverUrl.value = ''
+  coverUrl.value = ''; coverSourceUrl.value = ''
+  extraImages.value = ['', '']; uploadingIndex.value = -1; cropper.value?.cancel()
   coverError.value = ''
-  uploadingCover.value = false
   step.value = 0
   reviewed.value = false
   dateField.value = null
@@ -164,7 +171,10 @@ async function load() {
       if (!initialized) {
         descriptionDelta.value = activity.descriptionDelta || null
         registrationNotice.value = activity.registrationNotice || ''
-        coverUrl.value = activity.coverUrl || ''
+        const images = activityImages(activity)
+        coverUrl.value = images[0] || ''
+        coverSourceUrl.value = activity.coverSourceUrl || ''
+        extraImages.value = [images[1] || '', images[2] || '']
         const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
         locationCoordinates.value = activity.locationLatitude != null && activity.locationLongitude != null ? { latitude: activity.locationLatitude, longitude: activity.locationLongitude } : null
@@ -202,7 +212,7 @@ function payload(): ActivityWriteInput {
   if (source.value?.lifecycle === 'published' && Date.parse(source.value.startsAt) <= Date.now()) {
     if (!form.consultationContact.trim()) throw new Error('请填写咨询联系方式')
     const activity = source.value
-    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
+    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, coverSourceUrl: activity.coverSourceUrl || null, imageUrls: activityImages(activity), location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
   if (!richValid.value || form.description.length > 10000) throw new Error('活动介绍格式无效或超过 10000 字，请调整后保存')
@@ -228,7 +238,7 @@ function payload(): ActivityWriteInput {
     if (options && (options.length < 1 || options.length > 100 || options.some(option => option.length > 200) || new Set(options).size !== options.length)) throw new Error(`第 ${index + 1} 题需填写 1–100 个不同选项，每行一个，每项不超过 200 字`)
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options }
   })
-  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null }
+  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null, coverSourceUrl: coverUrl.value ? coverSourceUrl.value || null : null, imageUrls: imageSlotsPayload(imageSlots.value) }
 }
 function updateDescription(value: ActivityRichValue) {
   if (busy.value || !editable.value || started.value) return
@@ -251,29 +261,45 @@ async function selectLocation() {
   } catch (e) { if (current()) locationError.value = errorMessage(e) }
   finally { if (current()) { busy.value = false; selectingLocation.value = false } }
 }
-async function changeCover() {
-  if (busy.value || loading.value || error.value || started.value || !editable.value || disposed) return
-  const request = ++generation, token = session.token, epoch = session.epoch
+async function changeImage(index: number, recrop = false) {
+  if (busy.value || started.value || !editable.value || !initialized) return
+  const request = generation, token = session.token, epoch = session.epoch
   const current = () => request === generation && !disposed && token === session.token && epoch === session.epoch
-  busy.value = true
-  uploadingCover.value = true
-  coverError.value = ''
+  busy.value = true; uploadingIndex.value = index; coverError.value = ''
   try {
-    const image = await chooseCover()
-    if (!image || !current()) return
+    const selectedPath = recrop ? mediaUrl(coverSourceUrl.value || coverUrl.value) : await chooseActivityImagePath()
+    if (!selectedPath || !current()) return
+    const path = index === 0 ? await cropper.value?.open(selectedPath) : selectedPath
+    if (!path || !current()) return
+    let nextSource = recrop ? coverSourceUrl.value || coverUrl.value : ''
+    if (index === 0 && !recrop) {
+      const original = await readActivityImage(selectedPath)
+      if (!current()) return
+      const uploadedSource = await api.uploadCover(original.base64, original.mimeType)
+      if (!current()) return
+      nextSource = uploadedSource.coverUrl
+    }
+    const image = await readActivityImage(path)
+    if (!current()) return
     const result = await api.uploadCover(image.base64, image.mimeType)
-    if (current()) coverUrl.value = result.coverUrl
+    if (current()) {
+      if (index === 0) { coverUrl.value = result.coverUrl; coverSourceUrl.value = nextSource }
+      else extraImages.value[index - 1] = result.coverUrl
+    }
   } catch (e) {
     if (current()) {
       coverError.value = errorMessage(e)
       if (e instanceof ApiError && (e.status === 401 || e.code === 'PROFILE_INCOMPLETE')) loginPage(target.value)
     }
-  } finally {
-    if (current()) { busy.value = false; uploadingCover.value = false }
-  }
+  } finally { if (current()) { busy.value = false; uploadingIndex.value = -1 } }
 }
-function previewCover() {
-  if (coverUrl.value) uni.previewImage({ urls: [mediaUrl(coverUrl.value)] })
+function removeImage(index: number) {
+  if (busy.value || started.value || !editable.value) return
+  if (index === 0) { coverUrl.value = ''; coverSourceUrl.value = '' } else extraImages.value[index - 1] = ''
+  coverError.value = ''
+}
+function previewCover(index = 0) {
+  if (imageSlots.value[index]) uni.previewImage({ current: mediaUrl(imageSlots.value[index]), urls: previewImages.value.map(mediaUrl) })
 }
 function setCapacityLimited(limited: boolean) {
   if (busy.value || !editable.value || started.value) return
@@ -418,7 +444,7 @@ async function submit(publish = false) {
   } finally { if (request === generation && !disposed) busy.value = false }
 }
 const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
-  clearQuestionHistory()
+  clearQuestionHistory(); cropper.value?.cancel()
   if (!formOwner || disposed) return
   generation++
   reset()
@@ -429,7 +455,7 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
 onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1' })
 onShow(load)
 onHide(clearQuestionHistory)
-onUnload(() => { clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
+onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
 </script>
 
 <template>
@@ -565,39 +591,67 @@ onUnload(() => { clearQuestionHistory(); disposed = true; generation++; stopSess
             :cursor-spacing="130"
           >
         </view>
-        <view class="form-card cover-card">
-          <view class="card-heading"><text>活动封面</text><text class="helper">上传高质量封面，建议尺寸 16:9</text></view>
-          <view class="cover-row">
-            <image
-              v-if="coverUrl"
-              class="cover-image"
-              :src="mediaUrl(coverUrl)"
-              mode="aspectFill"
-              @click="previewCover"
-            />
+        <view class="form-card activity-images-card">
+          <view class="card-heading"><text>活动图片</text><text class="helper">{{ previewImages.length }} / 3 · 选填</text></view>
+          <view class="activity-image-slots">
             <view
-              v-else
-              class="cover-empty"
+              v-for="(url, index) in imageSlots"
+              :key="index"
+              class="activity-image-slot"
             >
-              <uni-icons
-                type="image"
-                size="48rpx"
-                color="#8a96a7"
-              /><text>尚未设置封面</text><text class="cover-optional">选填</text>
+              <view
+                v-if="url"
+                class="activity-image-preview"
+                @click="previewCover(index)"
+              >
+                <image
+                  :src="mediaUrl(url)"
+                  :mode="index === 0 ? 'aspectFill' : 'aspectFit'"
+                /><text>{{ index === 0 ? '封面 · 5:4' : '图片 ' + (index + 1) }}</text>
+              </view>
+              <button
+                v-else
+                class="activity-image-add"
+                :disabled="busy || started || !editable"
+                :loading="uploadingIndex === index"
+                @click="changeImage(index)"
+              >
+                <text>＋</text><text>{{ index === 0 ? '添加封面' : '添加图片' }}</text>
+              </button>
+              <view
+                v-if="url"
+                class="activity-image-actions"
+              >
+                <button
+                  v-if="index === 0"
+                  :disabled="busy || started || !editable"
+                  @click="changeImage(0, true)"
+                >
+                  重裁
+                </button>
+                <button
+                  :disabled="busy || started || !editable"
+                  :loading="uploadingIndex === index"
+                  @click="changeImage(index)"
+                >
+                  替换
+                </button>
+                <button
+                  :disabled="busy || started || !editable"
+                  @click="removeImage(index)"
+                >
+                  移除
+                </button>
+              </view>
             </view>
-            <button
-              class="cover-button"
-              :disabled="busy || started || !editable"
-              :loading="uploadingCover"
-              @click="changeCover"
-            >
-              <uni-icons
-                type="camera"
-                size="42rpx"
-                color="#788599"
-              /><text>{{ uploadingCover ? '正在上传' : coverUrl ? '更换封面' : '上传封面' }}</text><text class="helper">PNG / JPG · 2 MB 内</text>
-            </button>
           </view>
+          <text class="helper image-rules">首张封面须裁剪为 5:4，后两张完整展示。PNG / JPG，每张 2 MB 内。</text>
+          <text
+            v-if="!coverUrl && extraImages.some(Boolean)"
+            class="image-warning"
+          >
+            请先设置封面，再保存活动图片；其他图片不会自动变为封面。
+          </text>
         </view>
         <view
           v-if="coverError"
@@ -949,21 +1003,15 @@ onUnload(() => { clearQuestionHistory(); disposed = true; generation++; stopSess
               />编辑
             </button>
           </view>
-          <image
-            v-if="coverUrl"
-            class="preview-cover"
-            :src="mediaUrl(coverUrl)"
-            mode="aspectFill"
+          <ActivityImageGallery
+            v-if="previewImages.length"
+            :urls="previewImages"
           />
           <view
             v-else
             class="preview-cover empty-cover"
           >
-            <uni-icons
-              type="image"
-              size="59rpx"
-              color="#7d9d90"
-            /><text>未设置活动封面</text>
+            <text>未设置活动封面</text>
           </view>
           <view class="preview-title">{{ form.title.trim() || '请补充活动标题' }}</view>
           <view class="preview-badges"><text class="preview-fee">{{ form.feeType === 'paid' ? '收费活动 · ¥' + (form.amount || '待填写') : form.feeType === 'free' ? '免费活动' : '费用待确认' }}</text><text class="preview-state">{{ source?.lifecycle === 'published' ? '已发布 · 修改预览' : '待发布' }}</text></view>
@@ -1353,13 +1401,14 @@ onUnload(() => { clearQuestionHistory(); disposed = true; generation++; stopSess
       </view>
     </view>
   </view>
+  <ActivityCoverCropper ref="cropper" />
 </template>
 <style scoped>
 .activity-editor{min-height:100vh;background:#f4f9f7;color:#111a2d;padding:20rpx 47rpx calc(106rpx + env(safe-area-inset-bottom));font-size:27rpx;line-height:1.45}
 .steps{display:flex;align-items:center;justify-content:space-between;gap:10rpx;height:72rpx;margin:0 55rpx 16rpx}.step{flex-shrink:0;white-space:nowrap;font-size:27rpx;font-weight:500;line-height:51rpx;padding:0 20rpx;background:transparent;color:#717b90;border-radius:30rpx}.step.current{background:linear-gradient(110deg,#318e6f,#135741);color:#fff}.step.completed{color:#197757}.last-step{padding-right:0}.step-line{height:2rpx;background:#55a891;flex:1;min-width:24rpx}.muted-line{background:#cbd2dd}
 .form-card{background:#fff;border-radius:11rpx;padding:17rpx 18rpx;margin-bottom:14rpx}.card-heading{display:flex;align-items:center;justify-content:space-between;gap:8rpx;font-size:30rpx;line-height:42rpx;font-weight:600;margin-bottom:10rpx}.helper{font-size:24rpx;color:#7b879d;font-weight:400;line-height:1.5}.required{margin-left:3rpx;margin-right:0;color:#ea2027}.field{display:block;background:linear-gradient(110deg,#f7f9fa,#f5f7f8);border:1rpx solid #edf0f3;border-radius:8rpx;min-height:66rpx;height:66rpx;line-height:66rpx;width:100%;padding:0 15rpx;font-size:27rpx;color:#172239}.field::placeholder,.description-input::placeholder{color:#8c96a8}
 .type-card{padding-top:14rpx;padding-bottom:15rpx}.type-card .card-heading{margin-bottom:17rpx}.activity-types{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:19rpx}.type-option{display:flex;align-items:flex-start;gap:14rpx;text-align:left;border:1rpx solid #e0e6ed;background:#fafbfc;border-radius:7rpx;padding:20rpx 17rpx;min-height:117rpx;font-size:27rpx;line-height:1.6}.type-option.selected{border-color:#298363;background:#f6faf8}.type-name{display:block;font-size:30rpx;font-weight:600;white-space:nowrap}.type-note{display:block;font-size:24rpx;color:#768399;white-space:nowrap;letter-spacing:-.35rpx}.radio-dot{width:19rpx;height:29rpx;border:1.5rpx solid #9aa5b7;border-radius:50%;margin-top:7rpx;flex-shrink:0}.selected .radio-dot{border:6rpx solid #2b8064}.paid-details{margin-top:17rpx}.amount-row{display:flex;flex-direction:column;gap:10rpx}.amount-label{font-size:27rpx;font-weight:600;color:#263c35}.amount-control{display:flex;align-items:center;gap:12rpx;min-height:78rpx;padding:0 20rpx;border:1rpx solid #d9e5e1;border-radius:10rpx;background:#f7faf8}.amount-currency{font-size:30rpx;font-weight:600;color:#2b8064}.amount-input{flex:1;min-width:0;height:78rpx;font-size:30rpx;color:#263c35}.amount-unit{flex:none;font-size:25rpx;color:#667c73;white-space:nowrap}.fee-hint,.lock-hint{margin-top:11rpx;font-size:23rpx}.title-card{padding-top:11rpx;padding-bottom:11rpx}
-.cover-card{padding-top:11rpx;padding-bottom:11rpx}.cover-row{display:grid;grid-template-columns:2.1fr 1fr;gap:13rpx}.cover-image,.cover-empty,.cover-button{height:191rpx;border-radius:7rpx;width:100%}.cover-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8rpx;background:#edf3f2;color:#7a8894}.cover-optional{font-size:21rpx;color:#99a4af}.cover-button[disabled]{background:#fafbfc;color:#788599;border:1rpx dashed #cfd7e2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5rpx;font-size:27rpx;line-height:1.4}.unavailable-label{font-size:20rpx;color:#97a0ad}
+.unavailable-label{font-size:20rpx;color:#97a0ad}
 .description-box{border:1rpx solid #e2e7ee;border-radius:8rpx;overflow:hidden}.format-toolbar{height:63rpx;display:flex;align-items:center;gap:26rpx;padding:0 20rpx;background:#f5f7f9;border-bottom:1rpx solid #e3e8ef;color:#8993a2;font-size:32rpx}.format-bold{font-weight:700}.format-italic{font-family:Georgia,serif;font-style:italic}.format-underline{text-decoration:underline}.toolbar-divider{width:1rpx;height:29rpx;background:#dfe5ed}.toolbar-note{font-size:20rpx;margin-left:auto;white-space:nowrap}.description-input{font-size:27rpx;padding:14rpx 15rpx;height:110rpx;min-height:110rpx;width:100%;line-height:1.6;background:#fcfdfd}
 .time-card{padding-top:12rpx;padding-bottom:12rpx}.event-times{display:flex;align-items:center;gap:20rpx}.time-control{display:flex;align-items:center;gap:12rpx;flex:1;min-width:0;background:#f6f8fa;border-radius:8rpx;padding:13rpx 16rpx;height:95rpx;text-align:left;font-size:27rpx}.time-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:3rpx;white-space:nowrap}.time-separator{color:#9ba7ba}.end-time{padding-left:18rpx}.time-control:first-child::before,.clock-icon{content:'';display:block;width:17rpx;height:26rpx;border:1.6rpx solid #172239;border-radius:50%;flex-shrink:0;background:linear-gradient(#172239,#172239) 50% 25% / 1.3rpx 6rpx no-repeat,linear-gradient(35deg,transparent 40%,#172239 42%,#172239 59%,transparent 62%) 70% 65% / 6rpx 4rpx no-repeat}
 .location-link{background:transparent;color:#14745a;border-radius:0;padding:0;font-size:26rpx;line-height:42rpx}.icon-field{display:flex;align-items:center;gap:23rpx}.icon-field input{width:0;flex:1;min-width:0;font-size:27rpx;line-height:66rpx;height:66rpx}.field-note{color:#7d899c;font-size:23rpx;margin:3rpx 0 0 61rpx;line-height:33rpx}.two-column{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9rpx}.two-column .form-card{min-width:0;padding:11rpx 16rpx 14rpx}.two-column .card-heading{margin-bottom:6rpx}.two-column .field{height:60rpx;min-height:60rpx;line-height:60rpx;padding:0 13rpx}.two-column .icon-field{gap:23rpx}.deadline-control{display:flex;align-items:center;gap:13rpx;white-space:nowrap}.deadline-control text{flex:1;text-align:left;font-size:26rpx;letter-spacing:-.6rpx}.contact-card{padding-top:7rpx;padding-bottom:7rpx}.contact-card .card-heading{margin-bottom:6rpx}
@@ -1374,6 +1423,7 @@ onUnload(() => { clearQuestionHistory(); disposed = true; generation++; stopSess
 @media(max-width:360px){.confirmation-page .steps{margin-left:35rpx;margin-right:35rpx}.review-agreement{font-size:23rpx;gap:6rpx}.review-footer .review-guidance{font-size:21rpx}.review-detail{gap:16rpx}}
 
 /* 微信模拟器验收尺寸：750rpx设计宽度，正文28rpx，触控区至少80rpx。 */
-.activity-editor{padding-left:28rpx;padding-right:28rpx;padding-bottom:calc(150rpx + env(safe-area-inset-bottom));font-size:28rpx}.steps,.settings-page .steps,.confirmation-page .steps{margin-left:0;margin-right:0;gap:10rpx;height:80rpx;margin-bottom:20rpx}.step{font-size:28rpx;line-height:56rpx;padding:0 18rpx}.last-step{padding-right:18rpx}.step-line{min-width:12rpx}.form-card,.settings-card,.review-card{padding:22rpx 24rpx;margin-bottom:18rpx;border-radius:18rpx}.card-heading,.settings-heading,.review-heading{font-size:30rpx;line-height:44rpx;margin-bottom:14rpx}.helper{font-size:24rpx}.field{min-height:80rpx;height:80rpx;line-height:80rpx;font-size:28rpx}.icon-field input{font-size:28rpx;height:80rpx;line-height:80rpx}.activity-types{gap:16rpx}.type-option{gap:12rpx;padding:18rpx 16rpx;min-height:132rpx}.type-name{font-size:30rpx;white-space:normal}.type-note{font-size:24rpx;white-space:normal;letter-spacing:0;line-height:1.5}.radio-dot{width:30rpx;height:30rpx;margin-top:8rpx}.selected .radio-dot{border-width:9rpx}.cover-card .card-heading{flex-wrap:wrap}.cover-image,.cover-empty,.cover-button{height:190rpx}.format-toolbar{gap:24rpx;padding:0 18rpx;min-height:64rpx}.toolbar-note{font-size:22rpx}.description-input{height:180rpx;min-height:180rpx;font-size:28rpx}.event-times{gap:10rpx}.time-control{height:112rpx;padding:12rpx;gap:8rpx;font-size:24rpx}.time-copy{white-space:normal;line-height:1.5}.time-control:first-child::before{display:none}.end-time{padding-left:14rpx}.time-separator{font-size:26rpx}.icon-field{gap:16rpx}.field-note{font-size:24rpx;line-height:36rpx;margin-left:0;margin-top:10rpx}.two-column{grid-template-columns:minmax(0,1fr);gap:0}.two-column .form-card{padding:18rpx 24rpx}.two-column .field{height:80rpx;min-height:80rpx;line-height:80rpx}.deadline-control text{font-size:28rpx;letter-spacing:0}.contact-card{padding:20rpx 24rpx}.editor-footer,.settings-page .editor-footer{padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom))}.editor-footer button{height:84rpx;line-height:84rpx;font-size:28rpx;padding:0 16rpx}.footer-actions{gap:16rpx}.arrow{font-size:30rpx;margin-left:4rpx}.settings-options{grid-template-columns:minmax(0,1fr);gap:16rpx}.settings-option{height:80rpx;font-size:28rpx;gap:18rpx}.settings-option .radio-dot{width:30rpx;height:30rpx}.setting-value{display:flex;align-items:center;gap:20rpx}.setting-value>.helper{flex-shrink:0;width:110rpx;margin:0}.setting-input{flex:1;min-width:0;height:80rpx;font-size:28rpx}.setting-input input{font-size:28rpx}.settings-date{font-size:26rpx}.settings-date text{letter-spacing:0}.settings-description{font-size:28rpx}.settings-note{font-size:24rpx;line-height:1.5;margin-top:12rpx}.registration-switch{width:92rpx;height:52rpx;flex-shrink:0}.registration-switch view{width:48rpx;height:48rpx}.help-button{width:28rpx;height:28rpx;line-height:24rpx;font-size:22rpx}.questions-card .settings-heading{flex-wrap:wrap}.sorting-note{font-size:24rpx;margin-left:0;font-weight:400}.question-row{height:112rpx;margin-bottom:8rpx}.question-handle,.fixed-handle{width:58rpx;height:110rpx}.question-open{height:110rpx;gap:8rpx}.question-title{font-size:28rpx;line-height:40rpx;gap:8rpx}.question-subtitle{font-size:24rpx;line-height:36rpx}.require-badge{font-size:22rpx;line-height:30rpx;padding:2rpx 10rpx}.system-badge{font-size:22rpx;padding:4rpx 8rpx;margin-right:8rpx}.delete-question{width:42rpx;height:80rpx;margin-left:10rpx}.add-question-row{height:80rpx;font-size:28rpx}.notice-input textarea{font-size:26rpx;height:104rpx;min-height:104rpx}.notice-input>text{font-size:22rpx}.notice-input{padding-bottom:38rpx}.notice-unavailable{font-size:22rpx}.preview-cover{height:280rpx}.preview-title{font-size:32rpx}.preview-meta,.preview-organizer{font-size:28rpx;line-height:42rpx}.preview-description{font-size:28rpx;line-height:1.7}.preview-badges text{font-size:26rpx;line-height:34rpx}.organizer-avatar{width:56rpx;height:56rpx}.review-detail{gap:18rpx;margin:16rpx 0}.review-label{font-size:28rpx;line-height:42rpx}.review-muted{font-size:26rpx;line-height:40rpx}.review-agreement{font-size:24rpx;line-height:36rpx;flex-wrap:wrap}.review-footer .review-checkbox{width:36rpx;height:36rpx;line-height:34rpx}.review-footer .review-guidance{font-size:24rpx;line-height:36rpx;height:36rpx}.confirmation-page{padding-bottom:calc(210rpx + env(safe-area-inset-bottom))}.date-sheet .field{font-size:28rpx;height:80rpx;line-height:80rpx}.date-sheet .question-options-input{height:220rpx;line-height:1.6}.date-actions button,.save-question{font-size:28rpx;padding:20rpx}.date-sheet-title{font-size:30rpx}.question-form-label,.question-form-options,.close-question{font-size:28rpx}
+.activity-editor{padding-left:28rpx;padding-right:28rpx;padding-bottom:calc(150rpx + env(safe-area-inset-bottom));font-size:28rpx}.steps,.settings-page .steps,.confirmation-page .steps{margin-left:0;margin-right:0;gap:10rpx;height:80rpx;margin-bottom:20rpx}.step{font-size:28rpx;line-height:56rpx;padding:0 18rpx}.last-step{padding-right:18rpx}.step-line{min-width:12rpx}.form-card,.settings-card,.review-card{padding:22rpx 24rpx;margin-bottom:18rpx;border-radius:18rpx}.card-heading,.settings-heading,.review-heading{font-size:30rpx;line-height:44rpx;margin-bottom:14rpx}.helper{font-size:24rpx}.field{min-height:80rpx;height:80rpx;line-height:80rpx;font-size:28rpx}.icon-field input{font-size:28rpx;height:80rpx;line-height:80rpx}.activity-types{gap:16rpx}.type-option{gap:12rpx;padding:18rpx 16rpx;min-height:132rpx}.type-name{font-size:30rpx;white-space:normal}.type-note{font-size:24rpx;white-space:normal;letter-spacing:0;line-height:1.5}.radio-dot{width:30rpx;height:30rpx;margin-top:8rpx}.selected .radio-dot{border-width:9rpx}.format-toolbar{gap:24rpx;padding:0 18rpx;min-height:64rpx}.toolbar-note{font-size:22rpx}.description-input{height:180rpx;min-height:180rpx;font-size:28rpx}.event-times{gap:10rpx}.time-control{height:112rpx;padding:12rpx;gap:8rpx;font-size:24rpx}.time-copy{white-space:normal;line-height:1.5}.time-control:first-child::before{display:none}.end-time{padding-left:14rpx}.time-separator{font-size:26rpx}.icon-field{gap:16rpx}.field-note{font-size:24rpx;line-height:36rpx;margin-left:0;margin-top:10rpx}.two-column{grid-template-columns:minmax(0,1fr);gap:0}.two-column .form-card{padding:18rpx 24rpx}.two-column .field{height:80rpx;min-height:80rpx;line-height:80rpx}.deadline-control text{font-size:28rpx;letter-spacing:0}.contact-card{padding:20rpx 24rpx}.editor-footer,.settings-page .editor-footer{padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom))}.editor-footer button{height:84rpx;line-height:84rpx;font-size:28rpx;padding:0 16rpx}.footer-actions{gap:16rpx}.arrow{font-size:30rpx;margin-left:4rpx}.settings-options{grid-template-columns:minmax(0,1fr);gap:16rpx}.settings-option{height:80rpx;font-size:28rpx;gap:18rpx}.settings-option .radio-dot{width:30rpx;height:30rpx}.setting-value{display:flex;align-items:center;gap:20rpx}.setting-value>.helper{flex-shrink:0;width:110rpx;margin:0}.setting-input{flex:1;min-width:0;height:80rpx;font-size:28rpx}.setting-input input{font-size:28rpx}.settings-date{font-size:26rpx}.settings-date text{letter-spacing:0}.settings-description{font-size:28rpx}.settings-note{font-size:24rpx;line-height:1.5;margin-top:12rpx}.registration-switch{width:92rpx;height:52rpx;flex-shrink:0}.registration-switch view{width:48rpx;height:48rpx}.help-button{width:28rpx;height:28rpx;line-height:24rpx;font-size:22rpx}.questions-card .settings-heading{flex-wrap:wrap}.sorting-note{font-size:24rpx;margin-left:0;font-weight:400}.question-row{height:112rpx;margin-bottom:8rpx}.question-handle,.fixed-handle{width:58rpx;height:110rpx}.question-open{height:110rpx;gap:8rpx}.question-title{font-size:28rpx;line-height:40rpx;gap:8rpx}.question-subtitle{font-size:24rpx;line-height:36rpx}.require-badge{font-size:22rpx;line-height:30rpx;padding:2rpx 10rpx}.system-badge{font-size:22rpx;padding:4rpx 8rpx;margin-right:8rpx}.delete-question{width:42rpx;height:80rpx;margin-left:10rpx}.add-question-row{height:80rpx;font-size:28rpx}.notice-input textarea{font-size:26rpx;height:104rpx;min-height:104rpx}.notice-input>text{font-size:22rpx}.notice-input{padding-bottom:38rpx}.notice-unavailable{font-size:22rpx}.preview-cover{height:280rpx}.preview-title{font-size:32rpx}.preview-meta,.preview-organizer{font-size:28rpx;line-height:42rpx}.preview-description{font-size:28rpx;line-height:1.7}.preview-badges text{font-size:26rpx;line-height:34rpx}.organizer-avatar{width:56rpx;height:56rpx}.review-detail{gap:18rpx;margin:16rpx 0}.review-label{font-size:28rpx;line-height:42rpx}.review-muted{font-size:26rpx;line-height:40rpx}.review-agreement{font-size:24rpx;line-height:36rpx;flex-wrap:wrap}.review-footer .review-checkbox{width:36rpx;height:36rpx;line-height:34rpx}.review-footer .review-guidance{font-size:24rpx;line-height:36rpx;height:36rpx}.confirmation-page{padding-bottom:calc(210rpx + env(safe-area-inset-bottom))}.date-sheet .field{font-size:28rpx;height:80rpx;line-height:80rpx}.date-sheet .question-options-input{height:220rpx;line-height:1.6}.date-actions button,.save-question{font-size:28rpx;padding:20rpx}.date-sheet-title{font-size:30rpx}.question-form-label,.question-form-options,.close-question{font-size:28rpx}
 .question-presets{display:flex;flex-wrap:wrap;gap:12rpx;margin:12rpx 0 24rpx}.preset-button,.phone-included{font-size:24rpx;line-height:36rpx;padding:12rpx 18rpx;border-radius:10rpx;background:#edf7f1;color:#1d654e}.phone-included{background:#f1f3f4;color:#738379}.question-history{border:1rpx solid #dbe8e0;border-radius:12rpx;margin:12rpx 0 20rpx;background:#f8fcfa}.history-heading{display:flex;align-items:center;justify-content:space-between;padding:8rpx 16rpx;font-size:24rpx;color:#657a70}.history-scroll{max-height:280rpx;height:280rpx}.history-item{display:flex;flex-wrap:wrap;align-items:center;gap:12rpx;width:100%;padding:16rpx;text-align:left;background:transparent;border-radius:0;border-top:1rpx solid #e4ede7;font-size:26rpx;line-height:1.5}.history-item>text:first-child{flex:1;min-width:0;overflow-wrap:anywhere}.history-type{font-size:22rpx;color:#738379}.history-options{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:22rpx;color:#738379}.history-action{background:transparent;color:#1d654e;font-size:24rpx;padding:10rpx 16rpx;line-height:36rpx}.history-state{display:block;padding:18rpx;font-size:24rpx;line-height:1.5;color:#738379}
+.activity-image-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx}.activity-image-preview{position:relative;height:170rpx;background:#eaf0ec;border-radius:10rpx;overflow:hidden}.activity-image-preview image{height:100%;width:100%}.activity-image-preview>text{position:absolute;top:6rpx;left:6rpx;background:#18583ede;color:white;font-size:20rpx;padding:3rpx 7rpx;border-radius:5rpx}.activity-image-add{height:170rpx;width:100%;border:1rpx dashed #bfd2c6;background:#f4f9f6;color:#286448;border-radius:10rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24rpx}.activity-image-add>text:first-child{font-size:40rpx}.activity-image-actions{display:flex;justify-content:space-between;margin-top:8rpx;gap:2rpx}.activity-image-actions button{padding:10rpx 2rpx;background:transparent;font-size:22rpx;color:#286448;line-height:1.5}.image-rules{display:block;margin-top:18rpx;line-height:1.7}.image-warning{display:block;color:#b14e32;font-size:24rpx;margin-top:12rpx}
 </style>

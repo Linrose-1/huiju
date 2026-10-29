@@ -98,6 +98,10 @@
       }
     },
     {
+      "path": "pages/activity/special-invites",
+      "style": { "navigationBarTitleText": "免费特邀码", "enablePullDownRefresh": true }
+    },
+    {
       "path": "pages/activity/manage",
       "style": {
         "enablePullDownRefresh": true,
@@ -141,6 +145,14 @@
       "style": {
         "navigationBarTitleText": "会员名片"
       }
+    },
+    {
+      "path": "pages/member/fellows",
+      "style": { "navigationBarTitleText": "我的学友", "enablePullDownRefresh": true }
+    },
+    {
+      "path": "pages/member/connection",
+      "style": { "navigationBarTitleText": "人脉链路", "enablePullDownRefresh": true }
     },
     {
       "path": "pages/circle/index",

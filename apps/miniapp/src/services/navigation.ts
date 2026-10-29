@@ -8,10 +8,11 @@ export const routes = {
   circle: '/pages/circle/index', circleDetail: '/pages/circle/detail', circleEditor: '/pages/circle/editor', circleMine: '/pages/circle/mine', circleIntents: '/pages/circle/intents',
   feedback: '/pages/activity/feedback',
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',
+  fellows: '/pages/member/fellows', connection: '/pages/member/connection',
   invitation: '/pages/invitation/index',
   activityDraft: '/pages/assistant/activity-draft',
   activitySearch: '/pages/assistant/activity-search',
-  editor: '/pages/activity/editor', manage: '/pages/activity/manage', organizedActivities: '/pages/activity/organized', notifications: '/pages/notification/index',
+  editor: '/pages/activity/editor', manage: '/pages/activity/manage', specialInvites: '/pages/activity/special-invites', organizedActivities: '/pages/activity/organized', notifications: '/pages/notification/index',
   activity: '/pages/activity/index', assistant: '/pages/assistant/index', mine: '/pages/mine/index',
   login: '/pages/login/index', detail: '/pages/activity/detail', form: '/pages/registration/form', result: '/pages/registration/detail', registrations: '/pages/registration/index'
 }
@@ -34,6 +35,12 @@ export function loginPage(returnTo = '') {
   // 替换尚不能使用的表单页；返回时回到浏览页，避免 onShow 再次弹回完善页。
   const replace = [routes.editor, routes.form, routes.circleEditor].some(path => current === path && returnTo.split('?')[0] === path)
   navigate(routes.login + (returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''), replace)
+}
+export function returnToMemberCard(id: string) {
+  const previous = getCurrentPages().slice(-2)[0] as { route?: string; options?: Record<string,string> } | undefined
+  if (previous?.route === routes.memberCard.slice(1) && previous.options?.id === id) uni.navigateBack()
+  else if (id) navigate(routes.memberCard+'?id='+encodeURIComponent(id),true)
+  else uni.navigateBack()
 }
 export async function requireLogin(): Promise<boolean> {
   await bootstrapIdentity()

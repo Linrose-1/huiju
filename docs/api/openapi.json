@@ -1540,6 +1540,15 @@
             }
           },
           {
+            "name": "registrationId",
+            "required": false,
+            "in": "query",
+            "description": "仅发起人管理名单按报名ID定位，不改变权限",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "status",
             "required": false,
             "in": "query",
@@ -2040,6 +2049,191 @@
         ],
         "tags": [
           "活动阅读"
+        ]
+      }
+    },
+    "/api/v1/activities/{id}/special-invite-codes": {
+      "post": {
+        "operationId": "SpecialInviteController_create",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecialInviteCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialInviteCodeDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "special-invites"
+        ]
+      },
+      "get": {
+        "operationId": "SpecialInviteController_list",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "all",
+              "type": "string",
+              "enum": [
+                "all",
+                "unused",
+                "used",
+                "expired",
+                "paused"
+              ]
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialInviteListDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "special-invites"
+        ]
+      }
+    },
+    "/api/v1/activities/{id}/special-invite-codes/verify": {
+      "post": {
+        "operationId": "SpecialInviteController_verify",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpecialInviteVerifyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialInviteVerifiedDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "special-invites"
         ]
       }
     },
@@ -3814,6 +4008,127 @@
         ],
         "tags": [
           "会员资料与名片"
+        ]
+      }
+    },
+    "/api/v1/members/me/fellows": {
+      "get": {
+        "operationId": "FellowsController_list",
+        "parameters": [
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FellowListDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "fellows"
+        ]
+      }
+    },
+    "/api/v1/members/{id}/connection-path": {
+      "get": {
+        "operationId": "FellowsController_path",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionPathDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "fellows"
         ]
       }
     },
@@ -11426,6 +11741,13 @@
             "type": "string",
             "nullable": true
           },
+          "imageUrls": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "location": {
             "type": "string"
           },
@@ -11500,6 +11822,7 @@
           "title",
           "description",
           "coverUrl",
+          "imageUrls",
           "location",
           "startsAt",
           "endsAt",
@@ -11582,6 +11905,13 @@
       "RegistrationDto": {
         "type": "object",
         "properties": {
+          "feeQualification": {
+            "type": "string",
+            "enum": [
+              "ordinary",
+              "invited_free"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -11613,6 +11943,7 @@
           }
         },
         "required": [
+          "feeQualification",
           "id",
           "activityId",
           "status",
@@ -11660,6 +11991,13 @@
       "MyRegistrationDto": {
         "type": "object",
         "properties": {
+          "feeQualification": {
+            "type": "string",
+            "enum": [
+              "ordinary",
+              "invited_free"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -11694,6 +12032,7 @@
           }
         },
         "required": [
+          "feeQualification",
           "id",
           "activityId",
           "status",
@@ -11737,6 +12076,9 @@
       "RegistrationInput": {
         "type": "object",
         "properties": {
+          "specialInviteCode": {
+            "type": "string"
+          },
           "recommendationToken": {
             "type": "string"
           },
@@ -11860,6 +12202,19 @@
             "type": "string",
             "nullable": true
           },
+          "imageUrls": {
+            "maxItems": 3,
+            "description": "有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverSourceUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "本人上传的封面原图，用于再次裁剪；清空封面时同步清空"
+          },
           "location": {
             "type": "string"
           },
@@ -11967,6 +12322,13 @@
             "type": "string",
             "nullable": true
           },
+          "imageUrls": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "location": {
             "type": "string"
           },
@@ -12034,6 +12396,10 @@
               "$ref": "#/components/schemas/QuestionDto"
             }
           },
+          "coverSourceUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "lifecycle": {
             "type": "string",
             "enum": [
@@ -12059,6 +12425,7 @@
           "title",
           "description",
           "coverUrl",
+          "imageUrls",
           "location",
           "startsAt",
           "endsAt",
@@ -12071,6 +12438,7 @@
           "registrationState",
           "cancellationReason",
           "questions",
+          "coverSourceUrl",
           "lifecycle",
           "moderation",
           "hasRegistrationEver"
@@ -12152,6 +12520,13 @@
       "OrganizerRegistrationDto": {
         "type": "object",
         "properties": {
+          "feeQualification": {
+            "type": "string",
+            "enum": [
+              "ordinary",
+              "invited_free"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -12193,6 +12568,7 @@
           }
         },
         "required": [
+          "feeQualification",
           "id",
           "activityId",
           "status",
@@ -12363,6 +12739,116 @@
           "views",
           "visitors",
           "conversionRate"
+        ]
+      },
+      "SpecialInviteCreateInput": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "SpecialInviteCodeDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "maskedPhone": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unused",
+              "used",
+              "expired",
+              "paused"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "usedAt": {
+            "type": "string",
+            "nullable": true
+          },
+          "registrationId": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "maskedPhone",
+          "status",
+          "createdAt",
+          "expiresAt",
+          "usedAt",
+          "registrationId"
+        ]
+      },
+      "SpecialInviteListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpecialInviteCodeDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "hasMore"
+        ]
+      },
+      "SpecialInviteVerifyInput": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "SpecialInviteVerifiedDto": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "maskedPhone": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "valid",
+          "maskedPhone",
+          "expiresAt"
         ]
       },
       "WechatIdentityInput": {
@@ -12687,6 +13173,137 @@
         "required": [
           "avatarUrl",
           "displayName"
+        ]
+      },
+      "FellowSummaryDto": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "canOpenCard": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "memberId",
+          "displayName",
+          "avatarUrl",
+          "canOpenCard"
+        ]
+      },
+      "FellowListDto": {
+        "type": "object",
+        "properties": {
+          "inviter": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FellowSummaryDto"
+              }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FellowSummaryDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "inviter",
+          "items",
+          "total",
+          "hasMore"
+        ]
+      },
+      "ConnectionNodeDto": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number"
+          },
+          "member": {
+            "$ref": "#/components/schemas/FellowSummaryDto"
+          }
+        },
+        "required": [
+          "index",
+          "member"
+        ]
+      },
+      "ConnectionEdgeDto": {
+        "type": "object",
+        "properties": {
+          "fromIndex": {
+            "type": "number",
+            "description": "真实邀请人的绝对节点索引"
+          },
+          "toIndex": {
+            "type": "number",
+            "description": "真实受邀人的绝对节点索引"
+          }
+        },
+        "required": [
+          "fromIndex",
+          "toIndex"
+        ]
+      },
+      "ConnectionPathDto": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/FellowSummaryDto"
+          },
+          "target": {
+            "$ref": "#/components/schemas/FellowSummaryDto"
+          },
+          "connected": {
+            "type": "boolean"
+          },
+          "totalNodes": {
+            "type": "number"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionNodeDto"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionEdgeDto"
+            }
+          },
+          "nextCursor": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "source",
+          "target",
+          "connected",
+          "totalNodes",
+          "nodes",
+          "edges",
+          "nextCursor"
         ]
       },
       "NotificationDto": {

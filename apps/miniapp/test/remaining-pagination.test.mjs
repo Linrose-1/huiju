@@ -29,7 +29,7 @@ function harness(t, path) {
     '@/services/api/environment': {}, '@/services/presentation': {},
   }
   const manage = path === 'activity/manage', notification = path === 'notification/index'
-  const extra = manage ? 'load,loadRoster,selectFilter,roster,rosterMoreError,attendanceCount,activeCount,retryRosterMore'
+  const extra = manage ? 'load,loadRoster,selectFilter,roster,rosterMoreError,attendanceCount,activeCount,retryRosterMore,targetRegistration,showAllRegistrations,expanded'
     : notification ? 'load,more,items,moreError,retryMore' : 'load,more,items,moreError,retryMore,selectFilter,filters'
   const source = readFileSync(new URL('../src/pages/' + path + '.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const code = ts.transpileModule(source + '\nexport {' + extra + '};', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -40,6 +40,20 @@ function harness(t, path) {
     error: manage ? page.rosterMoreError : page.moreError, retry: manage ? page.retryRosterMore : page.retryMore }
 }
 const response = (items, hasMore = true) => ({ items, hasMore, counts, total: 125, activeCount: 103, attendedCount: 81 })
+
+test('invite record entry scopes roster by registration and returning to all resets query', async t => {
+  const h = harness(t, 'activity/manage')
+  h.hooks.onLoad({id:'activity-a',registrationId:'record-a'})
+  const first = h.page.load()
+  assert.equal(h.requests[0].query.registrationId,'record-a')
+  assert.equal(h.requests[0].query.status,'all')
+  h.requests[0].resolve(response([{id:'record-a',status:'cancelled'}],false)); await first
+  assert.equal(h.page.expanded.value,'record-a')
+  h.page.showAllRegistrations()
+  assert.equal(h.requests[1].query.registrationId,undefined)
+  assert.equal(h.requests[1].query.offset,0)
+  h.requests[1].resolve(response([],false)); await setImmediate()
+})
 
 for (const path of ['activity/organized', 'registration/index', 'notification/index', 'activity/manage']) {
   test(path + ': appends, deduplicates, preserves first page on failure, retries same raw offset and stops at end', async t => {

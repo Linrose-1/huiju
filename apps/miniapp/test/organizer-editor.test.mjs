@@ -1,3 +1,4 @@
+import activityImages from './activity-images-fixture.mjs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -40,9 +41,10 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
   const dependencies = {
     '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onHide() {}, onUnload(callback) { onUnload = callback } },
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
+    '@/services/activity-images': activityImages,
     '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/presentation': { feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
-    '@/services/wechat': { chooseCover, chooseActivityLocation },
+    '@/services/wechat': { chooseActivityImagePath: chooseCover, readActivityImage: async image => image, chooseActivityLocation },
     '@/services/api/environment': { mediaUrl: value => value },
     '@/services/navigation': {
       routes: { editor: '/pages/activity/editor', manage: '/pages/activity/manage' },
@@ -50,7 +52,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeCover, coverUrl, coverError, uploadingCover, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -58,6 +60,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     name => name in dependencies ? dependencies[name] : require(name), page,
     { getSystemInfoSync: () => ({ windowWidth: 375 }), pageScrollTo() {}, showModal: options => options.success({ confirm: true }) }, DateClass,
   )
+  page.cropper.value = { open: async path => path, cancel() {} }
   function fill() {
     Object.assign(page.form, { title: '交流活动', description: '一起交流', location: '会议室', consultationContact: '组织者微信', startDate: '2099-10-01', startTime: '09:00', endDate: '2099-10-01', endTime: '11:00' })
   }
@@ -342,13 +345,13 @@ test('cover uploads persist in payload, invalidate review and preserve previous 
     uploadCover: async () => { if (mode === 'failure') throw new Error('上传失败'); return { coverUrl: '/api/v1/media/covers/new.png' } },
   } })
   await h.page.load(); h.fill(); h.page.reviewed.value = true
-  await h.page.changeCover()
+  await h.page.changeImage(0)
   assert.equal(h.page.payload().coverUrl, '/api/v1/media/covers/new.png')
   assert.equal(h.page.reviewed.value, false)
-  mode = 'failure'; await h.page.changeCover()
+  mode = 'failure'; await h.page.changeImage(0)
   assert.equal(h.page.coverError.value, '上传失败')
   assert.equal(h.page.coverUrl.value, '/api/v1/media/covers/new.png')
-  mode = 'cancel'; await h.page.changeCover()
+  mode = 'cancel'; await h.page.changeImage(0)
   assert.equal(h.page.coverError.value, '')
   assert.equal(h.page.busy.value, false)
   await h.page.submit()
@@ -364,8 +367,8 @@ test('cover selection cannot upload after identity changes; late upload cannot r
       uploadCover: () => { uploads++; return pending.promise },
     } })
     await h.page.load()
-    const operation = h.page.changeCover()
-    await Promise.resolve()
+    const operation = h.page.changeImage(0)
+    await setImmediate()
     h.session.epoch++
     pending.resolve(pendingAt === 'selection' ? { base64: 'image', mimeType: 'image/png' } : { coverUrl: '/old.png' })
     await operation
@@ -475,5 +478,86 @@ test('history paginates, retains earlier entries on failure, retries and ignores
   requests[4].resolve({items:[{prompt:'旧账号',type:'short_text',options:null}],hasMore:false}); await switched
   assert.equal(h.page.historyItems.value.length, 0)
   assert.equal(h.page.historyOpen.value, false)
+  h.unload()
+})
+
+
+test('activity image slots keep extras after cover removal and block save until a new cover is cropped', async () => {
+  const h = harness({ record: activity({ coverUrl: '/old', imageUrls: ['/old','/second','/third'] }) })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  assert.deepEqual(h.page.payload().imageUrls, ['/old','/second','/third'])
+  h.page.removeImage(0)
+  assert.deepEqual([...h.page.extraImages.value], ['/second','/third'])
+  assert.throws(() => h.page.payload(), /封面/)
+  await h.page.submit(); assert.equal(h.updates.length, 0)
+  h.page.coverUrl.value = '/new'
+  h.page.removeImage(1)
+  assert.deepEqual(h.page.payload().imageUrls, ['/new','/third'])
+  h.unload()
+})
+
+test('crop cancel and failed secondary upload preserve every existing image and form field', async () => {
+  let uploads = 0
+  const h = harness({ record: activity({ coverUrl: '/old', imageUrls: ['/old','/second'] }), chooseCover: async () => 'local-image', apiOverrides: { uploadCover: async () => { uploads++; throw new Error('上传失败') } } })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  h.page.cropper.value.open = async () => null
+  await h.page.changeImage(0)
+  assert.equal(uploads, 0)
+  assert.deepEqual(h.page.payload().imageUrls, ['/old','/second'])
+  await h.page.changeImage(2)
+  assert.equal(uploads, 1)
+  assert.equal(h.page.form.title, '交流活动')
+  assert.deepEqual(h.page.payload().imageUrls, ['/old','/second'])
+  assert.equal(h.page.busy.value, false)
+  h.unload()
+})
+
+
+test('original and cropped cover replace together, second upload failure preserves both previous URLs', async () => {
+  let uploads = 0, failCrop = true
+  const h = harness({ record: activity({ coverUrl: '/old-cover', coverSourceUrl: '/old-source', imageUrls: ['/old-cover','/second'] }), chooseCover: async () => ({ base64: 'original', mimeType: 'image/png' }), apiOverrides: {
+    uploadCover: async base64 => { uploads++; if (base64 === 'cropped' && failCrop) throw new Error('裁剪图上传失败'); return { coverUrl: '/' + base64 } },
+  } })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  h.page.cropper.value.open = async () => ({ base64: 'cropped', mimeType: 'image/jpeg' })
+  await h.page.changeImage(0)
+  assert.equal(uploads, 2)
+  assert.equal(h.page.coverUrl.value, '/old-cover')
+  assert.equal(h.page.coverSourceUrl.value, '/old-source')
+  assert.deepEqual(h.page.payload().imageUrls, ['/old-cover','/second'])
+  failCrop = false; await h.page.changeImage(0)
+  assert.equal(h.page.coverUrl.value, '/cropped')
+  assert.equal(h.page.payload().coverSourceUrl, '/original')
+  h.page.removeImage(0)
+  assert.equal(h.page.coverSourceUrl.value, '')
+  h.unload()
+})
+
+test('recrop reuses stored original without uploading it again; legacy falls back to existing cover', async () => {
+  for (const source of ['/original', null]) {
+    const paths = [], uploads = []
+    const h = harness({ record: activity({ coverUrl: '/saved-cover', coverSourceUrl: source }), apiOverrides: { uploadCover: async base64 => { uploads.push(base64); return { coverUrl: '/new-crop' } } } })
+    h.page.id.value = 'activity-a'; await h.page.load()
+    h.page.cropper.value.open = async path => { paths.push(path); return { base64: 'cropped', mimeType: 'image/jpeg' } }
+    await h.page.changeImage(0, true)
+    assert.deepEqual(paths, [source || '/saved-cover'])
+    assert.deepEqual(uploads, ['cropped'])
+    assert.equal(h.page.payload().coverSourceUrl, source || '/saved-cover')
+    h.unload()
+  }
+})
+
+test('identity change between original and crop uploads discards source and skips crop upload', async () => {
+  const pending = deferred(); let uploads = 0
+  const h = harness({ chooseCover: async () => ({ base64: 'original', mimeType: 'image/png' }), apiOverrides: { uploadCover: () => { uploads++; return pending.promise } } })
+  await h.page.load()
+  const operation = h.page.changeImage(0)
+  await setImmediate()
+  h.session.epoch++
+  pending.resolve({ coverUrl:'/late-source' })
+  await operation
+  assert.equal(uploads, 1)
+  assert.equal(h.page.coverUrl.value, '')
+  assert.equal(h.page.coverSourceUrl.value, '')
   h.unload()
 })

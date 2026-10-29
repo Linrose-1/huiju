@@ -1,3 +1,4 @@
+import activityImages from './activity-images-fixture.mjs'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
@@ -29,6 +30,7 @@ test('AI draft input locks duplicate requests, preserves input on failure and st
   const deps = {
     '@dcloudio/uni-app': { onShow(fn) { show = fn }, onUnload() {} },
     '@/services/api': { api: { generateActivityDraft: idea => new Promise((resolve, reject) => requests.push({ idea, resolve, reject })) }, errorMessage: e => e.message, ApiError: class extends Error {} },
+    '@/services/activity-images': activityImages,
     '@/services/ai-draft': staged,
     '@/services/navigation': { routes: { activityDraft: '/pages/assistant/activity-draft', editor: '/pages/activity/editor' }, requireProfile: async () => true, navigate: url => navigation.push(url), loginPage() {} },
     '@/stores/session': { useSessionStore: () => session }
@@ -64,6 +66,7 @@ test('editor applies explicit AI fields but requires a fee choice when unknown',
   const deps = {
     '@dcloudio/uni-app': { onLoad(fn) { fn({ aiDraft: '1' }) }, onShow() {}, onHide() {}, onUnload() {} },
     '@/services/api': { api: {}, errorMessage: e => e.message, ApiError: class extends Error {} },
+    '@/services/activity-images': activityImages,
     '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/navigation': { routes: { editor: '/pages/activity/editor' }, requireProfile: async () => true },
     '@/services/api/environment': { mediaUrl: value => value }, '@/services/presentation': { feeDisclaimer: '' },

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, RegistrationInput } from '@/services/api/types'
 import { canEdit, feeNotice, feeDisclaimer } from '@/services/presentation'
@@ -10,23 +10,43 @@ import ActivitySummary from '@/components/business/ActivitySummary.vue'
 import RequestState from '@/components/base/RequestState.vue'
 const id = ref(''), editing = ref(false), activity = ref<Activity | null>(null), phone = ref(''), answers = ref<Record<string, string | string[]>>({}), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref(''), allowed = ref(false)
 const recommendationToken = ref('')
+const inviteCode = ref(''), verifiedCode = ref(''), inviteError = ref(''), verifying = ref(false)
+let generation = 0, verification = 0, alive = true
 const session = useSessionStore()
-watch(() => [session.token, session.epoch], () => { recommendationToken.value = '' }, { flush: 'sync' })
+function currentRequest() { const g = generation, token = session.token, epoch = session.epoch; return () => alive && g === generation && token === session.token && epoch === session.epoch }
+function removeInvite() { verification++; inviteCode.value = ''; verifiedCode.value = ''; inviteError.value = ''; verifying.value = false }
+watch(inviteCode, () => { verification++; verifiedCode.value = ''; inviteError.value = ''; verifying.value = false }, { flush: 'sync' })
+watch(() => [session.token, session.epoch], () => { generation++; recommendationToken.value = ''; removeInvite(); initialized = false; answers.value = {}; phone.value = ''; activity.value = null; allowed.value = false; busy.value = false; loading.value = false; submitError.value = ''; error.value = '' }, { flush: 'sync' })
+async function verifyInvite() {
+    if (busy.value || verifying.value || !allowed.value) return
+    inviteCode.value = inviteCode.value.trim().toUpperCase()
+    if (!/^[A-Z0-9]{12}$/.test(inviteCode.value)) { inviteError.value = '请输入 12 位免费特邀码'; return }
+    const code = inviteCode.value, request = ++verification, current = currentRequest()
+    verifying.value = true; inviteError.value = ''
+    try { await api.verifySpecialInvite(id.value, code); if (current() && request === verification) verifiedCode.value = code }
+    catch (e) { if (current() && request === verification) inviteError.value = errorMessage(e) }
+    finally { if (current() && request === verification) verifying.value = false }
+}
 function returnTarget() { return routes.form + '?id=' + id.value + (editing.value ? '&edit=1' : '') + (recommendationToken.value ? '&recommendationToken=' + encodeURIComponent(recommendationToken.value) : '') }
 let initialized = false
 let formOwner = ''
 const questions = computed(() => activity.value?.questions || [])
 async function load() { if (!id.value)
-    return; loading.value = true; error.value = ''; allowed.value = false; try {
+    return; const current = currentRequest(); loading.value = true; error.value = ''; allowed.value = false; try {
     const target = returnTarget()
     if (!await requireProfile(target)) {
+        if (!current()) return
         error.value = '请登录并完善资料后继续'
         return
     }
-    activity.value = await api.activity(id.value)
+    if (!current()) return
+    const detail = await api.activity(id.value)
+    if (!current()) return
+    activity.value = detail
     if (!editing.value) {
         try {
             const existing = await api.myRegistration(id.value)
+            if (!current()) return
             if (existing.status === 'active') {
                 navigate(routes.result + '?id=' + id.value, true)
                 return
@@ -38,6 +58,7 @@ async function load() { if (!id.value)
         }
     }
     const currentOwner = useSessionStore().member?.id || ''
+    if (!current()) return
     if (formOwner !== currentOwner) {
         initialized = false
         answers.value = {}
@@ -49,6 +70,7 @@ async function load() { if (!id.value)
             answers.value[question.id] = question.type === 'multiple' ? [] : ''
         if (editing.value) {
             const registration = await api.myRegistration(id.value)
+            if (!current()) return
             phone.value = registration.contactPhone
             for (const answer of registration.answers)
                 answers.value[answer.questionId] = answer.value
@@ -60,17 +82,19 @@ async function load() { if (!id.value)
         initialized = true
     }
     else if (editing.value) {
-        allowed.value = canEdit(activity.value, await api.myRegistration(id.value))
+        const registration = await api.myRegistration(id.value)
+        if (!current()) return
+        allowed.value = canEdit(activity.value, registration)
     }
     else {
         allowed.value = activity.value.registrationState === 'open'
     }
 }
 catch (e) {
-    error.value = errorMessage(e)
+    if (current()) error.value = errorMessage(e)
 }
 finally {
-    loading.value = false
+    if (current()) loading.value = false
 } }
 function selected(id: string, option: string) { const value = answers.value[id]; return Array.isArray(value) ? value.includes(option) : value === option; }
 function choose(id: string, option: string, multiple: boolean) { if (busy.value)
@@ -79,9 +103,10 @@ function choose(id: string, option: string, multiple: boolean) { if (busy.value)
     return
 } const value = answers.value[id]; const list = Array.isArray(value) ? value : []; answers.value[id] = list.includes(option) ? list.filter(item => item !== option) : [...list, option]; }
 async function submit() {
-    if (busy.value || !activity.value || !allowed.value)
+    if (busy.value || verifying.value || !activity.value || !allowed.value)
         return
     submitError.value = ''
+    if (!editing.value && inviteCode.value.trim() && verifiedCode.value !== inviteCode.value.trim().toUpperCase()) { submitError.value = '请先校验特邀码，或移除后按普通方式报名'; return }
     if (!/^\+?[0-9]{6,20}$/.test(phone.value.trim())) {
         submitError.value = '请填写有效的本次联系手机号'
         return
@@ -95,15 +120,19 @@ async function submit() {
     }
     const payload: RegistrationInput = { contactPhone: phone.value.trim(), answers: questions.value.map(question => ({ questionId: question.id, value: answers.value[question.id] || (question.type === 'multiple' ? [] : '') })) }
     if (!editing.value && recommendationToken.value) payload.recommendationToken = recommendationToken.value
+    if (!editing.value && verifiedCode.value) payload.specialInviteCode = verifiedCode.value
+    const current = currentRequest()
     busy.value = true
     try {
         if (editing.value)
             await api.editRegistration(id.value, payload.answers)
         else
             await api.register(id.value, payload)
-        navigate(routes.result + '?id=' + id.value, true)
+        if (current()) navigate(routes.result + '?id=' + id.value, true)
     }
     catch (e) {
+        if (!current()) return
+        if (e instanceof ApiError && e.code.startsWith('SPECIAL_INVITE')) verifiedCode.value = ''
         submitError.value = errorMessage(e)
         if (e instanceof ApiError && (e.status === 401 || e.code === 'PROFILE_INCOMPLETE'))
             loginPage(returnTarget())
@@ -111,7 +140,7 @@ async function submit() {
             await load()
     }
     finally {
-        busy.value = false
+        if (current()) busy.value = false
     }
 }
 onLoad(options => { id.value = String(options?.id || ''); editing.value = options?.edit === '1'; recommendationToken.value = editing.value ? '' : String(options?.recommendationToken || ''); if (!id.value) {
@@ -119,6 +148,8 @@ onLoad(options => { id.value = String(options?.id || ''); editing.value = option
     error.value = '报名链接不完整，请从活动详情重新进入'
 } })
 onShow(load)
+onHide(() => { generation++; verification++; verifying.value = false; busy.value = false })
+onUnload(() => { alive = false; generation++; verification++ })
 </script>
 <template>
   <view class="page-pad with-footer">
@@ -127,7 +158,53 @@ onShow(load)
       :error="error"
       @retry="load"
     /><template v-if="activity && !loading && !error">
-      <ActivitySummary :activity="activity" /><view class="card">
+      <ActivitySummary :activity="activity" />
+      <view
+        v-if="!editing && (activity.feeType==='paid' || inviteCode)"
+        class="card"
+      >
+        <view class="section-title">免费特邀码 <text class="muted small">（选填）</text></view>
+        <view class="hint">仅限发起人指定手机号本人使用，请使用您的微信绑定手机号对应的特邀码。</view>
+        <input
+          v-model="inviteCode"
+          class="input"
+          maxlength="12"
+          placeholder="请输入 12 位特邀码"
+          :disabled="busy || !!verifiedCode"
+          :cursor-spacing="130"
+        >
+        <view class="row invite-actions">
+          <button
+            v-if="!verifiedCode"
+            class="secondary"
+            :disabled="busy || verifying || !allowed"
+            :loading="verifying"
+            @click="verifyInvite"
+          >
+            校验特邀码
+          </button><button
+            v-if="inviteCode"
+            class="text-button"
+            :disabled="busy"
+            @click="removeInvite"
+          >
+            移除
+          </button>
+        </view>
+        <view
+          v-if="verifiedCode"
+          class="notice"
+        >
+          特邀资格有效，提交报名后生效。报名成功才消耗此码；取消报名后原码不恢复。
+        </view>
+        <view
+          v-if="inviteError"
+          class="error"
+        >
+          {{ inviteError }}
+        </view>
+      </view>
+      <view class="card">
         <view class="row between"><view class="section-title">联系信息</view><text class="muted small">用于活动联系</text></view><label class="field-label"><text class="required">*</text>本次联系手机号</label><view class="input-wrap">
           <input
             v-model="phone"
@@ -233,7 +310,7 @@ onShow(load)
             color="#e57a28"
           /><view><view class="notice-title">温馨提示</view>提交后，您可在报名截止前修改答案；活动开始前可取消报名。</view>
         </view><view
-          v-if="activity.feeType==='paid'"
+          v-if="activity.feeType==='paid' && !verifiedCode"
           class="notice form-notice"
         >
           {{ feeNotice }}。{{ feeDisclaimer }}。
@@ -253,7 +330,7 @@ onShow(load)
         <view class="capacity">已报名 <text>{{ activity.activeRegistrationCount }}</text><text v-if="activity.capacity"> / 限额 {{ activity.capacity }}</text></view><button
           class="primary"
           :loading="busy"
-          :disabled="busy || !allowed"
+          :disabled="busy || verifying || !allowed"
           @click="submit"
         >
           {{ editing?'保存修改':'提交报名' }}

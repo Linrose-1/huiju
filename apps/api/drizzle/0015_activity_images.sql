@@ -1,0 +1,1 @@
+ALTER TABLE `activities` ADD `image_urls` json;

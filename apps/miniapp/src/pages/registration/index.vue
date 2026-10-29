@@ -124,6 +124,7 @@ onPullDownRefresh(load)
           :activity="item.activity"
           :now="now"
           :registration-status="item.status"
+          :fee-qualification="item.feeQualification"
           @open="open(item)"
         />
 

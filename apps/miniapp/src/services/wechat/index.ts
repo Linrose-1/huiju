@@ -37,25 +37,27 @@ export function scanActivityCode(): Promise<{ path?: string; result: string } | 
     // #endif
   })
 }
-export async function chooseCover(): Promise<{ base64: string; mimeType: 'image/png' | 'image/jpeg' } | null> {
+export async function chooseActivityImagePath(): Promise<string | null> {
   // #ifdef MP-WEIXIN
   const path = await new Promise<string | null>((resolve, reject) => {
     uni.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'],
       success: result => resolve(result.tempFilePaths[0]),
       fail: result => result.errMsg?.includes('cancel') ? resolve(null) : reject(new Error('选图失败，请检查相册权限后重试')) })
   })
-  if (!path) return null
+  return path
+  // #endif
+  // #ifndef MP-WEIXIN
+  throw new Error('请在微信小程序中选择图片')
+  // #endif
+}
+export async function readActivityImage(path: string): Promise<{ base64: string; mimeType: 'image/png' | 'image/jpeg' }> {
   const base64 = await new Promise<string>((resolve, reject) => {
     uni.getFileSystemManager().readFile({ filePath: path, encoding: 'base64', success: result => resolve(String(result.data)), fail: () => reject(new Error('图片读取失败，请重新选择')) })
   })
-  if (base64.length > 2796204) throw new Error('请选择不超过 2 MB 的封面')
+  if (base64.length > 2796204) throw new Error('请选择不超过 2 MB 的图片')
   const mimeType = base64.startsWith('iVBOR') ? 'image/png' : base64.startsWith('/9j/') ? 'image/jpeg' : null
-  if (!mimeType) throw new Error('封面仅支持 PNG 或 JPG 图片')
+  if (!mimeType) throw new Error('图片仅支持 PNG 或 JPG 图片')
   return { base64, mimeType }
-  // #endif
-  // #ifndef MP-WEIXIN
-  throw new Error('请在微信小程序中选择封面')
-  // #endif
 }
 export function loginWithWechat(consent: { termsVersion: string; privacyVersion: string }): Promise<void> {
   if (!consent?.termsVersion || !consent?.privacyVersion) return Promise.reject(new ApiError('LEGAL_CONSENT_REQUIRED', '请先阅读并同意用户协议和隐私政策'))

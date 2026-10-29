@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator'
+import { IsIn, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator'
 import { sql } from 'drizzle-orm'
 import { activities } from '../database/schema/activities.js'
 import { registrations, registrationAnswers } from '../database/schema/registrations.js'
@@ -28,6 +28,7 @@ export class MyRegistrationQuery extends PageQuery {
   status: Exclude<typeof activityStatuses[number], 'draft'> = 'all'
 }
 export class RosterQuery extends PageQuery {
+  @ApiPropertyOptional({ description: '仅发起人管理名单按报名ID定位，不改变权限' }) @IsOptional() @IsUUID() registrationId?: string
   @ApiPropertyOptional({ enum: ['all', 'active', 'cancelled'], default: 'all' })
   @IsOptional() @IsIn(['all', 'active', 'cancelled'])
   status: 'all' | 'active' | 'cancelled' = 'all'

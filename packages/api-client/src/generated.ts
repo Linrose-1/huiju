@@ -340,6 +340,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/activities/{id}/special-invite-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["SpecialInviteController_list"];
+        put?: never;
+        post: operations["SpecialInviteController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activities/{id}/special-invite-codes/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SpecialInviteController_verify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/wechat/identify": {
         parameters: {
             query?: never;
@@ -524,6 +556,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["MemberCardController_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/members/me/fellows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FellowsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/members/{id}/connection-path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FellowsController_path"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1702,6 +1766,7 @@ export interface components {
             descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
             registrationNotice?: string | null;
             coverUrl: string | null;
+            imageUrls: string[];
             location: string;
             /** @description 微信地图 GCJ-02 纬度，旧活动可为空 */
             locationLatitude?: number | null;
@@ -1736,6 +1801,8 @@ export interface components {
             value: string | string[];
         };
         RegistrationDto: {
+            /** @enum {string} */
+            feeQualification: "ordinary" | "invited_free";
             id: string;
             activityId: string;
             /** @enum {string} */
@@ -1755,6 +1822,8 @@ export interface components {
             removed: number;
         };
         MyRegistrationDto: {
+            /** @enum {string} */
+            feeQualification: "ordinary" | "invited_free";
             id: string;
             activityId: string;
             /** @enum {string} */
@@ -1773,6 +1842,7 @@ export interface components {
             items: components["schemas"]["MyRegistrationDto"][];
         };
         RegistrationInput: {
+            specialInviteCode?: string;
             recommendationToken?: string;
             contactPhone: string;
             answers: components["schemas"]["AnswerInput"][];
@@ -1802,6 +1872,10 @@ export interface components {
             descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
             registrationNotice?: string | null;
             coverUrl?: string | null;
+            /** @description 有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空 */
+            imageUrls?: string[];
+            /** @description 本人上传的封面原图，用于再次裁剪；清空封面时同步清空 */
+            coverSourceUrl?: string | null;
             location: string;
             /** @description 微信地图 GCJ-02 纬度，与经度成对提供或清空 */
             locationLatitude?: number | null;
@@ -1826,6 +1900,7 @@ export interface components {
             descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
             registrationNotice?: string | null;
             coverUrl: string | null;
+            imageUrls: string[];
             location: string;
             /** @description 微信地图 GCJ-02 纬度，旧活动可为空 */
             locationLatitude?: number | null;
@@ -1845,6 +1920,7 @@ export interface components {
             cancellationReason: string | null;
             consultationContact?: string;
             questions: components["schemas"]["QuestionDto"][];
+            coverSourceUrl: string | null;
             /** @enum {string} */
             lifecycle: "draft" | "published" | "cancelled";
             /** @enum {string} */
@@ -1868,6 +1944,8 @@ export interface components {
             hasMore: boolean;
         };
         OrganizerRegistrationDto: {
+            /** @enum {string} */
+            feeQualification: "ordinary" | "invited_free";
             id: string;
             activityId: string;
             /** @enum {string} */
@@ -1922,6 +2000,33 @@ export interface components {
             visitors: number;
             /** @description 当前有效报名人数 / 去重浏览人数 × 100；无浏览时为 null */
             conversionRate: number | null;
+        };
+        SpecialInviteCreateInput: {
+            phone: string;
+        };
+        SpecialInviteCodeDto: {
+            id: string;
+            code: string;
+            maskedPhone: string;
+            /** @enum {string} */
+            status: "unused" | "used" | "expired" | "paused";
+            createdAt: string;
+            expiresAt: string;
+            usedAt: string | null;
+            registrationId: string | null;
+        };
+        SpecialInviteListDto: {
+            items: components["schemas"]["SpecialInviteCodeDto"][];
+            total: number;
+            hasMore: boolean;
+        };
+        SpecialInviteVerifyInput: {
+            code: string;
+        };
+        SpecialInviteVerifiedDto: {
+            valid: boolean;
+            maskedPhone: string;
+            expiresAt: string;
         };
         WechatIdentityInput: {
             code: string;
@@ -2002,6 +2107,37 @@ export interface components {
             wechatId?: string | null;
             personalTag?: string | null;
             wechatQrUrl?: string | null;
+        };
+        FellowSummaryDto: {
+            memberId: string | null;
+            displayName: string;
+            avatarUrl: string | null;
+            canOpenCard: boolean;
+        };
+        FellowListDto: {
+            inviter: components["schemas"]["FellowSummaryDto"] | null;
+            items: components["schemas"]["FellowSummaryDto"][];
+            total: number;
+            hasMore: boolean;
+        };
+        ConnectionNodeDto: {
+            index: number;
+            member: components["schemas"]["FellowSummaryDto"];
+        };
+        ConnectionEdgeDto: {
+            /** @description 真实邀请人的绝对节点索引 */
+            fromIndex: number;
+            /** @description 真实受邀人的绝对节点索引 */
+            toIndex: number;
+        };
+        ConnectionPathDto: {
+            source: components["schemas"]["FellowSummaryDto"];
+            target: components["schemas"]["FellowSummaryDto"];
+            connected: boolean;
+            totalNodes: number;
+            nodes: components["schemas"]["ConnectionNodeDto"][];
+            edges: components["schemas"]["ConnectionEdgeDto"][];
+            nextCursor: number | null;
         };
         NotificationDto: {
             id: string;
@@ -3610,6 +3746,8 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                /** @description 仅发起人管理名单按报名ID定位，不改变权限 */
+                registrationId?: string;
                 status?: "all" | "active" | "cancelled";
             };
             header: {
@@ -3920,6 +4058,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    SpecialInviteController_list: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                status?: "all" | "unused" | "used" | "expired" | "paused";
+            };
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialInviteListDto"];
+                };
+            };
+        };
+    };
+    SpecialInviteController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecialInviteCreateInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialInviteCodeDto"];
+                };
+            };
+        };
+    };
+    SpecialInviteController_verify: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpecialInviteVerifyInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpecialInviteVerifiedDto"];
                 };
             };
         };
@@ -5200,6 +5419,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    FellowsController_list: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FellowListDto"];
+                };
+            };
+        };
+    };
+    FellowsController_path: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionPathDto"];
                 };
             };
         };

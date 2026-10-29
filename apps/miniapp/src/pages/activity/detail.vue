@@ -10,6 +10,8 @@ import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { createReadingVisit } from '@/services/reading'
 import { activityRichTextNodes } from '@/services/activity-rich-text'
+import ActivityImageGallery from '@/components/business/ActivityImageGallery.vue'
+import { activityImages } from '@/services/activity-images'
 import RequestState from '@/components/base/RequestState.vue'
 
 const id = ref(''), activity = ref<Activity | null>(null), roster = ref<PublicMember[]>([]), registration = ref<Registration | null>(null), loading = ref(true), busy = ref(false), error = ref(''), rosterError = ref(''), expanded = ref(false)
@@ -174,12 +176,7 @@ onShareTimeline(shareTimeline)
       :error="error"
       @retry="load"
     /><template v-if="activity && !loading && !error">
-      <image
-        v-if="activity.coverUrl"
-        :src="mediaUrl(activity.coverUrl)"
-        class="detail-cover"
-        mode="aspectFill"
-      />
+      <ActivityImageGallery :urls="activityImages(activity)" />
       <view class="card summary-card">
         <view class="section-title mark activity-title">{{ activity.title }}</view><view class="row badges">
           <text
@@ -439,7 +436,6 @@ onShareTimeline(shareTimeline)
 </template>
 <style scoped>
 .activity-detail { padding: 0 26rpx calc(140rpx + env(safe-area-inset-bottom)); color: #111c2c; background: #f4f8f7; min-height: 100vh; }
-.detail-cover { display: block; width: 100%; height: 216rpx; border-radius: 12rpx; margin-bottom: 12rpx; }
 .card { padding: 16rpx 18rpx; margin-bottom: 12rpx; border-radius: 14rpx; }
 .section-title { font-size: 32rpx; line-height: 44rpx; margin-bottom: 10rpx; color: #101a2b; font-weight: 600; overflow-wrap: anywhere; }
 .section-title.mark { position: relative; padding-left: 14rpx; }

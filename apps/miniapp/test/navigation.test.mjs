@@ -6,6 +6,7 @@ import ts from 'typescript'
 
 function harness() {
   let page = { route: 'pages/activity/index' }
+  let previous = null
   const calls = [], toasts = [], member = { profileComplete: false }
   class ApiError extends Error {}
   const deps = {
@@ -14,6 +15,7 @@ function harness() {
     '@/stores/session': { useSessionStore: () => ({ member }) }
   }
   const uni = {
+    navigateBack: () => calls.push({ method: 'navigateBack' }),
     navigateTo: options => calls.push({ ...options, method: 'navigateTo' }), redirectTo: options => calls.push({ ...options, method: 'redirectTo' }),
     showToast: options => toasts.push(options)
   }
@@ -21,9 +23,16 @@ function harness() {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText
   const nav = {}
-  new Function('require', 'exports', 'uni', 'getCurrentPages', code)(name => deps[name], nav, uni, () => [page])
-  return { nav, calls, toasts, uni, enter: route => { page = { route } } }
+  new Function('require', 'exports', 'uni', 'getCurrentPages', code)(name => deps[name], nav, uni, () => previous ? [previous,page] : [page])
+  return { nav, calls, toasts, uni, enter: route => { page = { route } }, previous: value => { previous=value } }
 }
+
+test('connection returns to the exact previous member card or replaces direct entry with its fixed target', () => {
+  const h=harness(); h.enter('pages/member/connection'); h.previous({route:'pages/member/card',options:{id:'target-a'}})
+  h.nav.returnToMemberCard('target-a'); assert.equal(h.calls[0].method,'navigateBack')
+  const other=harness(); other.enter('pages/member/connection'); other.previous({route:'pages/member/card',options:{id:'different'}})
+  other.nav.returnToMemberCard('target-a'); assert.equal(other.calls[0].method,'redirectTo'); assert.equal(other.calls[0].url,'/pages/member/card?id=target-a')
+})
 
 test('source-page duplicate taps stay blocked while target onShow can open profile completion', async () => {
   const h = harness()

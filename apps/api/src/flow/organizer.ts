@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import sharp from 'sharp'
 import { activities, activityOperations, registrationQuestions } from '../database/schema/activities.js'
 import { members } from '../database/schema/members.js'
 import { NotificationService } from '../notifications/service.js'
@@ -15,6 +16,7 @@ import { AvatarInput } from './dto.js'
 import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
 import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 import { activityDescription, activityRegistrationNotice } from './activity-description.js'
+import { activityImages, activityImageValues, activityCoverSource, type ActivityImageData } from './activity-images.js'
 
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
@@ -52,7 +54,7 @@ export function activityValues(input: ActivityWriteInput) {
     }
   }
   return {
-    title: input.title.trim(), ...description, registrationNotice: activityRegistrationNotice(input.registrationNotice), coverUrl: input.coverUrl ?? null,
+    title: input.title.trim(), ...description, registrationNotice: activityRegistrationNotice(input.registrationNotice), ...activityImageValues(input),
     location: input.location.trim(), locationLatitude: latitude, locationLongitude: longitude, consultationContact: input.consultationContact.trim(),
     startsAt, endsAt, registrationDeadline, capacity: input.capacity ?? null,
     feeType: input.feeType, feeAmountCents: input.feeAmountCents ?? null
@@ -66,7 +68,12 @@ export function requireOrganizer(activity: Activity | undefined, memberId: strin
 
 export function validateActivityEdit(activity: Activity, questions: Question[], input: ActivityWriteInput, now = new Date()) {
   const preserveCoordinates = input.locationLatitude === undefined && input.locationLongitude === undefined && input.location.trim() === activity.location
+  const nextCover = input.imageUrls !== undefined ? input.imageUrls[0] ?? null : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl
   const values = activityValues({ ...input,
+    coverSourceUrl: input.coverSourceUrl === undefined && nextCover === activity.coverUrl ? activityCoverSource(activity) : input.coverSourceUrl,
+    coverUrl: input.imageUrls !== undefined ? input.coverUrl : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl,
+    imageUrls: input.imageUrls !== undefined ? input.imageUrls : input.coverUrl !== undefined && input.coverUrl !== activity.coverUrl
+      ? input.coverUrl ? [input.coverUrl, ...activityImages(activity).slice(1)] : [] : activityImages(activity),
     locationLatitude: preserveCoordinates ? activity.locationLatitude : input.locationLatitude,
     locationLongitude: preserveCoordinates ? activity.locationLongitude : input.locationLongitude,
     descriptionDelta: input.descriptionDelta === undefined && input.description.trim() === activity.description ? activity.descriptionDelta : input.descriptionDelta,
@@ -88,6 +95,7 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
       if (key === 'consultationContact') return false
       const original = activity[key as keyof typeof values]
       if (key === 'descriptionDelta') return JSON.stringify(value) !== JSON.stringify(original == null ? null : activityDescription(activity.description, activity.descriptionDelta).descriptionDelta)
+      if (key === 'imageUrls') return JSON.stringify(value) !== JSON.stringify({ urls: activityImages(activity), coverSourceUrl: activityCoverSource(activity) })
       if (key === 'registrationNotice') return value !== (original ?? null)
       if (key === 'locationLatitude' || key === 'locationLongitude') return value !== (original ?? null)
       // A missing deadline and the start time have identical meaning.
@@ -126,11 +134,32 @@ export class OrganizerService {
     catch { fail('NOT_FOUND', '图片不存在', 404) }
   }
 
-  private async checkCover(url: string | null | undefined, memberId: string) {
-    if (!url?.startsWith(coverPrefix)) return
-    const name = url.slice(coverPrefix.length)
-    if (!name.startsWith(memberId + '_')) fail('INVALID_COVER', '请使用本人上传的封面')
-    await this.coverImage(name)
+  private async checkImages(values: { coverUrl: string | null; imageUrls: ActivityImageData | null }, memberId: string, previous?: Activity) {
+    for (const [index, url] of activityImages(values).entries()) {
+      // Existing single covers may be external or use the old aspect ratio.
+      const unchangedCover = index === 0 && url === previous?.coverUrl
+      if (unchangedCover && !url.startsWith(coverPrefix)) continue
+      if (!url.startsWith(coverPrefix)) fail('INVALID_COVER', '请使用本人上传的活动图片')
+      const name = url.slice(coverPrefix.length)
+      if (!coverName.test(name) || !name.startsWith(memberId + '_')) fail('INVALID_COVER', '请使用本人上传的活动图片')
+      const bytes = await this.coverImage(name)
+      if (index === 0 && !unchangedCover) {
+        let size
+        try { size = await sharp(bytes, { failOn: 'warning', limitInputPixels: 4096 * 4096 }).metadata() }
+        catch { fail('INVALID_COVER', '封面图片无法读取，请重新上传') }
+        const rotated = size.orientation !== undefined && size.orientation >= 5
+        const width = rotated ? size.height : size.width, height = rotated ? size.width : size.height
+        if (!width || !height || width * 4 !== height * 5) fail('INVALID_COVER', '活动封面须裁剪为5:4')
+      }
+    }
+    const source = activityCoverSource(values)
+    if (source && !activityImages(values).includes(source)) {
+      if (source === (previous ? activityCoverSource(previous) : null) && !source.startsWith(coverPrefix)) return
+      if (!source.startsWith(coverPrefix)) fail('INVALID_COVER', '请使用本人上传的封面原图')
+      const name = source.slice(coverPrefix.length)
+      if (!coverName.test(name) || !name.startsWith(memberId + '_')) fail('INVALID_COVER', '请使用本人上传的封面原图')
+      await this.coverImage(name)
+    }
   }
 
   private async owner(tx: Tx, id: string, memberId: string) {
@@ -151,6 +180,8 @@ export class OrganizerService {
     const [organizer] = await db.select({ memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     return {
       id: activity.id, title: activity.title, description: activity.description, coverUrl: activity.coverUrl,
+      imageUrls: activityImages(activity),
+      coverSourceUrl: activityCoverSource(activity),
       descriptionDelta: activity.descriptionDelta ?? null, registrationNotice: activity.registrationNotice ?? null,
       location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: activity.consultationContact,
       startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(),
@@ -212,7 +243,7 @@ export class OrganizerService {
   async create(input: ActivityWriteInput, header?: string) {
     const member = (await this.identity.require(header))!
     const values = activityValues(input)
-    await this.checkCover(input.coverUrl, member.id)
+    await this.checkImages(values, member.id)
     if (values.startsAt <= new Date()) fail('INVALID_ACTIVITY_TIME', '开始时间须晚于当前时间')
     if (input.questions.some(q => q.id)) fail('INVALID_QUESTIONS', '新活动不能使用已有问题编号')
     const id = randomUUID()
@@ -235,7 +266,7 @@ export class OrganizerService {
       const activity = await this.owner(tx, id, member.id)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
       const { values, sameQuestions } = validateActivityEdit(activity, questions, input)
-      await this.checkCover(input.coverUrl, member.id)
+      await this.checkImages(values, member.id, activity)
       await tx.update(activities).set(values).where(eq(activities.id, id))
       if (!sameQuestions) await this.questions(tx, id, input)
       if (activity.consultationContact !== values.consultationContact) {
@@ -254,7 +285,7 @@ export class OrganizerService {
       if (activity.lifecycle === 'published') return
       await this.profile(tx, member.id)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
-      activityValues({ ...activity, startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), registrationDeadline: activity.registrationDeadline?.toISOString() ?? null, questions })
+      activityValues({ ...activity, imageUrls: activityImages(activity), coverSourceUrl: activityCoverSource(activity), startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), registrationDeadline: activity.registrationDeadline?.toISOString() ?? null, questions })
       if (activity.startsAt <= new Date()) fail('INVALID_ACTIVITY_TIME', '开始时间已过，请先修改活动时间')
       await tx.update(activities).set({ lifecycle: 'published', publishedAt: new Date() }).where(eq(activities.id, id))
       await tx.insert(activityOperations).values({ id: randomUUID(), activityId: id, actorType: 'member', actorMemberId: member.id, action: 'publish' })
@@ -297,7 +328,7 @@ export class OrganizerService {
     const member = (await this.identity.require(header))!
     const [activity] = await this.database.db.select().from(activities).where(eq(activities.id, id))
     requireOrganizer(activity, member.id)
-    const where = eq(registrations.activityId, id)
+    const where = and(eq(registrations.activityId, id), query.registrationId ? eq(registrations.id, query.registrationId) : undefined)
     const [totals] = await this.database.db.select({ total: count(),
       activeCount: sql<number>`coalesce(sum(${registrations.status} = 'active'), 0)`,
       cancelledCount: sql<number>`coalesce(sum(${registrations.status} = 'cancelled'), 0)`,
@@ -313,6 +344,7 @@ export class OrganizerService {
       attendedCount: activity.lifecycle === 'cancelled' ? 0 : Number(totals!.attendedCount), hasMore: rows.length > query.limit,
       items: page.map(({ registration: row, member }) => ({
       id: row.id, activityId: row.activityId, status: row.status, contactPhone: row.contactPhone,
+      feeQualification: row.feeQualification ?? 'ordinary',
       currentRegisteredAt: row.currentRegisteredAt.toISOString(), cancelledAt: row.cancelledAt?.toISOString() ?? null,
       member, attended: activity.lifecycle !== 'cancelled' && row.status === 'active' && row.attended,
       attendedAt: activity.lifecycle !== 'cancelled' && row.status === 'active' && row.attended ? row.attendedAt?.toISOString() ?? null : null,

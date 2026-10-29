@@ -20,6 +20,8 @@ import { ActivityDto, AnswerInput, PublicMemberDto, RegistrationDto, Registratio
 import { ActivityListQuery } from './activity-list-dto.js'
 import { PageQuery, MyRegistrationQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 import { RecommendationRecordsService } from '../recommendations/records.js'
+import { activityImages } from './activity-images.js'
+import { SpecialInviteService } from './special-invite.js'
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
 
@@ -78,7 +80,8 @@ export class ActivityService {
   constructor(
     private readonly database: FlowDatabase,
     private readonly identity: IdentityService,
-    private readonly recommendations: RecommendationRecordsService = new RecommendationRecordsService(database)
+    private readonly recommendations: RecommendationRecordsService = new RecommendationRecordsService(database),
+    private readonly specialInvites: SpecialInviteService = new SpecialInviteService(database, identity)
   ) {}
 
   private async present(activity: Activity, memberId?: string): Promise<ActivityDto> {
@@ -116,6 +119,7 @@ export class ActivityService {
       descriptionDelta: state === 'removed' ? null : activity.descriptionDelta ?? null,
       registrationNotice: state === 'removed' ? null : activity.registrationNotice ?? null,
       coverUrl: state === 'removed' ? null : activity.coverUrl,
+      imageUrls: state === 'removed' ? [] : activityImages(activity),
       location: state === 'removed' ? '' : activity.location,
       locationLatitude: state === 'removed' ? null : activity.locationLatitude ?? null,
       locationLongitude: state === 'removed' ? null : activity.locationLongitude ?? null,
@@ -239,6 +243,7 @@ export class ActivityService {
       id: row.id,
       activityId: row.activityId,
       status: row.status,
+      feeQualification: row.feeQualification ?? 'ordinary',
       contactPhone: row.contactPhone,
       answers,
       currentRegisteredAt: row.currentRegisteredAt.toISOString(),
@@ -377,6 +382,9 @@ export class ActivityService {
       validateAnswers(questions, input!.answers)
       const registrationId = existing?.id ?? randomUUID()
       if (action === 'register') {
+        const specialInviteCode = (input as RegistrationInput).specialInviteCode
+        const inviteId = specialInviteCode ? await this.specialInvites.prepare(tx, activity, specialInviteCode, owner.boundPhone!) : null
+        const feeQualification = inviteId ? 'invited_free' as const : 'ordinary' as const
         const contactPhone = (input as RegistrationInput).contactPhone
         if (existing) {
           await tx
@@ -384,6 +392,7 @@ export class ActivityService {
             .set({
               status: 'active',
               contactPhone,
+              feeQualification,
               currentRegisteredAt: now,
               cancelledAt: null
             })
@@ -396,6 +405,7 @@ export class ActivityService {
               activityId: id,
               memberId: member.id,
               contactPhone,
+              feeQualification,
               firstRegisteredAt: now,
               currentRegisteredAt: now
             })
@@ -418,6 +428,7 @@ export class ActivityService {
             action: existing ? 'reregistered' : 'registered'
           })
         const sourceToken = (input as RegistrationInput).recommendationToken
+        if (inviteId) await this.specialInvites.consume(tx, inviteId, member.id, operationId, now)
         if (sourceToken) await this.recommendations.conversion(tx, sourceToken, member.id, activity.id, operationId)
       }
       await tx

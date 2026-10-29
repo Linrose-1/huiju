@@ -243,6 +243,25 @@ onUnload(() => { active = false; generation++ })
         <view
           class="menu-row row"
           hover-class="menu-pressed"
+          @click="openMemberPage(routes.fellows)"
+        >
+          <view class="menu-icon">
+            <uni-icons
+              type="staff"
+              size="48rpx"
+              color="#17543d"
+            />
+          </view>
+          <view class="grow"><view class="tile-title">我的学友</view><view class="muted small">查看直接邀请关系</view></view><text
+            class="entry-arrow"
+            aria-hidden="true"
+          >
+            {{ '>' }}
+          </text>
+        </view>
+        <view
+          class="menu-row row"
+          hover-class="menu-pressed"
           @click="openMemberPage(routes.notifications)"
         >
           <view class="menu-icon">

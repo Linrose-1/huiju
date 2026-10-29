@@ -4,6 +4,7 @@ import {
   char,
   check,
   datetime,
+  foreignKey,
   index,
   json,
   mysqlEnum,
@@ -35,6 +36,7 @@ export const registrations = mysqlTable(
       .notNull()
       .default('active'),
     contactPhone: varchar('contact_phone', { length: 32 }).notNull(),
+    feeQualification: mysqlEnum('fee_qualification', ['ordinary', 'invited_free']).notNull().default('ordinary'),
     firstRegisteredAt: datetime('first_registered_at', {
       mode: 'date',
       fsp: 3,
@@ -146,3 +148,27 @@ export const registrationOperations = mysqlTable(
     ),
   ],
 )
+
+export const activityInviteCodes = mysqlTable('activity_invite_codes', {
+  id: char('id', { length: 36 }).primaryKey(),
+  activityId: char('activity_id', { length: 36 }).notNull(),
+  issuerMemberId: char('issuer_member_id', { length: 36 }).notNull(),
+  phoneHash: char('phone_hash', { length: 64 }).notNull(),
+  codeHash: char('code_hash', { length: 64 }).notNull(),
+  encryptedPayload: varchar('encrypted_payload', { length: 512 }).notNull(),
+  expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
+  createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+  usedAt: datetime('used_at', { mode: 'date', fsp: 3 }),
+  usedByMemberId: char('used_by_member_id', { length: 36 }),
+  operationId: char('operation_id', { length: 36 }),
+}, table => [
+  foreignKey({ name: 'aic_activity_fk', columns: [table.activityId], foreignColumns: [activities.id] }).onDelete('restrict'),
+  foreignKey({ name: 'aic_issuer_fk', columns: [table.issuerMemberId], foreignColumns: [members.id] }).onDelete('restrict'),
+  foreignKey({ name: 'aic_used_member_fk', columns: [table.usedByMemberId], foreignColumns: [members.id] }).onDelete('restrict'),
+  foreignKey({ name: 'aic_operation_fk', columns: [table.operationId], foreignColumns: [registrationOperations.id] }).onDelete('restrict'),
+  uniqueIndex('aic_code_hash_uq').on(table.codeHash),
+  uniqueIndex('aic_operation_uq').on(table.operationId),
+  index('aic_activity_phone_idx').on(table.activityId, table.phoneHash),
+  index('aic_activity_created_idx').on(table.activityId, table.createdAt),
+  check('aic_usage_ck', sql`(${table.usedAt} IS NULL AND ${table.usedByMemberId} IS NULL AND ${table.operationId} IS NULL) OR (${table.usedAt} IS NOT NULL AND ${table.usedByMemberId} IS NOT NULL AND ${table.operationId} IS NOT NULL)`),
+])

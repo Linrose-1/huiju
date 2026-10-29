@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/mysql-core'
 import { adminAccounts, members } from './members.js'
 import type { DescriptionDelta } from '../../flow/activity-description.js'
+import type { ActivityImageData } from '../../flow/activity-images.js'
 
 export const activities = mysqlTable(
   'activities',
@@ -32,6 +33,7 @@ export const activities = mysqlTable(
     descriptionDelta: json('description_delta').$type<DescriptionDelta>(),
     registrationNotice: varchar('registration_notice', { length: 500 }),
     coverUrl: varchar('cover_url', { length: 2048 }),
+    imageUrls: json('image_urls').$type<ActivityImageData>(),
     location: varchar('location', { length: 500 }).notNull(),
     locationLatitude: double('location_latitude'),
     locationLongitude: double('location_longitude'),

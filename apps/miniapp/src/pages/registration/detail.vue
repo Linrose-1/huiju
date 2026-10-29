@@ -137,7 +137,7 @@ onShareAppMessage(shareMessage)
             {{ activity.title }}
           </text>
           <view class="tags">
-            <text class="fee-tag">{{ activity.feeType==='paid' ? '收费活动 '+fee(activity) : '免费活动' }}</text><text
+            <text class="fee-tag">{{ registration.feeQualification==='invited_free' ? (registration.status==='active'?'特邀免费':'原报名：特邀免费') : activity.feeType==='paid' ? '收费活动 '+fee(activity) : '免费活动' }}</text><text
               class="registration-tag"
               :class="{inactive:registration.status==='cancelled'}"
             >
@@ -199,6 +199,12 @@ onShareAppMessage(shareMessage)
         class="error"
       >
         {{ toolsError }}
+      </view>
+      <view
+        v-if="registration.feeQualification==='invited_free'"
+        class="notice"
+      >
+        {{ registration.status==='active'?'特邀免费 · 本次活动免费参加资格':'原报名资格：特邀免费。取消后原码不恢复，再次报名需重新确认资格。' }}
       </view>
       <view class="detail-card">
         <view class="section-top">

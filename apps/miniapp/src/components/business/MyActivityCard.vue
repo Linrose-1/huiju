@@ -4,7 +4,7 @@ import type { Activity, ManagedActivity } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
 import { activityTimeRangeWeekday, fee } from '@/services/presentation'
 import { myActivityState, myActivityLabel } from '@/services/my-activities'
-const props = defineProps<{ activity: Activity | ManagedActivity; registrationStatus?: string; organized?: boolean; now: number }>()
+const props = defineProps<{ activity: Activity | ManagedActivity; registrationStatus?: string; feeQualification?: 'ordinary' | 'invited_free'; organized?: boolean; now: number }>()
 defineEmits<{ (e: 'open'): void }>()
 const state = computed(() => myActivityState(props.activity, props.registrationStatus, props.now))
 const label = computed(() => myActivityLabel(props.activity, props.registrationStatus, props.now))
@@ -60,9 +60,9 @@ const count = computed(() => props.activity.registrationState === 'cancelled' ? 
       </view>
       <view
         class="fee"
-        :class="{paid:activity.feeType==='paid'}"
+        :class="{paid:activity.feeType==='paid' && feeQualification!=='invited_free'}"
       >
-        {{ activity.feeType==='paid' ? '收费活动 ' + fee(activity) : '免费活动' }}<text
+        {{ feeQualification==='invited_free' ? (registrationStatus==='active'?'特邀免费':'原报名：特邀免费') : activity.feeType==='paid' ? '收费活动 ' + fee(activity) : '免费活动' }}<text
           v-if="registrationStatus==='active' && !['removed','cancelled'].includes(state)"
           class="joined"
         >

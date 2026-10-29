@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { Type } from 'class-transformer'
+import { Transform, Type } from 'class-transformer'
 import type { DescriptionDelta } from './activity-description.js'
 import { DescriptionDeltaDto } from './activity-description-dto.js'
 import {
@@ -13,6 +13,7 @@ import {
   Length,
   Matches,
   MaxLength,
+  ValidateIf,
   ValidateNested
 } from 'class-validator'
 
@@ -120,6 +121,8 @@ export class AnswerInput {
 }
 
 export class RegistrationInput {
+  @ApiPropertyOptional() @ValidateIf((_object, value) => value !== undefined) @Transform(({ value }) => typeof value === 'string' ? value.trim().toUpperCase() : value)
+  @IsString() @Matches(/^[A-HJ-NP-Z2-9]{12}$/) specialInviteCode?: string
   @ApiPropertyOptional() @IsOptional() @IsString() @Length(1, 256)
   recommendationToken?: string
 
@@ -208,6 +211,7 @@ export class ActivityDto {
     type: String
   })
   coverUrl!: string | null
+  @ApiProperty({ type: [String], maxItems: 3 }) imageUrls!: string[]
 
   @ApiProperty()
   location!: string
@@ -273,6 +277,7 @@ export class ActivityListDto {
 }
 
 export class RegistrationDto {
+  @ApiProperty({ enum: ['ordinary', 'invited_free'] }) feeQualification!: 'ordinary' | 'invited_free'
   @ApiProperty()
   id!: string
 

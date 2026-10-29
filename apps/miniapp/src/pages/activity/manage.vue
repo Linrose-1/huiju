@@ -14,6 +14,7 @@ const session = useSessionStore()
 const id = ref(''), activity = ref<ManagedActivity | null>(null), roster = ref<OrganizerRegistration[]>([])
 const loading = ref(false), error = ref(''), actionError = ref(''), busy = ref(false), cancelling = ref(false), reason = ref(''), filter = ref('active'), expanded = ref('')
 const attendanceBusy = ref('')
+const targetRegistration = ref('')
 const rosterLoading = ref(false), rosterError = ref(''), rosterHasMore = ref(false), rosterMoreError = ref('')
 const attendanceCount = ref(0), activeCount = ref(0)
 let rosterOffset = 0, rosterGeneration = 0
@@ -58,10 +59,11 @@ async function load() {
   if (!session.token) { loading.value = false; uni.stopPullDownRefresh(); return }
   loading.value = true
   try {
-    const [detail, registrations] = await Promise.all([api.managedActivity(activityId), api.organizerRoster(activityId, { offset: 0, status: filter.value })])
+    const [detail, registrations] = await Promise.all([api.managedActivity(activityId), api.organizerRoster(activityId, { offset: 0, status: filter.value, ...(targetRegistration.value ? { registrationId: targetRegistration.value } : {}) })])
     if (active()) {
       activity.value = detail; roster.value = registrations.items; rosterOffset = registrations.items.length
       rosterHasMore.value = registrations.hasMore; attendanceCount.value = registrations.attendedCount; activeCount.value = registrations.activeCount
+      if (targetRegistration.value) expanded.value = targetRegistration.value
       void loadStats()
     }
   } catch (e) { if (active()) error.value = errorMessage(e) }
@@ -75,7 +77,7 @@ async function loadRoster(more = false) {
   const current = () => active() && request === rosterGeneration
   rosterLoading.value = true
   try {
-    const result = await api.organizerRoster(activityId, { offset: rosterOffset, status: filter.value })
+    const result = await api.organizerRoster(activityId, { offset: rosterOffset, status: filter.value, ...(targetRegistration.value ? { registrationId: targetRegistration.value } : {}) })
     if (!current()) return
     rosterOffset += result.items.length
     const known = new Set(roster.value.map(item => item.id))
@@ -88,6 +90,7 @@ function selectFilter(value: string) {
   if (filter.value !== value && !busy.value && !loading.value) { filter.value = value; void loadRoster() }
 }
 function retryRosterMore() { rosterMoreError.value = ''; void loadRoster(true) }
+function showAllRegistrations() { if (busy.value || loading.value) return; targetRegistration.value = ''; filter.value = 'all'; void loadRoster() }
 async function publish() {
   if (busy.value || !session.token || activity.value?.lifecycle !== 'draft') return
   const active = currentRequest(), activityId = id.value
@@ -130,7 +133,7 @@ function answer(item: OrganizerRegistration, questionId: string) {
   return Array.isArray(value) ? value.join('、') : value || '未填写'
 }
 const stop = watch(() => [session.token, session.epoch], () => { clear(); if (shown) void load() }, { flush: 'sync' })
-onLoad(options => { id.value = String(options?.id || '') })
+onLoad(options => { id.value = String(options?.id || ''); targetRegistration.value = String(options?.registrationId || ''); if (targetRegistration.value) filter.value = 'all' })
 onShow(() => { shown = true; void load() })
 onHide(() => { shown = false; clear() })
 onUnload(() => { shown = false; clear(); stop() })
@@ -198,6 +201,13 @@ onShareAppMessage(shareMessage)
           </view>
           <view class="actions">
             <button
+              class="secondary"
+              :disabled="busy"
+              @click="navigate(routes.specialInvites+'?id='+id)"
+            >
+              免费特邀码
+            </button>
+            <button
               v-if="editable"
               class="secondary"
               :disabled="busy"
@@ -260,10 +270,33 @@ onShareAppMessage(shareMessage)
           </view>
         </view>
         <view class="card">
-          <view class="row between"><view class="section-title">报名名单</view><text class="muted small">{{ activity.lifecycle==='cancelled'?'取消前报名':'当前有效' }} {{ activity.lifecycle==='cancelled' ? activity.cancellationRegistrationCount : activeCount }} 人</text></view>
-          <view class="muted small">已到场 {{ attendanceCount }} 人</view>
+          <view class="row between">
+            <view class="section-title">{{ targetRegistration?'特邀报名记录':'报名名单' }}</view><text
+              v-if="!targetRegistration"
+              class="muted small"
+            >
+              {{ activity.lifecycle==='cancelled'?'取消前报名':'当前有效' }} {{ activity.lifecycle==='cancelled' ? activity.cancellationRegistrationCount : activeCount }} 人
+            </text>
+          </view>
+          <view
+            v-if="!targetRegistration"
+            class="muted small"
+          >
+            已到场 {{ attendanceCount }} 人
+          </view>
+          <button
+            v-if="targetRegistration"
+            class="secondary"
+            :disabled="busy || loading"
+            @click="showAllRegistrations"
+          >
+            返回全部报名
+          </button>
           <view class="notice">联系手机号和回答仅用于本次活动组织，请妥善保管。</view>
-          <view class="filters">
+          <view
+            v-if="!targetRegistration"
+            class="filters"
+          >
             <button
               v-for="option in [{value:'active',label:'有效报名'},{value:'cancelled',label:'已取消报名'},{value:'all',label:'全部'}]"
               :key="option.value"
@@ -302,7 +335,16 @@ onShareAppMessage(shareMessage)
                   size="38rpx"
                 />
               </view>
-              <view class="grow"><view>{{ item.member.displayName || '会员' }}</view><view class="muted small">{{ item.status==='active'?'已报名':'已取消报名' }} · {{ dateTime(item.currentRegisteredAt) }}</view></view>
+              <view class="grow">
+                <view>
+                  {{ item.member.displayName || '会员' }} <text
+                    v-if="item.feeQualification==='invited_free'"
+                    class="tag"
+                  >
+                    特邀免费
+                  </text>
+                </view><view class="muted small">{{ item.status==='active'?'已报名':'已取消报名' }} · {{ dateTime(item.currentRegisteredAt) }}</view>
+              </view>
             </view>
             <view class="phone">联系手机号：<text user-select>{{ item.contactPhone }}</text></view>
             <view

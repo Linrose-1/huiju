@@ -1,5 +1,30 @@
 # API 契约
 
+## 我的学友与本人链路（第27项）
+
+`GET /members/me/fellows?offset=0&limit=20` 返回 `inviter`、`items`、`total`、`hasMore`；仅完整资料会员本人直属邀请关系，平台根邀请者返回null，列表按创建时间与ID稳定排序。人员摘要仅包含 `memberId/displayName/avatarUrl/canOpenCard`，未完善节点返回匿名文案、null ID/头像、不可点名片。
+
+`GET /members/:id/connection-path?cursor=0&limit=20` 返回 `source/target/connected/totalNodes/nodes/edges/nextCursor`。本人端由服务端会话确定；nodes含绝对index及member摘要，edges的fromIndex→toIndex是实际邀请方向，每页包含与上一页末尾相连的边。cursor是下一节点索引，默认每页20，最大100；非任意层数上限。只有两条祖先链共同自然人连接才返回路径；仅共同平台根时connected=false、空路径。本人查询本人为单节点；服务层根目标404，当前平台根哨兵ID因不符合HTTP UUID校验会先返回400。
+
+关系查询不写库、不建立身份或替换邀请。循环或断裂返回 `RELATIONSHIP_INCOMPLETE`（409），游客调用为 `PROFILE_INCOMPLETE`（403）；目标不存在为404。成功读完才可显示完整，失败/未加载不能冒充无关系。不支持客户端指定另一个起点或导出整树。
+
+## 活动免费特邀码（第24项）
+
+- `POST /activities/:id/special-invite-codes`：发起人提交 `{ phone }`（11位手机号），返回有效未使用原码或新码。
+- `GET /activities/:id/special-invite-codes?status=all&offset=0&limit=20`：仅发起人列表，状态为unused/used/expired/paused，返回items/total/hasMore。仅脱敏手机号，已用行可带registrationId。
+- `POST /activities/:id/special-invite-codes/verify`：完整资料会员提交 `{ code }` 预校验，仅自己的账号绑定手机号可通过；不占名额或消费。
+- 原报名写入可带 `specialInviteCode`，事务内重新核验并消费；本人报名和发起人名单返回 `feeQualification: ordinary | invited_free`。公开名单不返回码或资格详情。
+
+错误包括 `SPECIAL_INVITE_INVALID`（无效/异活动/手机号不符统一）、`SPECIAL_INVITE_USED`、`SPECIAL_INVITE_EXPIRED`、`SPECIAL_INVITE_PAUSED` 和 `SPECIAL_INVITE_UNAVAILABLE`。缺少服务端 `ACTIVITY_INVITE_KEY` 仅禁用特邀操作，不影响普通报名；该密钥是32随机字节的base64，保存于服务端配置并备份，不写入Git或客户端，不能直接更换使既有密文失效。码和手机号以AES-256-GCM加密，检索使用带用途隔离的HMAC摘要。日志不得记录原码、手机号或密钥。
+
+码的有效截止取生成时截止与活动当前报名截止/开始时间的较早值；活动延期不会复活已过期码。下架或改免费期间暂停，恢复收费、正常上架且仍在有效期内才恢复；取消报名不恢复已用码。迁移0016执行状态见实现日志，不能把契约生成视为数据库上线。
+
+## 活动图片（第25项）
+
+活动写入支持 `imageUrls`（按顺序最多3张）和 `coverSourceUrl`（封面裁剪前原图，仅管理详情返回）。首图同步为 `coverUrl`，新封面须为本人已上传且有效的5:4图片；后两图保留原比例。公开详情只返回展示图片，不返回裁剪源图。编辑省略图片字段保留原内容，显式空数组清空图片及原图；历史单封面兼容读取，不批量裁切。上传使用原有 `POST /media/covers`。
+
+`0015` 新增可空 `activities.image_urls` JSON，保存 `{ urls, coverSourceUrl }`，兼容旧数组和空值。本机已授权迁移及回滚验收；其他环境使用新版本前须单独应用迁移。
+
 ## 智能活动推荐
 
 有效会话且手机号、主动头像与主动名称均完整的会员才可使用；推荐成功每天10次与草拟分账，按完成时北京时间计次。规则见[专项需求](../product/智能活动推荐.md)，事务、隐私、过期及归因见[技术方案](../architecture/activity-recommendation.md)。实现与环境启用分开记录；本轮不执行迁移或真实付费模型调用。

@@ -11,10 +11,12 @@ import { ReadingService } from './reading.js'
 import { ActivityModerationService } from './activity-moderation.js'
 import { RecommendationCandidatesService } from './recommendation-candidates.js'
 import { RecommendationRecordsModule } from '../recommendations/records.module.js'
+import { SpecialInviteController } from './special-invite-controller.js'
+import { SpecialInviteService } from './special-invite.js'
 
 // Capacity and registration writes remain in one transaction-owning module.
 @Module({ imports: [DatabaseModule, IdentityModule, NotificationsModule, RecommendationRecordsModule],
-  controllers: [FlowController, OrganizerController, ReadingController],
-  providers: [ActivityService, OrganizerService, ReadingService, ActivityModerationService, RecommendationCandidatesService],
+  controllers: [FlowController, OrganizerController, ReadingController, SpecialInviteController],
+  providers: [ActivityService, OrganizerService, ReadingService, ActivityModerationService, RecommendationCandidatesService, SpecialInviteService],
   exports: [ActivityModerationService, RecommendationCandidatesService, ReadingService] })
 export class ActivitiesModule {}

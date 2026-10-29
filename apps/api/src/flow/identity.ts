@@ -22,7 +22,7 @@ import { LEGAL_VERSION, recordLegalConsent, requireLegalConsent } from '../platf
 import { legalConsents } from '../database/schema/platform.js'
 export type Member = typeof members.$inferSelect
 
-export function complete(member: Member) {
+export function complete(member: Pick<Member, 'boundPhone' | 'avatarUrl' | 'displayName' | 'avatarSetByUser' | 'nameSetByUser'>) {
   return Boolean(member.boundPhone && member.avatarUrl && member.displayName?.trim()
     && member.avatarSetByUser
     && member.nameSetByUser)
