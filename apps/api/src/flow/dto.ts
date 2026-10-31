@@ -149,6 +149,7 @@ export class AnswersInput {
 }
 
 export class QuestionDto {
+  @ApiProperty() publicToParticipants!: boolean
   @ApiProperty()
   id!: string
 
@@ -327,11 +328,19 @@ export class RegistrationListDto {
   items!: MyRegistrationDto[]
 }
 
+export class PublicRegistrationAnswerDto extends AnswerInput {
+  @ApiProperty() prompt!: string
+}
+
+export class PublicRosterMemberDto extends PublicMemberDto {
+  @ApiProperty({ type: [PublicRegistrationAnswerDto] }) publicAnswers!: PublicRegistrationAnswerDto[]
+}
+
 export class PublicRosterDto {
   @ApiProperty() hasMore!: boolean
   @ApiProperty() total!: number
-  @ApiProperty({ type: [PublicMemberDto] })
-  items!: PublicMemberDto[]
+  @ApiProperty({ type: [PublicRosterMemberDto] })
+  items!: PublicRosterMemberDto[]
 }
 
 

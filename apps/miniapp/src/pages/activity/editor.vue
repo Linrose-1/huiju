@@ -19,7 +19,7 @@ import type { AiActivityDraft } from '@/services/api/types'
 import RequestState from '@/components/base/RequestState.vue'
 
 type QuestionType = 'short_text' | 'long_text' | 'single' | 'multiple'
-type DraftQuestion = { key: number; id?: string; prompt: string; type: QuestionType; required: boolean; options: string }
+type DraftQuestion = { key: number; id?: string; prompt: string; type: QuestionType; required: boolean; options: string; publicToParticipants?: boolean }
 const questionTypes: QuestionType[] = ['short_text', 'long_text', 'single', 'multiple']
 const questionLabels = ['简答', '长文本', '单选', '多选']
 const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref('')
@@ -89,7 +89,7 @@ function retryQuestionHistory() { historyError.value = ''; void loadQuestionHist
 function selectQuestionTemplate(item: ActivityQuestionHistoryItem) {
   if (!editingQuestion.value || busy.value || locked.value || !editable.value) return
   // Preserve this activity's identity and required setting; copy only reusable configuration.
-  Object.assign(editingQuestion.value, { prompt: item.prompt, type: item.type, options: (item.options || []).join('\n') })
+  Object.assign(editingQuestion.value, { prompt: item.prompt, type: item.type, options: (item.options || []).join('\n'), publicToParticipants: false })
   questionError.value = ''; clearQuestionHistory()
 }
 function closeQuestion() { editingQuestion.value = null; clearQuestionHistory() }
@@ -147,7 +147,7 @@ function applyAiDraft(draft: AiActivityDraft) {
   customDeadline.value = draft.registrationDeadline !== null
   questions.value = draft.questions.map(question => ({
     key: ++sequence, prompt: question.prompt, type: question.type || 'short_text',
-    required: question.required ?? false, options: (question.options || []).join('\n')
+    publicToParticipants: false, required: question.required ?? false, options: (question.options || []).join('\n')
   }))
   aiDraftApplied.value = true
 }
@@ -182,7 +182,7 @@ async function load() {
       }
       // 首个报名后，以服务端已锁定的问题和金额为准，防止保留的草稿覆盖它们。
       if (!initialized || activity.hasRegistrationEver) {
-        questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, required: question.required, options: (question.options || []).join('\n') }))
+        questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
         form.feeType = activity.feeType
         form.amount = activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : ''
       }
@@ -212,7 +212,7 @@ function payload(): ActivityWriteInput {
   if (source.value?.lifecycle === 'published' && Date.parse(source.value.startsAt) <= Date.now()) {
     if (!form.consultationContact.trim()) throw new Error('请填写咨询联系方式')
     const activity = source.value
-    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, coverSourceUrl: activity.coverSourceUrl || null, imageUrls: activityImages(activity), location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType })) }
+    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, coverSourceUrl: activity.coverSourceUrl || null, imageUrls: activityImages(activity), location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType, publicToParticipants: !!questions.value.find(item => item.id === question.id)?.publicToParticipants })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
   if (!richValid.value || form.description.length > 10000) throw new Error('活动介绍格式无效或超过 10000 字，请调整后保存')
@@ -236,7 +236,7 @@ function payload(): ActivityWriteInput {
     if (!prompt) throw new Error(`请填写第 ${index + 1} 项的填写项名称`)
     const options = question.type === 'single' || question.type === 'multiple' ? question.options.split('\n').map(item => item.trim()).filter(Boolean) : null
     if (options && (options.length < 1 || options.length > 100 || options.some(option => option.length > 200) || new Set(options).size !== options.length)) throw new Error(`第 ${index + 1} 题需填写 1–100 个不同选项，每行一个，每项不超过 200 字`)
-    return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options }
+    return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options, publicToParticipants: !!question.publicToParticipants && !privateContactQuestion(prompt) }
   })
   return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null, coverSourceUrl: coverUrl.value ? coverSourceUrl.value || null : null, imageUrls: imageSlotsPayload(imageSlots.value) }
 }
@@ -306,6 +306,9 @@ function setCapacityLimited(limited: boolean) {
   if (!limited) form.capacity = ''
   capacityLimited.value = limited
 }
+function privateContactQuestion(prompt: string) { return /手机|电话|联系|微信|微\s*信|二维码|邮箱|邮件|电邮|qq|wechat|weixin|phone|mobile|e[\s-]*mail|qr[\s-]*code|contact/i.test(prompt) }
+function visibilityDisabled(question: DraftQuestion) { return busy.value || !editable.value || privateContactQuestion(question.prompt) || (!!source.value?.hasRegistrationEver && !source.value.questions.find(item => item.id === question.id)?.publicToParticipants) }
+function changeVisibility(question: DraftQuestion, value: boolean) { if (!visibilityDisabled(question)) question.publicToParticipants = value }
 function beginQuestion(question?: DraftQuestion) {
   if (busy.value || locked.value || !editable.value || (!question && questions.value.length >= 100)) return
   clearQuestionHistory()
@@ -433,7 +436,7 @@ async function submit(publish = false) {
     if (!current()) return
     id.value = activity.id
     source.value = activity
-    questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, required: question.required, options: (question.options || []).join('\n') }))
+    questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
     if (publish) await api.publishActivity(activity.id)
     if (!current()) return
     navigate(routes.manage + '?id=' + encodeURIComponent(activity.id), true)
@@ -973,6 +976,33 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
             <text class="plus">＋</text>添加报名填写项
           </button>
         </view>
+        <view
+          v-if="questions.length"
+          class="settings-card visibility-card"
+        >
+          <view class="settings-heading">报名名单公开字段</view>
+          <view class="settings-note">仅本活动有效报名会员可见。联系方式不可公开；首次报名后只能关闭公开。</view>
+          <view
+            v-for="question in questions"
+            :key="question.key"
+            class="visibility-row"
+          >
+            <view class="visibility-label">
+              {{ question.prompt }}<text
+                v-if="privateContactQuestion(question.prompt)"
+                class="settings-note"
+              >
+                联系方式不公开
+              </text>
+            </view>
+            <switch
+              :checked="!!question.publicToParticipants && !privateContactQuestion(question.prompt)"
+              :disabled="visibilityDisabled(question)"
+              color="#16865c"
+              @change="changeVisibility(question, switchValue($event))"
+            />
+          </view>
+        </view>
         <view class="settings-card notice-card">
           <view class="settings-heading"><text>报名须知</text><text class="require-badge optional">选填</text></view><view class="settings-description">向参与者展示报名须知、费用说明等重要信息</view><view class="notice-input">
             <textarea
@@ -1404,6 +1434,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
   <ActivityCoverCropper ref="cropper" />
 </template>
 <style scoped>
+.visibility-row{display:flex;align-items:center;justify-content:space-between;gap:20rpx;padding:18rpx 0}.visibility-label{flex:1;min-width:0;overflow-wrap:anywhere;font-size:28rpx}.visibility-label text{display:block}
 .activity-editor{min-height:100vh;background:#f4f9f7;color:#111a2d;padding:20rpx 47rpx calc(106rpx + env(safe-area-inset-bottom));font-size:27rpx;line-height:1.45}
 .steps{display:flex;align-items:center;justify-content:space-between;gap:10rpx;height:72rpx;margin:0 55rpx 16rpx}.step{flex-shrink:0;white-space:nowrap;font-size:27rpx;font-weight:500;line-height:51rpx;padding:0 20rpx;background:transparent;color:#717b90;border-radius:30rpx}.step.current{background:linear-gradient(110deg,#318e6f,#135741);color:#fff}.step.completed{color:#197757}.last-step{padding-right:0}.step-line{height:2rpx;background:#55a891;flex:1;min-width:24rpx}.muted-line{background:#cbd2dd}
 .form-card{background:#fff;border-radius:11rpx;padding:17rpx 18rpx;margin-bottom:14rpx}.card-heading{display:flex;align-items:center;justify-content:space-between;gap:8rpx;font-size:30rpx;line-height:42rpx;font-weight:600;margin-bottom:10rpx}.helper{font-size:24rpx;color:#7b879d;font-weight:400;line-height:1.5}.required{margin-left:3rpx;margin-right:0;color:#ea2027}.field{display:block;background:linear-gradient(110deg,#f7f9fa,#f5f7f8);border:1rpx solid #edf0f3;border-radius:8rpx;min-height:66rpx;height:66rpx;line-height:66rpx;width:100%;padding:0 15rpx;font-size:27rpx;color:#172239}.field::placeholder,.description-input::placeholder{color:#8c96a8}

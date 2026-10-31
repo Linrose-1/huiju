@@ -1,0 +1,1 @@
+ALTER TABLE `registration_questions` ADD `public_to_participants` boolean DEFAULT false NOT NULL;

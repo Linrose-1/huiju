@@ -22,6 +22,7 @@ import { PageQuery, MyRegistrationQuery, activityStatusSql, activityCounts, answ
 import { RecommendationRecordsService } from '../recommendations/records.js'
 import { activityImages } from './activity-images.js'
 import { SpecialInviteService } from './special-invite.js'
+import { contactQuestion } from './question-visibility.js'
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
 
@@ -98,6 +99,7 @@ export class ActivityService {
         type: registrationQuestions.type,
         prompt: registrationQuestions.prompt,
         required: registrationQuestions.required,
+        publicToParticipants: registrationQuestions.publicToParticipants,
         options: registrationQuestions.options
       })
       .from(registrationQuestions)
@@ -206,7 +208,7 @@ export class ActivityService {
     return this.present(activity, member?.id)
   }
 
-  async roster(id: string, query: PageQuery = new PageQuery()) {
+  async roster(id: string, query: PageQuery = new PageQuery(), header?: string) {
     await this.detail(id)
     const [activity] = await this.database.db
       .select()
@@ -228,7 +230,28 @@ export class ActivityService {
       .limit(query.limit + 1).offset(query.offset)
     const [total] = await this.database.db.select({ value: count() }).from(registrations)
       .where(and(eq(registrations.activityId, id), eq(registrations.status, 'active')))
-    return { items: rows.slice(0, query.limit), total: Number(total!.value), hasMore: rows.length > query.limit }
+    const page = rows.slice(0, query.limit)
+    const answers = new Map<string, { questionId: string; prompt: string; value: string | string[] }[]>()
+    const caller = header ? await this.identity.require(header, true) : null
+    if (caller && complete(caller) && activity.lifecycle !== 'cancelled' && page.length) {
+      const [registered] = await this.database.db.select({ id: registrations.id }).from(registrations)
+        .where(and(eq(registrations.activityId, id), eq(registrations.memberId, caller.id), eq(registrations.status, 'active'))).limit(1)
+      if (registered) {
+        const visible = await this.database.db.select({ memberId: registrations.memberId, questionId: registrationQuestions.id, prompt: registrationQuestions.prompt, value: registrationAnswers.answer })
+          .from(registrationAnswers)
+          .innerJoin(registrations, eq(registrations.id, registrationAnswers.registrationId))
+          .innerJoin(registrationQuestions, eq(registrationQuestions.id, registrationAnswers.questionId))
+          .where(and(eq(registrations.activityId, id), eq(registrations.status, 'active'), eq(registrationQuestions.activityId, id), eq(registrationQuestions.publicToParticipants, true), inArray(registrations.memberId, page.map(row => row.memberId))))
+          .orderBy(asc(registrationQuestions.sortOrder))
+        for (const row of visible) {
+          if (contactQuestion(row.prompt) || (Array.isArray(row.value) ? !row.value.some(value => value.trim()) : !row.value.trim())) continue
+          const items = answers.get(row.memberId) ?? []
+          items.push({ questionId: row.questionId, prompt: row.prompt, value: row.value })
+          answers.set(row.memberId, items)
+        }
+      }
+    }
+    return { items: page.map(row => ({ ...row, publicAnswers: answers.get(row.memberId) ?? [] })), total: Number(total!.value), hasMore: rows.length > query.limit }
   }
 
   private async registrationDto(row: typeof registrations.$inferSelect, knownAnswers?: RegistrationDto['answers']): Promise<RegistrationDto> {

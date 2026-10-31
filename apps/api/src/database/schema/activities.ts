@@ -121,6 +121,7 @@ export const registrationQuestions = mysqlTable(
       .notNull(),
     prompt: text('prompt').notNull(),
     required: boolean('required').notNull().default(false),
+    publicToParticipants: boolean('public_to_participants').notNull().default(false),
     sortOrder: int('sort_order', { unsigned: true }).notNull(),
     options: json('options').$type<string[]>(),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 })

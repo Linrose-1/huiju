@@ -8,7 +8,7 @@ import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
-const id = ref(''), kind = ref<'roster' | 'readers'>('roster'), people = ref<PublicMember[]>([])
+const id = ref(''), kind = ref<'roster' | 'readers'>('roster'), people = ref<(PublicMember & { publicAnswers?: { questionId: string; prompt: string; value: string | string[] }[] })[]>([])
 const loading = ref(false), moreLoading = ref(false), error = ref(''), moreError = ref(''), hasMore = ref(false)
 const session = useSessionStore()
 let generation = 0, offset = 0, visible = false, opening = false
@@ -24,7 +24,8 @@ async function load(more = false) {
     if (!active()) return
     offset += result.items.length
     const known = new Set(people.value.map(person => person.memberId))
-    people.value.push(...result.items.filter(person => !known.has(person.memberId)))
+    const items: typeof people.value = result.items
+    people.value.push(...items.filter(person => !known.has(person.memberId)))
     hasMore.value = result.hasMore
   } catch (e) { if (active()) { if (more) moreError.value = errorMessage(e); else error.value = errorMessage(e) } }
   finally { if (active()) { loading.value = false; moreLoading.value = false; uni.stopPullDownRefresh() } }
@@ -90,7 +91,17 @@ onPullDownRefresh(() => { void load() })
               color="#82968a"
             />
           </view>
-          <text class="person-name">{{ person.displayName || '有聚点会员' }}</text>
+          <view class="person-name">
+            {{ person.displayName || '有聚点会员' }}<template v-if="kind === 'roster'">
+              <view
+                v-for="answer in person.publicAnswers || []"
+                :key="answer.questionId"
+                class="public-answer"
+              >
+                <text v-if="Array.isArray(answer.value) ? answer.value.some(value => value.trim()) : answer.value.trim()">{{ answer.prompt }}：{{ Array.isArray(answer.value) ? answer.value.filter(value => value.trim()).join('、') : answer.value }}</text>
+              </view>
+            </template>
+          </view>
           <uni-icons
             type="arrow-right"
             size="28rpx"
@@ -109,5 +120,6 @@ onPullDownRefresh(() => { void load() })
   </view>
 </template>
 <style scoped>
+.public-answer{font-size:24rpx;color:#718b94;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
 .people-page{min-height:100vh;padding:24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));background:#f1f8f5}.people-list{background:#fff;border-radius:20rpx;padding:0 24rpx}.person{display:flex;align-items:center;gap:20rpx;width:100%;padding:24rpx 0;background:transparent;border-radius:0;text-align:left;border-bottom:1rpx solid #edf3ef}.person:last-child{border-bottom:0}.person-avatar{width:80rpx;height:80rpx;border-radius:50%;flex-shrink:0}.placeholder{display:flex;align-items:center;justify-content:center;background:#e8f2ed}.person-name{flex:1;min-width:0;font-size:30rpx;color:#16333c;overflow-wrap:anywhere}.empty{padding:80rpx 24rpx;text-align:center;font-size:28rpx;color:#718b94}
 </style>

@@ -1750,6 +1750,7 @@ export interface components {
             ops: components["schemas"]["DescriptionOperationDto"][];
         };
         QuestionDto: {
+            publicToParticipants: boolean;
             id: string;
             /** @enum {string} */
             type: "short_text" | "long_text" | "single" | "multiple";
@@ -1791,10 +1792,22 @@ export interface components {
             items: components["schemas"]["ActivityDto"][];
             hasMore: boolean;
         };
+        PublicRegistrationAnswerDto: {
+            questionId: string;
+            value: string | string[];
+            prompt: string;
+        };
+        PublicRosterMemberDto: {
+            /** Format: uuid */
+            memberId: string;
+            avatarUrl: string | null;
+            displayName: string | null;
+            publicAnswers: components["schemas"]["PublicRegistrationAnswerDto"][];
+        };
         PublicRosterDto: {
             hasMore: boolean;
             total: number;
-            items: components["schemas"]["PublicMemberDto"][];
+            items: components["schemas"]["PublicRosterMemberDto"][];
         };
         AnswerInput: {
             questionId: string;
@@ -1864,6 +1877,11 @@ export interface components {
             type: "short_text" | "long_text" | "single" | "multiple";
             prompt: string;
             required: boolean;
+            /**
+             * @description 仅有效报名会员可见；已有报名后只能关闭
+             * @default false
+             */
+            publicToParticipants: boolean;
             options?: string[] | null;
         };
         ActivityWriteInput: {
@@ -3006,7 +3024,9 @@ export interface operations {
                 offset?: number;
                 limit?: number;
             };
-            header?: never;
+            header: {
+                authorization: string;
+            };
             path: {
                 id: string;
             };

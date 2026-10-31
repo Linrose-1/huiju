@@ -95,7 +95,7 @@ describe('bounded list pagination', () => {
       [{ value: 240 }]])
     vi.spyOn(f.activity, 'detail').mockResolvedValue({} as never)
     const result = await f.activity.roster('activity', { offset: 200, limit: 1 })
-    expect(result).toEqual({ items: [{ memberId: '201', avatarUrl: null, displayName: '甲' }], total: 240, hasMore: true })
+    expect(result).toEqual({ items: [{ memberId: '201', avatarUrl: null, displayName: '甲', publicAnswers: [] }], total: 240, hasMore: true })
     expect(f.calls).toContainEqual({ query: 1, method: 'offset', args: [200] })
     expect(f.calls.find(call => call.query === 1 && call.method === 'orderBy')!.args).toHaveLength(2)
   })

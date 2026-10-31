@@ -52,7 +52,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -200,7 +200,7 @@ test('first registration refresh restores locked questions and fee from the serv
   assert.equal(h.page.questions.value.length, 1)
   const input = h.page.payload()
   assert.equal(input.feeAmountCents, 1000)
-  assert.deepEqual(input.questions, [{ id: 'q1', type: 'single', prompt: '原问题', required: true, options: ['唯一选项'] }])
+  assert.deepEqual(input.questions, [{ id: 'q1', type: 'single', prompt: '原问题', required: true, options: ['唯一选项'], publicToParticipants: false }])
   assert.equal(input.startsAt, '2099-10-01T01:00:12.123Z')
   h.unload()
 })
@@ -559,5 +559,47 @@ test('identity change between original and crop uploads discards source and skip
   assert.equal(uploads, 1)
   assert.equal(h.page.coverUrl.value, '')
   assert.equal(h.page.coverSourceUrl.value, '')
+  h.unload()
+})
+
+test('participant visibility defaults private and contact questions cannot enter public payload', async () => {
+  const h = harness({ record: activity({ questions: [{ id: 'q1', type: 'short_text', prompt: '公司', required: false, options: null }, { id: 'q2', type: 'short_text', prompt: '微信号', required: false, options: null }] }) })
+  h.page.id.value = 'activity-a'
+  await h.page.load()
+  assert.equal(h.page.payload().questions[0].publicToParticipants, false)
+  h.page.questions.value.forEach(q => { q.publicToParticipants = true })
+  const input = h.page.payload()
+  assert.equal(input.questions[0].publicToParticipants, true)
+  assert.equal(input.questions[1].publicToParticipants, false)
+  h.unload()
+})
+
+test('started activity can retract visibility and undo before saving, while private fields stay locked', async () => {
+  const record = activity({ lifecycle: 'published', hasRegistrationEver: true, startsAt: '2020-01-01T00:00:00Z', endsAt: '2099-01-01T00:00:00Z', questions: [
+    { id: 'q1', type: 'short_text', prompt: '公司', required: false, options: null, publicToParticipants: true },
+    { id: 'q2', type: 'short_text', prompt: '职位', required: false, options: null, publicToParticipants: false },
+  ] })
+  const h = harness({ record }); h.page.id.value = record.id; await h.page.load()
+  assert.equal(h.page.started.value, true)
+  const [publicQuestion, privateQuestion] = h.page.questions.value
+  h.page.changeVisibility(publicQuestion, false)
+  assert.equal(h.page.payload().questions[0].publicToParticipants, false)
+  h.page.changeVisibility(publicQuestion, true)
+  assert.equal(h.page.payload().questions[0].publicToParticipants, true)
+  h.page.changeVisibility(privateQuestion, true)
+  assert.equal(h.page.payload().questions[1].publicToParticipants, false)
+  h.page.busy.value = true
+  h.page.changeVisibility(publicQuestion, false)
+  assert.equal(publicQuestion.publicToParticipants, true)
+  h.page.busy.value = false
+  h.api.managedActivity = async () => ({ ...record, questions: record.questions.map(q => ({ ...q, publicToParticipants: false })) })
+  await h.page.load()
+  assert.equal(h.page.visibilityDisabled(h.page.questions.value[0]), true)
+  h.unload()
+})
+test('choosing a historical question clears a previous public setting', async () => {
+  const h = harness(); h.page.beginQuestion(); h.page.editingQuestion.value.publicToParticipants = true
+  h.page.selectQuestionTemplate({ prompt: '邮箱', type: 'short_text', options: null })
+  assert.equal(h.page.editingQuestion.value.publicToParticipants, false)
   h.unload()
 })

@@ -120,6 +120,13 @@
       "when": 1793263098596,
       "tag": "0016_activity_special_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1793284744422,
+      "tag": "0017_registration_question_visibility",
+      "breakpoints": true
     }
   ]
 }

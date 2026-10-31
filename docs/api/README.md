@@ -1,5 +1,11 @@
 # API 契约
 
+## 报名名单公开字段（第5项）
+
+活动问题输入增加可选 `publicToParticipants` 布尔值，新建省略为false，编辑省略保留原值；问题输出包含该标记，报名表据此提前告知。手机号、微信号、二维码、邮箱等联系方式题目不允许开启，返回 `QUESTION_CONTACT_PRIVATE`；已有首次报名后false变true返回 `QUESTION_VISIBILITY_LOCKED`（409），关闭公开不改答案及题目内容。活动编辑的生命周期限制继续有效。
+
+`GET /activities/:id/registrations` 接受可选Bearer，仍返回头像名称及分页信息，每个item新增 `publicAnswers: { questionId, prompt, value }[]`。仅完整资料且本活动有效报名者可取得当前页、当前活动的公开非联系方式非空答案；其他调用者返回空数组，活动下架返回空名单，活动取消不返回答案。发起人在公开接口没有额外特权，原管理名单不变。响应使用 `Cache-Control: private, no-store`，阅读名单不增加报名答案。0017已按授权在本机huiju执行并完成本地验收，远程未执行；部署前须单独授权并迁移，证据见实现日志。
+
 ## 我的学友与本人链路（第27项）
 
 `GET /members/me/fellows?offset=0&limit=20` 返回 `inviter`、`items`、`total`、`hasMore`；仅完整资料会员本人直属邀请关系，平台根邀请者返回null，列表按创建时间与ID稳定排序。人员摘要仅包含 `memberId/displayName/avatarUrl/canOpenCard`，未完善节点返回匿名文案、null ID/头像、不可点名片。

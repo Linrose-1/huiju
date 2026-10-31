@@ -335,6 +335,14 @@
               "default": 20,
               "type": "number"
             }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -419,7 +427,12 @@
             }
           }
         },
-        "security": [],
+        "security": [
+          {},
+          {
+            "bearer": []
+          }
+        ],
         "summary": "",
         "tags": [
           "activities"
@@ -11663,6 +11676,9 @@
       "QuestionDto": {
         "type": "object",
         "properties": {
+          "publicToParticipants": {
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },
@@ -11690,6 +11706,7 @@
           }
         },
         "required": [
+          "publicToParticipants",
           "id",
           "type",
           "prompt",
@@ -11855,6 +11872,64 @@
           "hasMore"
         ]
       },
+      "PublicRegistrationAnswerDto": {
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string"
+          },
+          "value": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "questionId",
+          "value",
+          "prompt"
+        ]
+      },
+      "PublicRosterMemberDto": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "publicAnswers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicRegistrationAnswerDto"
+            }
+          }
+        },
+        "required": [
+          "memberId",
+          "avatarUrl",
+          "displayName",
+          "publicAnswers"
+        ]
+      },
       "PublicRosterDto": {
         "type": "object",
         "properties": {
@@ -11867,7 +11942,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PublicMemberDto"
+              "$ref": "#/components/schemas/PublicRosterMemberDto"
             }
           }
         },
@@ -12161,6 +12236,11 @@
           },
           "required": {
             "type": "boolean"
+          },
+          "publicToParticipants": {
+            "type": "boolean",
+            "default": false,
+            "description": "仅有效报名会员可见；已有报名后只能关闭"
           },
           "options": {
             "nullable": true,

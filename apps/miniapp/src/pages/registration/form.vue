@@ -242,6 +242,11 @@ onUnload(() => { alive = false; generation++; verification++ })
             v-if="question.required"
             class="required"
           >*</text>{{ question.prompt }}<text v-if="question.type==='single'">（单选）</text><text v-if="question.type==='multiple'">（多选）</text></label><view
+            v-if="question.publicToParticipants"
+            class="helper"
+          >
+            报名后对本活动参与者可见
+          </view><view
             v-if="question.type==='short_text'"
             class="input-wrap"
           >

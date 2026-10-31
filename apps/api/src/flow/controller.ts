@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpException, Param, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common'
+import { Body, Controller, Get, Header, Headers, HttpCode, HttpException, Param, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common'
 import { ApiBearerAuth, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { ActivityService } from './activity.js'
 import { ActivityListQuery } from './activity-list-dto.js'
@@ -53,12 +53,13 @@ export class FlowController {
     @Headers('authorization')
     header?: string) { return this.activity.detail(id, header) }
 
-  @ApiOperation({ security: [] })
+  @ApiOperation({ security: [{}, { bearer: [] }] })
   @Get('activities/:id/registrations')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOkResponse({ type: PublicRosterDto })
   roster(
     @Param('id', ParseUUIDPipe)
-    id: string, @Query() query: PageQuery) { return this.activity.roster(id, query) }
+    id: string, @Query() query: PageQuery, @Headers('authorization') header?: string) { return this.activity.roster(id, query, header) }
 
   @Get('activities/:id/registrations/me')
   @ApiOkResponse({ type: RegistrationDto })

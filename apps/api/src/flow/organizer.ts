@@ -17,6 +17,7 @@ import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, ManagedA
 import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 import { activityDescription, activityRegistrationNotice } from './activity-description.js'
 import { activityImages, activityImageValues, activityCoverSource, type ActivityImageData } from './activity-images.js'
+import { validateQuestionVisibility } from './question-visibility.js'
 
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
@@ -47,6 +48,7 @@ export function activityValues(input: ActivityWriteInput) {
   const ids = input.questions.flatMap(q => q.id ? [q.id] : [])
   if (new Set(ids).size !== ids.length) fail('INVALID_QUESTIONS', '报名问题不能重复')
   for (const q of input.questions) {
+    validateQuestionVisibility(q)
     if (!q.prompt?.trim()) fail('INVALID_QUESTIONS', '请填写报名问题')
     const choices = q.type === 'single' || q.type === 'multiple'
     if (choices ? !q.options?.length || q.options.some(o => !o.trim()) || new Set(q.options).size !== q.options.length : Boolean(q.options?.length)) {
@@ -67,6 +69,7 @@ export function requireOrganizer(activity: Activity | undefined, memberId: strin
 }
 
 export function validateActivityEdit(activity: Activity, questions: Question[], input: ActivityWriteInput, now = new Date()) {
+  for (const question of input.questions) validateQuestionVisibility({ ...question, publicToParticipants: question.publicToParticipants ?? questions.find(old => old.id === question.id)?.publicToParticipants ?? false })
   const preserveCoordinates = input.locationLatitude === undefined && input.locationLongitude === undefined && input.location.trim() === activity.location
   const nextCover = input.imageUrls !== undefined ? input.imageUrls[0] ?? null : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl
   const values = activityValues({ ...input,
@@ -87,6 +90,9 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
   })
   if (activity.hasRegistrationEver && (!sameQuestions || activity.feeType !== values.feeType || activity.feeAmountCents !== values.feeAmountCents)) {
     fail('ACTIVITY_FIELDS_LOCKED', '已有报名记录，报名问题、收费模式和金额不能修改', 409)
+  }
+  if (activity.hasRegistrationEver && input.questions.some(q => q.publicToParticipants === true && !questions.find(old => old.id === q.id)?.publicToParticipants)) {
+    fail('QUESTION_VISIBILITY_LOCKED', '已有报名记录，不能将私密填写项改为公开', 409)
   }
   if (values.capacity !== null && values.capacity < activity.activeRegistrationCount) fail('CAPACITY_BELOW_REGISTRATIONS', '人数上限不能低于当前有效报名人数', 409)
   if (activity.lifecycle === 'published' && now >= activity.endsAt) fail('ACTIVITY_ENDED', '活动已结束，不能编辑', 409)
@@ -175,7 +181,7 @@ export class OrganizerService {
 
   private async present(activity: Activity): Promise<ManagedActivityDto> {
     const db = this.database.db
-    const questions = await db.select({ id: registrationQuestions.id, type: registrationQuestions.type, prompt: registrationQuestions.prompt, required: registrationQuestions.required, options: registrationQuestions.options })
+    const questions = await db.select({ id: registrationQuestions.id, type: registrationQuestions.type, prompt: registrationQuestions.prompt, required: registrationQuestions.required, options: registrationQuestions.options, publicToParticipants: registrationQuestions.publicToParticipants })
       .from(registrationQuestions).where(eq(registrationQuestions.activityId, activity.id)).orderBy(asc(registrationQuestions.sortOrder))
     const [organizer] = await db.select({ memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     return {
@@ -232,10 +238,11 @@ export class OrganizerService {
     return { items: rows.slice(0, query.limit).map(row => ({ prompt: row.prompt, type: row.type, options: row.options ?? null })), hasMore: rows.length > query.limit }
   }
 
-  private async questions(tx: Tx, id: string, input: ActivityWriteInput) {
+  private async questions(tx: Tx, id: string, input: ActivityWriteInput, previous: Question[] = []) {
     await tx.delete(registrationQuestions).where(eq(registrationQuestions.activityId, id))
     if (input.questions.length) await tx.insert(registrationQuestions).values(input.questions.map((q, index) => ({
       id: q.id ?? randomUUID(), activityId: id, type: q.type, prompt: q.prompt.trim(), required: q.required,
+      publicToParticipants: q.publicToParticipants ?? previous.find(old => old.id === q.id)?.publicToParticipants ?? false,
       options: q.options?.length ? q.options : null, sortOrder: index
     })))
   }
@@ -268,7 +275,13 @@ export class OrganizerService {
       const { values, sameQuestions } = validateActivityEdit(activity, questions, input)
       await this.checkImages(values, member.id, activity)
       await tx.update(activities).set(values).where(eq(activities.id, id))
-      if (!sameQuestions) await this.questions(tx, id, input)
+      if (!sameQuestions) await this.questions(tx, id, input, questions)
+      else for (const question of input.questions) {
+        if (question.publicToParticipants !== undefined && question.publicToParticipants !== questions.find(old => old.id === question.id)?.publicToParticipants) {
+          await tx.update(registrationQuestions).set({ publicToParticipants: question.publicToParticipants })
+            .where(and(eq(registrationQuestions.activityId, id), eq(registrationQuestions.id, question.id!)))
+        }
+      }
       if (activity.consultationContact !== values.consultationContact) {
         await tx.insert(activityOperations).values({ id: randomUUID(), activityId: id, actorType: 'member', actorMemberId: member.id, action: 'update_consultation_contact', changeSummary: { previous: activity.consultationContact, current: values.consultationContact } })
         await this.notify(tx, activity, 'consultation_contact_updated', `《${activity.title}》的咨询联系方式已更新，请进入活动查看。`)

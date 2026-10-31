@@ -26,6 +26,7 @@ export class QuestionWriteInput {
   @IsIn(['short_text', 'long_text', 'single', 'multiple']) type!: 'short_text' | 'long_text' | 'single' | 'multiple'
   @ApiProperty() @IsString() @Length(1, 1000) @Matches(/\S/) prompt!: string
   @ApiProperty() @IsBoolean() required!: boolean
+  @ApiPropertyOptional({ default: false, description: '仅有效报名会员可见；已有报名后只能关闭' }) @ValidateIf((_object, value) => value !== undefined) @IsBoolean() publicToParticipants?: boolean
   @ApiPropertyOptional({ type: [String], nullable: true }) @IsOptional() @IsArray() @ArrayMaxSize(100) @IsString({ each: true }) @Length(1, 200, { each: true }) options?: string[] | null
 }
 export class ActivityWriteInput {

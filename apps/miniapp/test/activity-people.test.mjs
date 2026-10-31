@@ -56,3 +56,21 @@ test('refresh, hide and account change discard stale responses', async t => {
   h.hooks.onShow(); h.requests[3].resolve(result([])); await setImmediate()
   assert.equal(h.page.loading.value,false); assert.equal(h.page.hasMore.value,false)
 })
+
+test('participant answers cannot survive an account change or return after cancellation', async t => {
+  const h = harness(t)
+  const privateResult = {items:[{memberId:'same-person',displayName:'会员',publicAnswers:[{questionId:'q',prompt:'公司',value:'参与者可见内容'}]}],hasMore:true}
+  h.requests[0].resolve(privateResult); await setImmediate()
+  assert.equal(h.page.people.value[0].publicAnswers[0].value,'参与者可见内容')
+  h.hooks.onReachBottom()
+  h.session.token = 'different-account'; h.session.epoch++; await setImmediate()
+  assert.deepEqual(h.page.people.value,[])
+  h.requests[1].resolve(privateResult); await setImmediate()
+  assert.deepEqual(h.page.people.value,[])
+  h.requests[2].resolve({items:[{memberId:'same-person',publicAnswers:[]}],hasMore:false}); await setImmediate()
+  assert.deepEqual(h.page.people.value[0].publicAnswers,[])
+  h.hooks.onHide(); h.hooks.onShow()
+  assert.deepEqual(h.page.people.value,[])
+  h.requests[3].resolve({items:[{memberId:'same-person',publicAnswers:[]}],hasMore:false}); await setImmediate()
+  assert.deepEqual(h.page.people.value[0].publicAnswers,[])
+})
