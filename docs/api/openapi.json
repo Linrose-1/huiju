@@ -2250,6 +2250,220 @@
         ]
       }
     },
+    "/api/v1/activities/{id}/poster": {
+      "get": {
+        "operationId": "ActivityPosterController_read",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPosterDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "activity-posters"
+        ]
+      }
+    },
+    "/api/v1/organizer/activities/{id}/poster-draft": {
+      "post": {
+        "operationId": "ActivityPosterController_draft",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosterDraftDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "activity-posters"
+        ]
+      }
+    },
+    "/api/v1/organizer/activities/{id}/poster": {
+      "put": {
+        "operationId": "ActivityPosterController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PosterCopyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityPosterDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "activity-posters"
+        ]
+      }
+    },
+    "/api/v1/activities/{id}/poster-code": {
+      "post": {
+        "operationId": "ActivityPosterController_code",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosterCodeDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "activity-posters"
+        ]
+      }
+    },
+    "/api/v1/activity-posters/resolve/{scene}": {
+      "get": {
+        "operationId": "ActivityPosterController_resolve",
+        "parameters": [
+          {
+            "name": "scene",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosterTargetDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "summary": "",
+        "tags": [
+          "activity-posters"
+        ]
+      }
+    },
     "/api/v1/auth/wechat/identify": {
       "post": {
         "operationId": "IdentityController_identify",
@@ -13114,6 +13328,176 @@
           "valid",
           "maskedPhone",
           "expiresAt"
+        ]
+      },
+      "ActivityPosterDto": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "feeType": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid"
+            ]
+          },
+          "feeAmount": {
+            "type": "number",
+            "nullable": true,
+            "description": "费用，单位为分"
+          },
+          "sourceHash": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          },
+          "subtitle": {
+            "type": "string"
+          },
+          "highlights": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "copyStatus": {
+            "type": "string",
+            "enum": [
+              "none",
+              "confirmed",
+              "stale"
+            ]
+          },
+          "canEdit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "activityId",
+          "title",
+          "coverUrl",
+          "startsAt",
+          "endsAt",
+          "location",
+          "feeType",
+          "feeAmount",
+          "sourceHash",
+          "version",
+          "subtitle",
+          "highlights",
+          "copyStatus",
+          "canEdit"
+        ]
+      },
+      "PosterDraftDto": {
+        "type": "object",
+        "properties": {
+          "subtitle": {
+            "type": "string"
+          },
+          "highlights": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceHash": {
+            "type": "string"
+          },
+          "remainingToday": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "subtitle",
+          "highlights",
+          "sourceHash",
+          "remainingToday"
+        ]
+      },
+      "PosterCopyInput": {
+        "type": "object",
+        "properties": {
+          "subtitle": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "highlights": {
+            "maxItems": 2,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sourceHash": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "subtitle",
+          "highlights",
+          "sourceHash",
+          "version"
+        ]
+      },
+      "PosterCodeDto": {
+        "type": "object",
+        "properties": {
+          "scene": {
+            "type": "string"
+          },
+          "base64": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ]
+          }
+        },
+        "required": [
+          "scene",
+          "base64",
+          "mimeType"
+        ]
+      },
+      "PosterTargetDto": {
+        "type": "object",
+        "properties": {
+          "activityId": {
+            "type": "string"
+          },
+          "inviteCode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "activityId",
+          "inviteCode"
         ]
       },
       "WechatIdentityInput": {

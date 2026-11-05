@@ -2,6 +2,7 @@ import { ApiError } from '@/services/api'
 import { bootstrapIdentity } from '@/services/wechat'
 import { useSessionStore } from '@/stores/session'
 export const routes = {
+  activityShare: '/pages/activity/share',
   advertisingIntroduction: '/pages/advertising/introduction',
   activityPeople: '/pages/activity/people',
   terms: '/pages/legal/terms', privacy: '/pages/legal/privacy', contentSettings: '/pages/platform/content',

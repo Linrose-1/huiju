@@ -202,6 +202,7 @@ test('ordinary mode refuses local actor selection and ignores stored test actor'
   await assert.rejects(wechat.switchLocalTestActor('peer'), /仅本地/)
   assert.equal(h.queue.length, 0)
   const login = wechat.bootstrapIdentity()
+  await setImmediate()
   h.logins.shift().success({ code: 'real-wx-code' })
   await setImmediate()
   assert.equal(h.queue[0].data.code, 'real-wx-code')
@@ -324,6 +325,7 @@ test('silent identity does not require or fabricate agreement consent', async ()
   const h = harness(); h.store.captureInvite('FIRST')
   await assert.rejects(h.wechat().loginWithWechat(), error => error.code === 'LEGAL_CONSENT_REQUIRED')
   const result = h.wechat().bootstrapIdentity()
+  await setImmediate()
   h.logins.shift().success({ code: 'silent' }); await setImmediate()
   assert.deepEqual(h.queue[0].data, { code: 'silent', inviteCode: 'FIRST' })
   h.respond(200, { token: 'visitor', expiresAt: '2099-01-01', member: sampleMember }); await result
@@ -333,6 +335,7 @@ test('silent identity does not require or fabricate agreement consent', async ()
 test('duplicate silent identities merge one exchange with captured first invitation', async () => {
   const h = harness(); h.store.pendingInvite = 'FIRST'
   const first = h.wechat().bootstrapIdentity()
+  await setImmediate()
   h.store.pendingInvite = 'LATER'
   const second = h.wechat().bootstrapIdentity()
   assert.equal(h.logins.length, 1)
@@ -346,6 +349,7 @@ test('duplicate silent identities merge one exchange with captured first invitat
 test('valid stored identity refreshes without a new WeChat exchange', async () => {
   const h = harness(); h.accept('current')
   const result = h.wechat().bootstrapIdentity()
+  await setImmediate()
   h.respond(200, sampleMember)
   await result
   assert.equal(h.logins.length, 0)
@@ -354,6 +358,7 @@ test('valid stored identity refreshes without a new WeChat exchange', async () =
 test('expired server session silently reidentifies the existing account', async () => {
   const h = harness(); h.accept('expired')
   const result = h.wechat().bootstrapIdentity()
+  await setImmediate()
   h.respond(401, { code: 'SESSION_REQUIRED', message: 'Expired' }); await setImmediate()
   assert.equal(h.logins.length, 1)
   h.logins.shift().success({ code: 'renewed' }); await setImmediate()
@@ -363,6 +368,7 @@ test('expired server session silently reidentifies the existing account', async 
 
 test('logout during WeChat code exchange cannot restore identity or submit a login', async () => {
   const h = harness(); const result = h.wechat().bootstrapIdentity()
+  await setImmediate()
   h.store.clear()
   h.logins.shift().success({ code: 'late-code' })
   await assert.rejects(result, error => error.code === 'STALE_REQUEST')
@@ -381,10 +387,39 @@ test('anonymous public response remains usable when silent login finishes meanwh
 test('natural first entry and failed identification keep their first source through retry', async () => {
   const h = harness(); h.store.captureInvite(); h.store.captureInvite('LATER')
   assert.equal(h.store.pendingInvite, '')
-  const first = h.wechat().bootstrapIdentity(); h.logins.shift().fail()
+  const first = h.wechat().bootstrapIdentity(); await setImmediate(); h.logins.shift().fail()
   await assert.rejects(first, /重试/)
   h.store.captureInvite('LATER')
-  const retry = h.wechat().bootstrapIdentity(); h.logins.shift().success({ code: 'retry' }); await setImmediate()
+  const retry = h.wechat().bootstrapIdentity(); await setImmediate(); h.logins.shift().success({ code: 'retry' }); await setImmediate()
   assert.deepEqual(h.queue[0].data, { code: 'retry' })
   h.respond(200, { token: 'visitor', expiresAt: '2099-01-01', member: sampleMember }); await retry
+})
+
+test('cold poster launch resolves its invitation before the real bootstrap sends the first identify request', async () => {
+  const h = harness(), scene = 'p1234567890abcdef12345678'
+  const options = { path: 'pages/activity/detail', query: { scene } }, app = h.app(options)
+  app.onLaunch(options); app.onShow()
+  assert.equal(h.queue.length, 1)
+  assert.equal(h.logins.length, 0)
+  assert.match(h.queue[0].url, new RegExp(`/activity-posters/resolve/${scene}$`))
+  h.respond(200, { activityId: 'activity-a', inviteCode: 'POSTER_INVITER' }); await setImmediate()
+  assert.equal(h.logins.length, 1)
+  h.logins.shift().success({ code: 'poster-login' }); await setImmediate()
+  assert.deepEqual(h.queue[0].data, { code: 'poster-login', inviteCode: 'POSTER_INVITER' })
+  h.respond(200, { token: 'poster-session', expiresAt: '2099-01-01', member: sampleMember }); await setImmediate()
+  assert.equal(h.store.token, 'poster-session')
+})
+
+test('poster resolution failure does not establish the first identity without attribution and can be retried', async () => {
+  const h = harness(), scene = 'p1234567890abcdef12345678'
+  const options = { path: 'pages/activity/detail', query: { scene } }, app = h.app(options)
+  app.onLaunch(options)
+  h.respond(503, { code: 'TEMPORARY_UNAVAILABLE', message: '稍后重试' }); await setImmediate()
+  assert.equal(h.logins.length, 0)
+  assert.equal(h.store.token, '')
+  const retry = h.wechat().bootstrapIdentity()
+  h.respond(200, { activityId: 'activity-a', inviteCode: 'POSTER_INVITER' }); await setImmediate()
+  h.logins.shift().success({ code: 'poster-retry' }); await setImmediate()
+  assert.deepEqual(h.queue[0].data, { code: 'poster-retry', inviteCode: 'POSTER_INVITER' })
+  h.respond(200, { token: 'poster-session', expiresAt: '2099-01-01', member: sampleMember }); await retry
 })

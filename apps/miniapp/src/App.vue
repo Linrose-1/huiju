@@ -2,11 +2,14 @@
 import { onLaunch, onShow } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { bootstrapIdentity } from '@/services/wechat'
+import { preparePosterEntry } from '@/services/wechat/poster-entry'
 import { LOCAL_TEST } from '@/services/api/environment'
 function captureInvite(options: {
+    path?: string
     query?: Record<string, unknown>
 } | undefined) {
-    useSessionStore().captureInvite(options?.query?.inviteCode)
+    preparePosterEntry(options)
+    if (options?.query?.scene === undefined) useSessionStore().captureInvite(options?.query?.inviteCode)
 }
 onLaunch(options => { captureInvite(options); void bootstrapIdentity().catch(() => undefined); })
 onShow(() => {

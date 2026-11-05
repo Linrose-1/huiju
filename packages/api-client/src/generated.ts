@@ -372,6 +372,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/activities/{id}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ActivityPosterController_read"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizer/activities/{id}/poster-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ActivityPosterController_draft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organizer/activities/{id}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["ActivityPosterController_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activities/{id}/poster-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ActivityPosterController_code"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activity-posters/resolve/{scene}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ActivityPosterController_resolve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/wechat/identify": {
         parameters: {
             query?: never;
@@ -2077,6 +2157,47 @@ export interface components {
             valid: boolean;
             maskedPhone: string;
             expiresAt: string;
+        };
+        ActivityPosterDto: {
+            activityId: string;
+            title: string;
+            coverUrl: string | null;
+            startsAt: string;
+            endsAt: string;
+            location: string;
+            /** @enum {string} */
+            feeType: "free" | "paid";
+            /** @description 费用，单位为分 */
+            feeAmount: number | null;
+            sourceHash: string;
+            version: number;
+            subtitle: string;
+            highlights: string[];
+            /** @enum {string} */
+            copyStatus: "none" | "confirmed" | "stale";
+            canEdit: boolean;
+        };
+        PosterDraftDto: {
+            subtitle: string;
+            highlights: string[];
+            sourceHash: string;
+            remainingToday: number;
+        };
+        PosterCopyInput: {
+            subtitle: string;
+            highlights: string[];
+            sourceHash: string;
+            version: number;
+        };
+        PosterCodeDto: {
+            scene: string;
+            base64: string;
+            /** @enum {string} */
+            mimeType: "image/png" | "image/jpeg";
+        };
+        PosterTargetDto: {
+            activityId: string;
+            inviteCode: string;
         };
         WechatIdentityInput: {
             code: string;
@@ -4206,6 +4327,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpecialInviteVerifiedDto"];
+                };
+            };
+        };
+    };
+    ActivityPosterController_read: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPosterDto"];
+                };
+            };
+        };
+    };
+    ActivityPosterController_draft: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PosterDraftDto"];
+                };
+            };
+        };
+    };
+    ActivityPosterController_save: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PosterCopyInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPosterDto"];
+                };
+            };
+        };
+    };
+    ActivityPosterController_code: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PosterCodeDto"];
+                };
+            };
+        };
+    };
+    ActivityPosterController_resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scene: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PosterTargetDto"];
                 };
             };
         };

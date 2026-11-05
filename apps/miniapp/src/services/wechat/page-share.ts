@@ -41,7 +41,7 @@ export function usePageShare(target: () => ShareTarget | null, timeline = false)
     if (visible.value && !shareBusy.value && !shareReady.value) shareError.value = '身份已变更，请重试分享'
   }, { flush: 'sync' })
   watch(shareReady, updateMenu, { flush: 'sync' })
-  onLoad(options => { session.captureInvite(options?.inviteCode) })
+  onLoad(options => { if (options?.scene === undefined) session.captureInvite(options?.inviteCode) })
   onShow(() => { visible.value = true; updateMenu(); void retryShare() })
   const leave = () => { visible.value = false; generation++; shareBusy.value = false; verifiedToken.value = ''; verifiedCode.value = '' }
   onHide(leave); onUnload(leave)

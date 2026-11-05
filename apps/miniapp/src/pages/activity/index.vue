@@ -13,7 +13,7 @@ import { activityTimeRangeWeekday, fee } from '@/services/presentation'
 import { navigate, routes } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { scanActivityCode } from '@/services/wechat'
-import { activityCodeTarget } from '@/services/activity-code'
+import { activityCodeTarget, activityPosterScene } from '@/services/activity-code'
 import RequestState from '@/components/base/RequestState.vue'
 const adActive = ref(false), adRefresh = ref(0)
 onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
@@ -43,6 +43,8 @@ async function scanActivity() {
     try {
         const result = await scanActivityCode()
         if (!result || !current()) return
+        const scene = activityPosterScene(result.path || '') || activityPosterScene(result.result)
+        if (scene) { navigate(routes.detail + '?scene=' + encodeURIComponent(scene)); return }
         const target = activityCodeTarget(result.path || '') || activityCodeTarget(result.result)
         if (!target) {
             uni.showModal({ title: '无法识别活动', content: '请扫描有聚点活动二维码，该二维码不是支持的活动链接。', showCancel: false })
@@ -280,7 +282,12 @@ onShareTimeline(shareTimeline)
                   />
                   <text v-else>{{ person.displayName?.slice(0, 1) || '友' }}</text>
                 </view>
-              </view><text class="registration-count">{{ activity.activeRegistrationCount ? activity.activeRegistrationCount+' 人已报名' : '暂无报名' }}</text>
+              </view><text class="registration-count">{{ activity.activeRegistrationCount ? activity.activeRegistrationCount+' 人已报名' : '暂无报名' }}</text><button
+                class="card-share"
+                @click.stop="navigate(routes.activityShare+'?id='+encodeURIComponent(activity.id))"
+              >
+                分享
+              </button>
             </view>
           </view>
         </view>
@@ -316,4 +323,8 @@ onShareTimeline(shareTimeline)
 .activity-content{display:flex;flex-direction:column;flex:1;min-width:0;padding:3rpx 0 2rpx}.activity-title{font-size:31rpx;line-height:1.36;color:#182b22;margin:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.description{color:#7b847e;font-size:24rpx;line-height:1.45;margin-top:8rpx;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.activity-card .meta{gap:7rpx;margin-top:9rpx;font-size:23rpx;line-height:1.35;align-items:flex-start}.meta-text{min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.location-text{-webkit-line-clamp:1}
 .card-bottom{display:flex;align-items:center;gap:10rpx;min-height:50rpx;margin-top:auto;padding-top:13rpx}.avatar-stack{display:flex;align-items:center;flex:none;padding-left:4rpx}.member-avatar{width:48rpx;height:48rpx;margin-left:-5rpx;border:3rpx solid #fff;border-radius:50%;overflow:hidden;background:#dcebe0;color:#286649;display:flex;align-items:center;justify-content:center;font-size:23rpx;box-shadow:0 1rpx 4rpx #183d271c}.member-avatar image{width:100%;height:100%}.registration-count{color:#557365;font-size:23rpx;white-space:nowrap}
 .list-footer{padding:20rpx 0 34rpx;text-align:center;color:#829087;font-size:24rpx}.load-error{display:flex;align-items:center;justify-content:center;gap:10rpx;flex-wrap:wrap}.load-error .text-button{font-size:24rpx}
+</style>
+
+<style scoped>
+.card-share { flex-shrink: 0; margin: 0 0 0 auto; padding: 8rpx 18rpx; min-height: 64rpx; line-height: 48rpx; font-size: 26rpx; color: #155b45; background: #edf4ef; border-radius: 32rpx; }
 </style>

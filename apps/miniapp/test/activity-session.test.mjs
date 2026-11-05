@@ -21,6 +21,7 @@ function harness(t, token = '', reading = {}, navigation = {}) {
   const scrolls = []
   const dependencies = {
     '@dcloudio/uni-app': { onHide() {}, onReachBottom() {}, onPullDownRefresh() {}, onLoad(fn) { onLoadPage = fn }, onShow(callback) { show = callback }, onUnload(callback) { unload = callback }, onShareAppMessage() {}, onShareTimeline() {} },
+    '@/services/wechat/poster-entry': { resolvePosterEntry: () => { throw new Error('Unexpected poster entry in standard activity test') }, releasePosterEntry() {} },
     '@/services/reading': { createReadingVisit: reading.createVisit || (() => ({ record: async () => {} })) },
     '@/services/api': { api: { ...api, activityReaders: reading.list || (async () => ({items:[], total:0, hasMore:false})) }, ApiError, errorMessage: e => e.message },
     '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },

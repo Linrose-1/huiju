@@ -178,3 +178,7 @@ AI `ai-draft-reservation.spec.ts` 验证调用模型时没有活动事务、跨�
 
 
 19:28收尾：本次回滚报告确认七表数量与内容校验和恢复一致，3001测试服务退出。原dev小程序已恢复普通编译／3012／LOCAL_TEST=false；3012与5175当前未启动。后续不可复用过期的事务测试身份或活动ID。
+
+### 活动海报验证入口
+
+API `poster.spec.ts`、`wechat-poster-code.spec.ts` 覆盖独立额度/预留、权限/冲突、本人短码、微信二进制/安全错误。小程序 `poster-entry.test.mjs`、`activity-poster-page.test.mjs`、`activity-poster-canvas.test.mjs` 覆盖首次邀请等待、迟到隔离、候选确认及导出新鲜度、布局极限；原session/activity-code测试覆盖真实bootstrap组合。授权本机验收脚本在忽略目录 `poster-http-rollback-20261105.mjs`，必须显式参数和精确本机目标；真实MySQL/HTTP、微信及AI替身，不作为外部验收。独立微信Canvas夹具只证明绘制导出，码区测试纹理不可扫码。

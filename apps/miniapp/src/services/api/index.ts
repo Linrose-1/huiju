@@ -20,7 +20,7 @@ export type ListQuery = { offset?: number; limit?: number; status?: string }
 function listQuery(query: ListQuery = {}) {
   return `offset=${query.offset ?? 0}&limit=${query.limit ?? 20}${query.status ? `&status=${encodeURIComponent(query.status)}` : ''}`
 }
-async function request<T>(path: string, method: 'GET' | 'POST' | 'DELETE' = 'GET', data?: object, auth: boolean | 'none' = false, timeout = 15000): Promise<T> {
+async function request<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET', data?: object, auth: boolean | 'none' = false, timeout = 15000): Promise<T> {
   const session = useSessionStore()
   if (session.token && Date.parse(session.expiresAt) <= Date.now()) session.clear()
   if (auth === true && !session.token) throw new ApiError('SESSION_REQUIRED', '登录已失效，请重新登录', 401)
@@ -73,6 +73,11 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  activityPoster: (id: string) => request<import('./types').ActivityPoster>(`/activities/${encodeURIComponent(id)}/poster`, 'GET', undefined, true),
+  generatePosterCopy: (id: string) => request<import('./types').PosterDraft>(`/organizer/activities/${encodeURIComponent(id)}/poster-draft`, 'POST', {}, true, 100000),
+  savePosterCopy: (id: string, input: import('./types').PosterCopyInput) => request<import('./types').ActivityPoster>(`/organizer/activities/${encodeURIComponent(id)}/poster`, 'PUT', input, true),
+  activityPosterCode: (id: string) => request<import('./types').PosterCode>(`/activities/${encodeURIComponent(id)}/poster-code`, 'POST', {}, true, 30000),
+  resolveActivityPoster: (scene: string) => request<import('./types').PosterDestination>(`/activity-posters/resolve/${encodeURIComponent(scene)}`, 'GET', undefined, 'none'),
   fellows: (query: ListQuery = {}) => request<FellowList>(`/members/me/fellows?${listQuery(query)}`, 'GET', undefined, true),
   connectionPath: (id: string, cursor = 0) => request<ConnectionPath>(`/members/${encodeURIComponent(id)}/connection-path?cursor=${cursor}&limit=20`, 'GET', undefined, true),
   advertising: (placement: 'activity' | 'circle' | 'assistant', offset = 0) => request<AdvertisingPublicAdList>(`/advertising/ads?placement=${placement}&offset=${offset}&limit=20`, 'GET', undefined, 'none'),

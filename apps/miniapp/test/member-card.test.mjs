@@ -92,6 +92,7 @@ test('avatar file read cannot upload under a replacement account', async () => {
   const session = { token: 'a', epoch: 0 }, uploads = []
   let read
   const service = compile('../src/services/wechat/index.ts', '', {
+    '@/services/wechat/poster-entry': { awaitPosterEntry: async () => {} },
     '@/services/wechat/local-test-actor': compile('../src/services/wechat/local-test-actor.ts', '', { '@/services/api/environment': {} }),
     '@/services/api': { api: { avatar: (...args) => uploads.push(args) }, ApiError: class extends Error {} },
     '@/stores/session': { useSessionStore: () => session }, '@/services/api/environment': {}

@@ -24,3 +24,10 @@ export function activityCodeTarget(value: string): { id: string; inviteCode?: st
   if (fields.inviteCode !== undefined && !/^[A-Za-z0-9_-]{1,32}$/.test(fields.inviteCode)) return null
   return { id: fields.id, ...(fields.inviteCode ? { inviteCode: fields.inviteCode } : {}) }
 }
+
+// WeChat unlimited codes carry only an opaque server-resolved scene, never an arbitrary URL.
+export function activityPosterScene(value: string): string | null {
+  const match = /^\/?pages\/activity\/detail\?scene=([^&#]+)$/.exec(value.trim())
+  if (!match) return null
+  try { const scene = decodeURIComponent(match[1]); return /^p[a-f0-9]{24}$/.test(scene) ? scene : null } catch { return null }
+}

@@ -1,3 +1,4 @@
+import { awaitPosterEntry } from '@/services/wechat/poster-entry'
 import { api, ApiError, refreshMember } from '@/services/api'
 import { useSessionStore } from '@/stores/session'
 import { LOCAL_TEST } from '@/services/api/environment'
@@ -93,6 +94,7 @@ function identifyWithWechat(): Promise<void> {
   return promise
 }
 export async function bootstrapIdentity(): Promise<void> {
+  await awaitPosterEntry()
   const session = useSessionStore()
   if (session.token) {
     try { await refreshMember(); return }

@@ -244,8 +244,8 @@ onShareAppMessage(shareMessage)
             <button
               v-if="activity.lifecycle==='published' && activity.moderation==='normal'"
               class="primary share-action"
-              :open-type="shareReady ? 'share' : undefined"
               :disabled="!shareReady"
+              @click="navigate(routes.activityShare+'?id='+encodeURIComponent(id))"
             >
               分享活动
             </button>

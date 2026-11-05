@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { resolvePosterEntry, releasePosterEntry } from '@/services/wechat/poster-entry'
 import PageReturn from '@/components/base/PageReturn.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
@@ -19,6 +20,12 @@ const id = ref(''), activity = ref<Activity | null>(null), roster = ref<PublicMe
 const rosterLoading = ref(false), rosterHasMore = ref(false), rosterMoreError = ref('')
 const registrationLoading = ref(false), registrationError = ref(''), registrationKnown = ref(false)
 const searchId = ref(''), recommendationToken = ref('')
+let incomingScene: unknown = undefined
+async function loadScene() {
+    loading.value = true; error.value = ''
+    try { const destination = await resolvePosterEntry(incomingScene); if (!alive || !shown) return; id.value = destination.activityId; await load() }
+    catch (e) { if (alive && shown) { error.value = errorMessage(e); loading.value = false } }
+}
 let rosterOffset = 0, readersOffset = 0, registrationGeneration = 0
 const session = useSessionStore()
 let generation = 0
@@ -95,8 +102,7 @@ async function loadRegistration(isCurrent = currentRequest()) {
         }
     } finally { if (current()) registrationLoading.value = false }
 }
-async function load(background = false) { if (!id.value)
-    return
+async function load(background = false) { if (!id.value) { if (incomingScene !== undefined) return loadScene(); return }
     const current = ++generation, token = session.token, epoch = session.epoch
     const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
     const retain = background === true && !!activity.value
@@ -130,7 +136,7 @@ finally {
         }
 } }
 const stopWatchingSession = watch(() => [session.token, session.epoch], () => { searchId.value = ''; recommendationToken.value = ''; if (shown) void load() })
-onUnload(() => { alive = false; generation += 1; stopWatchingSession() })
+onUnload(() => { alive = false; generation += 1; releasePosterEntry(incomingScene); stopWatchingSession() })
 async function register() { if (busy.value || registrationLoading.value || (session.token && !registrationKnown.value))
     return; busy.value = true; try {
     if (registration.value?.status === 'active') {
@@ -147,7 +153,7 @@ catch (e) {
 finally {
     busy.value = false
 } }
-onLoad(options => { id.value = String(options?.id || ''); searchId.value = String(options?.searchId || ''); session.captureInvite(options?.inviteCode); if (!id.value) {
+onLoad(options => { incomingScene = options?.scene; id.value = incomingScene === undefined ? String(options?.id || '') : ''; searchId.value = String(options?.searchId || ''); if (incomingScene === undefined) session.captureInvite(options?.inviteCode); if (!id.value && incomingScene === undefined) {
     loading.value = false
     error.value = '活动链接不完整，请从活动列表重新进入'
 } })
@@ -155,7 +161,7 @@ onShow(() => { shown = true; visit = null; void load(true) })
 onHide(() => { shown = false; generation++; registrationGeneration++; registration.value = null; registrationKnown.value = false; registrationError.value = ''; registrationLoading.value = false; loading.value = false })
 onPullDownRefresh(load)
 function openPeople(kind: 'roster' | 'readers') { navigate(routes.activityPeople + '?id=' + encodeURIComponent(id.value) + '&kind=' + kind) }
-const { shareReady, shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => activity.value && activity.value.registrationState !== 'removed' ? {path: routes.detail, id: id.value, title: activity.value.title} : null, true)
+const { shareReady, shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => activity.value && !['removed', 'cancelled'].includes(activity.value.registrationState) ? {path: routes.detail, id: id.value, title: activity.value.title} : null, true)
 onShareAppMessage(shareMessage)
 onShareTimeline(shareTimeline)
 </script>
@@ -420,8 +426,8 @@ onShareTimeline(shareTimeline)
       <view class="fixed-footer">
         <button
           class="secondary share"
-          :open-type="shareReady ? 'share' : undefined"
           :disabled="!shareReady"
+          @click="navigate(routes.activityShare+'?id='+encodeURIComponent(id))"
         >
           <uni-icons
             type="upload"

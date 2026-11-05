@@ -11,7 +11,7 @@ function execute(source, dependencies = {}, uni = {}) {
   new Function('require', 'exports', 'uni', code)(name => dependencies[name] || require(name), exports, uni)
   return exports
 }
-const { activityCodeTarget } = execute(readFileSync(new URL('../src/services/activity-code.ts', import.meta.url), 'utf8'))
+const { activityCodeTarget, activityPosterScene } = execute(readFileSync(new URL('../src/services/activity-code.ts', import.meta.url), 'utf8'))
 const id = 'd13244f9-da4a-43e1-8995-b394ec30c38d'
 test('scanned activity paths and application codes retain validated invite only', () => {
   for (const value of [`pages/activity/detail?id=${id}`, `/pages/activity/detail?id=${id}`, `huiju://activity/${id}`]) assert.deepEqual(activityCodeTarget(value), { id })
@@ -23,6 +23,15 @@ test('rejects foreign links, arbitrary routes, malformed encoding and conflictin
     '/pages/activity/detail?id=bad', `/pages/activity/detail?id=${id}&id=${id}`, `/pages/activity/detail?id=${id}&inviteCode=%`,
     `/pages/activity/detail?id=${id}&returnTo=other`, `/pages/activity/detail?id=${id}#bad`, `/pages/activity/detail?id=${id}&inviteCode=%26id%3Devil`,
     `huiju://activity/${id}?id=${id}`]) assert.equal(activityCodeTarget(value), null, value)
+})
+test('poster scan recognizes only the fixed detail scene and rejects duplicate or double-encoded parameters', () => {
+  const scene = 'p1234567890abcdef12345678'
+  assert.equal(activityPosterScene(`pages/activity/detail?scene=${scene}`), scene)
+  assert.equal(activityPosterScene(`/pages/activity/detail?scene=%70${scene.slice(1)}`), scene)
+  for (const value of [`pages/activity/detail?scene=${scene}&scene=${scene}`, `pages/activity/detail?scene=${scene}&inviteCode=OTHER`,
+    `pages/activity/detail?scene=%2570${scene.slice(1)}`, `pages/member/profile?scene=${scene}`, `https://other.example/pages/activity/detail?scene=${scene}`]) {
+    assert.equal(activityPosterScene(value), null)
+  }
 })
 function harness(scanner) {
   const session = { epoch: 1, token: 'a' }, navigations = [], modals = []
@@ -36,7 +45,7 @@ function harness(scanner) {
     '@/services/api/environment': {}, '@/services/presentation': {},
     '@/services/navigation': { routes: { detail: '/pages/activity/detail' }, navigate: url => navigations.push(url) },
     '@/stores/session': { useSessionStore: () => session }, '@/services/wechat': { scanActivityCode: scanner },
-    '@/services/activity-code': { activityCodeTarget },
+    '@/services/activity-code': { activityCodeTarget, activityPosterScene },
   }, { showModal: o => modals.push(o) })
   return { page, session, navigations, modals, unload: () => unload() }
 }
@@ -60,4 +69,11 @@ test('duplicate taps, account changes and page disposal cannot navigate late', a
     assert.equal(h.navigations.length, mode === 'normal' ? 1 : 0)
     assert.equal(h.page.scanning.value, false)
   }
+})
+test('scanning a poster opens its detail scene without manufacturing an invitation or activity ID', async () => {
+  const scene = 'p1234567890abcdef12345678'
+  const h = harness(async () => ({ path: `pages/activity/detail?scene=${scene}`, result: 'opaque' }))
+  await h.page.scanActivity()
+  assert.deepEqual(h.navigations, [`/pages/activity/detail?scene=${scene}`])
+  assert.equal(h.modals.length, 0)
 })
