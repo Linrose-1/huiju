@@ -133,6 +133,7 @@ onPullDownRefresh(load)
           :activity="item"
           :now="now"
           organized
+          @edit="navigate(routes.editor + '?id=' + item.id)"
           @open="open(item)"
         />
         <ListMore

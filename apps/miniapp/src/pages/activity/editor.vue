@@ -659,63 +659,66 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
         <view class="form-card activity-images-card">
           <view class="card-heading"><text>活动图片</text><text class="helper">{{ previewImages.length }} / 9 · 选填</text></view>
           <view class="activity-image-slots">
-            <view
+            <template
               v-for="(url, index) in imageSlots"
               :key="index"
-              class="activity-image-slot"
             >
               <view
                 v-if="url"
-                class="activity-image-preview"
-                @click="previewCover(index)"
+                class="activity-image-slot"
               >
-                <image
-                  :src="mediaUrl(url)"
-                  :mode="index === 0 ? 'aspectFill' : 'aspectFit'"
-                /><text>{{ index === 0 ? '封面 · 5:4' : '图片 ' + (index + 1) }}</text>
+                <view
+                  class="activity-image-preview"
+                  @click="previewCover(index)"
+                >
+                  <image
+                    :src="mediaUrl(url)"
+                    :mode="index === 0 ? 'aspectFill' : 'aspectFit'"
+                  /><text>{{ index === 0 ? '封面 · 5:4' : '图片 ' + (index + 1) }}</text>
+                </view>
+                <view
+                  class="activity-image-actions"
+                >
+                  <button
+                    v-if="index === 0"
+                    :disabled="busy || started || !editable"
+                    @click="changeImage(0, true)"
+                  >
+                    重裁
+                  </button>
+                  <button
+                    v-if="index > 0"
+                    :disabled="busy || started || !editable"
+                    @click="promoteImage(index)"
+                  >
+                    设为封面
+                  </button>
+                  <button
+                    :disabled="busy || started || !editable"
+                    :loading="uploadingIndex === index"
+                    @click="changeImage(index)"
+                  >
+                    替换
+                  </button>
+                  <button
+                    :disabled="busy || started || !editable"
+                    @click="removeImage(index)"
+                  >
+                    移除
+                  </button>
+                </view>
               </view>
-              <button
-                v-else
-                class="activity-image-add"
-                :disabled="busy || started || !editable"
-                :loading="uploadingIndex === index"
-                @click="addImages()"
-              >
-                <text>＋</text><text>{{ index === 0 ? '添加封面' : '添加图片' }}</text>
-              </button>
-              <view
-                v-if="url"
-                class="activity-image-actions"
-              >
-                <button
-                  v-if="index === 0"
-                  :disabled="busy || started || !editable"
-                  @click="changeImage(0, true)"
-                >
-                  重裁
-                </button>
-                <button
-                  v-if="index > 0"
-                  :disabled="busy || started || !editable"
-                  @click="promoteImage(index)"
-                >
-                  设为封面
-                </button>
-                <button
-                  :disabled="busy || started || !editable"
-                  :loading="uploadingIndex === index"
-                  @click="changeImage(index)"
-                >
-                  替换
-                </button>
-                <button
-                  :disabled="busy || started || !editable"
-                  @click="removeImage(index)"
-                >
-                  移除
-                </button>
-              </view>
-            </view>
+            </template>
+            <button
+              v-if="previewImages.length < 9"
+              class="activity-image-add"
+              aria-label="添加活动图片"
+              :disabled="busy || started || !editable"
+              :loading="uploadingIndex >= 0"
+              @click="addImages()"
+            >
+              <text>＋</text>
+            </button>
           </view>
           <text class="helper image-rules">首张封面须裁剪为 5:4，其余图片完整展示，最多 9 张，可一次多选。PNG / JPG，每张 2 MB 内。</text>
           <text
