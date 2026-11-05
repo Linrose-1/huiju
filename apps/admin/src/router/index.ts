@@ -12,6 +12,7 @@ import ContentPage from '../modules/content/ContentPage.vue'
 import ActivitiesPage from '../modules/activities/ActivitiesPage.vue'
 import CirclePage from '../modules/circle/CirclePage.vue'
 import AdvertisingPage from '../modules/advertising/AdvertisingPage.vue'
+import BrandPage from '../modules/brand/BrandPage.vue'
 
 export { allowedRoute } from '../services/access'
 
@@ -22,6 +23,7 @@ export const router = createRouter({
     { path: '/engagement', component: EngagementPage },
     { path: '/content', component: ContentPage },
     { path: '/advertising', component: AdvertisingPage },
+    { path: '/brand', component: BrandPage },
     { path: '/login', component: LoginPage },
     { path: '/password', component: PasswordPage },
     { path: '/feedback', component: FeedbackPage },

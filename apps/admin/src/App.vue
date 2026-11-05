@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { adminApi, AdminRequestError, errorMessage, isSuperAdmin, session } from './services/admin'
 import { allowedRoute, router } from './router'
+import { brand, refreshBrand } from './services/brand'
 
 const route = useRoute()
 const ready = ref(false)
@@ -40,6 +41,10 @@ watch(() => session.epoch, () => {
   }
 })
 onMounted(restore)
+onMounted(() => { void refreshBrand().catch(() => {}) })
+watch(() => [brand.displayName, brand.visible], () => {
+  if (globalThis.document) globalThis.document.title = `${brand.visible ? brand.displayName + ' ' : ''}管理后台`
+}, { immediate: true })
 </script>
 
 <template>
@@ -47,7 +52,7 @@ onMounted(restore)
     v-if="!ready"
     class="startup"
   >
-    <h1>有聚点管理后台</h1>
+    <h1>{{ brand.visible ? brand.displayName + ' ' : '' }}管理后台</h1>
     <template v-if="startupError">
       <el-alert
         :title="startupError"
@@ -74,7 +79,9 @@ onMounted(restore)
   >
     <header class="app-header">
       <div class="brand">
-        有聚点 <span>管理后台</span>
+        <template v-if="brand.visible">
+          {{ brand.displayName }}
+        </template><span>管理后台</span>
       </div>
       <div class="identity">
         <span>{{ session.account.displayName }} · {{ isSuperAdmin ? '超级管理员' : '普通运营' }}</span>
@@ -124,6 +131,12 @@ onMounted(restore)
         </router-link>
         <router-link
           v-if="isSuperAdmin"
+          to="/brand"
+        >
+          品牌设置
+        </router-link>
+        <router-link
+          v-if="isSuperAdmin"
           to="/accounts"
         >
           运营账号
@@ -154,7 +167,7 @@ p { line-height: 1.65; }
 .muted, .page-description { color: var(--huiju-muted); }
 .page-description { margin: 0 0 20px; font-size: 14px; }
 .app-header { display: flex; justify-content: space-between; align-items: center; min-height: 60px; padding: 0 24px; border-bottom: 1px solid var(--huiju-border); background: white; gap: 16px; }
-.brand { font-size: 20px; font-weight: 700; white-space: nowrap; color: var(--huiju-green); }
+.brand { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; color: var(--huiju-green); }
 .brand span { margin-left: 10px; font-size: 13px; color: var(--huiju-muted); font-weight: 400; }
 .identity { display: flex; align-items: center; gap: 4px; font-size: 13px; flex-wrap: wrap; }
 .workspace { display: flex; min-height: calc(100vh - 60px); }

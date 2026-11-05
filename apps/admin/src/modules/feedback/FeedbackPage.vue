@@ -6,6 +6,7 @@ import { useRequestScope } from '../../services/request-scope'
 
 const kind = ref<'comment' | 'review'>('comment')
 const status = ref<'visible' | 'hidden' | 'all'>('visible')
+let requestedOffset = 0
 const offset = ref(0)
 const items = ref<FeedbackItem[]>([])
 const total = ref(0)
@@ -20,14 +21,15 @@ const dialogOpen = ref(false)
 const begin = useRequestScope()
 async function load(reset = false) {
   if (submitting.value) return
-  if (reset) offset.value = 0
+  if (reset) { requestedOffset = 0; offset.value = 0; items.value = []; total.value = 0; hasMore.value = false }
+  const targetOffset = requestedOffset
   const current = begin()
   loading.value = true
   error.value = ''
-  items.value = []
   try {
-    const result = await adminApi.feedback(kind.value, status.value, offset.value)
+    const result = await adminApi.feedback(kind.value, status.value, targetOffset)
     if (!current()) return
+    offset.value = targetOffset
     items.value = result.items
     total.value = result.total
     hasMore.value = result.hasMore
@@ -58,7 +60,7 @@ async function hide() {
   finally { if (current()) submitting.value = false }
   if (current() && !dialogOpen.value) await load(true)
 }
-function changePage(back: boolean) { offset.value = Math.max(0, offset.value + (back ? -40 : 40)); void load() }
+function changePage(back: boolean) { requestedOffset = Math.max(0, offset.value + (back ? -40 : 40)); void load() }
 onMounted(() => load())
 </script>
 

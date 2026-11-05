@@ -5931,7 +5931,30 @@
     "/api/v1/admin/accounts": {
       "get": {
         "operationId": "AdminController_accounts",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -10114,6 +10137,168 @@
         ]
       }
     },
+    "/api/v1/platform/brand": {
+      "get": {
+        "operationId": "PublicBrandController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBrandDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "summary": "",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/api/v1/admin/platform/brand": {
+      "get": {
+        "operationId": "AdminBrandController_read",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-platform"
+        ]
+      },
+      "put": {
+        "operationId": "AdminBrandController_save",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-platform"
+        ]
+      }
+    },
     "/api/v1/advertising/ads": {
       "get": {
         "operationId": "AdvertisingController_ads",
@@ -13756,10 +13941,14 @@
             "items": {
               "$ref": "#/components/schemas/AdminAccountDto"
             }
+          },
+          "hasMore": {
+            "type": "boolean"
           }
         },
         "required": [
-          "items"
+          "items",
+          "hasMore"
         ]
       },
       "AdminCreateInput": {
@@ -15479,6 +15668,68 @@
         },
         "required": [
           "enabled"
+        ]
+      },
+      "PublicBrandDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "displayName",
+          "visible"
+        ]
+      },
+      "BrandDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "displayName",
+          "visible",
+          "version"
+        ]
+      },
+      "BrandInput": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4294967294
+          }
+        },
+        "required": [
+          "displayName",
+          "visible",
+          "version"
         ]
       },
       "AdvertisingPublicAdDto": {

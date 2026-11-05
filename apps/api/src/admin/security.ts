@@ -1,9 +1,29 @@
 import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { isIP } from 'node:net'
 import { fail } from '../flow/common.js'
 
 export const ADMIN_COOKIE = 'huiju_admin_session'
 export const digest = (value: string) => createHash('sha256').update(value).digest('hex')
 export const csrfFor = (token: string) => digest(`huiju-admin-csrf:${token}`)
+
+function normalizedIp(value?: string) {
+  if (!value || value.includes('%') || !isIP(value)) return null
+  if (isIP(value) === 4) return value
+  const address = new URL(`http://[${value}]/`).hostname.slice(1, -1)
+  const mapped = /^::ffff:([a-f0-9]+):([a-f0-9]+)$/.exec(address)
+  if (!mapped) return address
+  const high = Number.parseInt(mapped[1]!, 16), low = Number.parseInt(mapped[2]!, 16)
+  return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`
+}
+
+export function adminLoginSource(remoteAddress?: string, forwardedFor?: string | string[]) {
+  const remote = normalizedIp(remoteAddress) ?? 'unknown'
+  // Opt in only for a single local proxy that overwrites/appends its direct client address.
+  // Never trust user-supplied leftmost entries, or headers received from a non-loopback peer.
+  if (process.env.ADMIN_TRUST_LOOPBACK_PROXY !== 'true' || !['127.0.0.1', '::1'].includes(remote)
+    || typeof forwardedFor !== 'string' || forwardedFor.length > 4096) return remote
+  return normalizedIp(forwardedFor.slice(forwardedFor.lastIndexOf(',') + 1).trim()) ?? remote
+}
 const derive = (password: string, salt: string) => new Promise<Buffer>((resolve, reject) => {
   scrypt(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }, (error, key) => error ? reject(error) : resolve(key))
 })

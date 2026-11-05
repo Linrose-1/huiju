@@ -12,6 +12,8 @@ const historyMore = ref(false), editorMore = ref(false), searchMore = ref(false)
 const historyLoading = ref(false), editorLoading = ref(false), searchLoading = ref(false)
 const historyError = ref(''), editorError = ref(''), searchError = ref('')
 const query = ref(''), appliedQuery = ref(''), changing = ref('')
+const beginAction = useRequestScope()
+let requestedHistoryOffset = 0, requestedEditorOffset = 0, requestedSearchOffset = 0
 const begin = useRequestScope(), beginHistory = useRequestScope(), beginEditors = useRequestScope(), beginSearch = useRequestScope()
 async function load() {
   const current = begin(); loading.value = true; error.value = ''
@@ -23,43 +25,47 @@ async function save() {
   if (saving.value || loading.value) return
   if (!form.value.activityText.trim() || !form.value.assistantText.trim()) { error.value = '两项文案均不能为空。'; return }
   const current = begin(); saving.value = true; error.value = ''
-  try { await adminApi.saveContent({ activityText: form.value.activityText.trim(), assistantText: form.value.assistantText.trim() }); if (current()) { ElMessage.success('文案已保存'); historyOffset.value = 0; void loadHistory() } }
+  try { await adminApi.saveContent({ activityText: form.value.activityText.trim(), assistantText: form.value.assistantText.trim() }); if (current()) { ElMessage.success('文案已保存'); requestedHistoryOffset = 0; void loadHistory() } }
   catch (e) { if (current()) error.value = errorMessage(e) }
   finally { if (current()) saving.value = false }
 }
 async function loadHistory() {
-  const current = beginHistory(); historyLoading.value = true; historyError.value = ''; history.value = []
-  try { const value = await adminApi.contentHistory(historyOffset.value); if (current()) { history.value = value.items; historyMore.value = value.hasMore } }
+  const targetOffset = requestedHistoryOffset
+  const current = beginHistory(); historyLoading.value = true; historyError.value = ''
+  try { const value = await adminApi.contentHistory(targetOffset); if (current()) { historyOffset.value = targetOffset; history.value = value.items; historyMore.value = value.hasMore } }
   catch (e) { if (current()) historyError.value = errorMessage(e) }
   finally { if (current()) historyLoading.value = false }
 }
 async function loadEditors() {
   if (!isSuperAdmin.value) return
-  const current = beginEditors(); editorLoading.value = true; editorError.value = ''; editors.value = []
-  try { const value = await adminApi.contentEditors(editorOffset.value); if (current()) { editors.value = value.items; editorMore.value = value.hasMore } }
+  const targetOffset = requestedEditorOffset
+  const current = beginEditors(); editorLoading.value = true; editorError.value = ''
+  try { const value = await adminApi.contentEditors(targetOffset); if (current()) { editorOffset.value = targetOffset; editors.value = value.items; editorMore.value = value.hasMore } }
   catch (e) { if (current()) editorError.value = errorMessage(e) }
   finally { if (current()) editorLoading.value = false }
 }
 async function search(reset = true) {
-  if (reset) { searchOffset.value = 0; appliedQuery.value = query.value.trim() }
+  if (reset) { requestedSearchOffset = 0; searchOffset.value = 0; candidates.value = []; searchMore.value = false; appliedQuery.value = query.value.trim() }
   if (!appliedQuery.value) { searchError.value = '请填写会员编号或名称。'; return }
-  const current = beginSearch(); searchLoading.value = true; searchError.value = ''; candidates.value = []
-  try { const value = await adminApi.members({ q: appliedQuery.value, offset: searchOffset.value }); if (current()) { candidates.value = value.items; searchMore.value = value.hasMore } }
+  const targetOffset = requestedSearchOffset
+  const current = beginSearch(); searchLoading.value = true; searchError.value = ''
+  try { const value = await adminApi.members({ q: appliedQuery.value, offset: targetOffset }); if (current()) { searchOffset.value = targetOffset; candidates.value = value.items; searchMore.value = value.hasMore } }
   catch (e) { if (current()) searchError.value = errorMessage(e) }
   finally { if (current()) searchLoading.value = false }
 }
 async function grant(memberId: string, enabled: boolean) {
   if (changing.value || !isSuperAdmin.value) return
   changing.value = memberId; editorError.value = ''
-  const current = beginEditors()
-  try { await adminApi.setContentEditor(memberId, enabled); if (current()) { ElMessage.success(enabled ? '已授予编辑权限' : '已撤销编辑权限'); editorOffset.value = 0 } }
+  const current = beginAction()
+  try { await adminApi.setContentEditor(memberId, enabled); if (current()) { ElMessage.success(enabled ? '已授予编辑权限' : '已撤销编辑权限'); requestedEditorOffset = 0 } }
   catch (e) { if (current()) editorError.value = errorMessage(e) }
   finally { if (current()) changing.value = '' }
   if (current() && !editorError.value) void loadEditors()
 }
 function page(kind: 'history' | 'editors' | 'search', back: boolean) {
   const offset = kind === 'history' ? historyOffset : kind === 'editors' ? editorOffset : searchOffset
-  offset.value = Math.max(0, offset.value + (back ? -(kind === 'search' ? 40 : 20) : (kind === 'search' ? 40 : 20)))
+  const target = Math.max(0, offset.value + (back ? -(kind === 'search' ? 40 : 20) : (kind === 'search' ? 40 : 20)))
+  if (kind === 'history') requestedHistoryOffset = target; else if (kind === 'editors') requestedEditorOffset = target; else requestedSearchOffset = target
   if (kind === 'history') void loadHistory(); else if (kind === 'editors') void loadEditors(); else void search(false)
 }
 onMounted(() => { void load(); void loadHistory(); void loadEditors() })

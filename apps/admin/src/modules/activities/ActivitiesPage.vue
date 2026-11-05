@@ -7,6 +7,7 @@ import { useRequestScope } from '../../services/request-scope'
 const status = ref<'all' | 'normal' | 'removed'>('all')
 const keyword = ref('')
 const applied = ref({ status: status.value, q: '' })
+let requestedOffset = 0
 const offset = ref(0)
 const items = ref<AdminActivity[]>([])
 const total = ref(0)
@@ -20,6 +21,7 @@ const submitting = ref(false)
 const dialogOpen = ref(false)
 const detail = ref<AdminActivity | null>(null)
 const history = ref<ActivityOperation[]>([])
+let requestedHistoryOffset = 0, requestedRegistrationOffset = 0
 const historyOffset = ref(0)
 const historyMore = ref(false)
 const historyLoading = ref(false)
@@ -37,29 +39,31 @@ async function loadReport() {
 }
 async function loadRegistrations(reset = false) {
   if (!detail.value) return
-  if (reset) registrationOffset.value = 0
-  const current = beginRegistrations(); registrationLoading.value = true; registrationError.value = ''; registrations.value = []
-  try { const result = await adminApi.activityRegistrations(detail.value.id, registrationOffset.value, registrationStatus.value); if (current()) { registrations.value = result.items; registrationTotal.value = result.total; registrationMore.value = result.hasMore } }
+  if (reset) { requestedRegistrationOffset = 0; registrationOffset.value = 0; registrations.value = []; registrationTotal.value = 0; registrationMore.value = false }
+  const targetOffset = requestedRegistrationOffset
+  const current = beginRegistrations(); registrationLoading.value = true; registrationError.value = ''
+  try { const result = await adminApi.activityRegistrations(detail.value.id, targetOffset, registrationStatus.value); if (current()) { registrationOffset.value = targetOffset; registrations.value = result.items; registrationTotal.value = result.total; registrationMore.value = result.hasMore } }
   catch (e) { if (current()) registrationError.value = errorMessage(e) }
   finally { if (current()) registrationLoading.value = false }
 }
-function registrationPage(back: boolean) { registrationOffset.value = Math.max(0, registrationOffset.value + (back ? -40 : 40)); void loadRegistrations() }
+function registrationPage(back: boolean) { requestedRegistrationOffset = Math.max(0, registrationOffset.value + (back ? -40 : 40)); void loadRegistrations() }
 const begin = useRequestScope()
 const beginHistory = useRequestScope()
 
 async function load(reset = false) {
   if (submitting.value) return
   if (reset) {
-    offset.value = 0
+    requestedOffset = 0; offset.value = 0; items.value = []; total.value = 0; hasMore.value = false
     applied.value = { status: status.value, q: keyword.value.trim() }
   }
+  const targetOffset = requestedOffset
   const current = begin()
   loading.value = true
   error.value = ''
-  items.value = []
   try {
-    const result = await adminApi.activities({ ...applied.value, offset: offset.value })
+    const result = await adminApi.activities({ ...applied.value, offset: targetOffset })
     if (!current()) return
+    offset.value = targetOffset
     items.value = result.items
     total.value = result.total
     hasMore.value = result.hasMore
@@ -94,13 +98,14 @@ async function applyAction() {
 }
 async function loadHistory() {
   if (!detail.value) return
+  const targetOffset = requestedHistoryOffset
   const current = beginHistory()
   historyLoading.value = true
   historyError.value = ''
-  history.value = []
   try {
-    const result = await adminApi.activityOperations(detail.value.id, historyOffset.value)
+    const result = await adminApi.activityOperations(detail.value.id, targetOffset)
     if (!current()) return
+    historyOffset.value = targetOffset
     history.value = result.items
     historyMore.value = result.hasMore
   } catch (value) { if (current()) historyError.value = errorMessage(value) }
@@ -108,13 +113,13 @@ async function loadHistory() {
 }
 function openDetail(item: AdminActivity) {
   detail.value = item
-  historyOffset.value = 0
+  requestedHistoryOffset = 0; historyOffset.value = 0; history.value = []; historyMore.value = false
   registrationStatus.value = 'all'
   void loadReport(); void loadRegistrations(true); void loadHistory()
 }
 function closeDetail() { beginReport(); beginRegistrations(); report.value = null; registrations.value = []; reportLoading.value = false; registrationLoading.value = false; beginHistory(); detail.value = null; history.value = []; historyLoading.value = false }
-function changePage(back: boolean) { offset.value = Math.max(0, offset.value + (back ? -20 : 20)); void load() }
-function changeHistory(back: boolean) { historyOffset.value = Math.max(0, historyOffset.value + (back ? -20 : 20)); void loadHistory() }
+function changePage(back: boolean) { requestedOffset = Math.max(0, offset.value + (back ? -20 : 20)); void load() }
+function changeHistory(back: boolean) { requestedHistoryOffset = Math.max(0, historyOffset.value + (back ? -20 : 20)); void loadHistory() }
 onMounted(() => load())
 </script>
 

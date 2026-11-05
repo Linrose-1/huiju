@@ -5,6 +5,8 @@ import { adminApi, errorMessage, formatDate, isSuperAdmin, type AdminAccount } f
 import { useRequestScope } from '../../services/request-scope'
 
 const items = ref<AdminAccount[]>([])
+const offset = ref(0), hasMore = ref(false)
+let requestedOffset = 0
 const loading = ref(false)
 const error = ref('')
 const dialogOpen = ref(false)
@@ -18,13 +20,17 @@ const submitting = ref(false)
 const begin = useRequestScope()
 async function load() {
   if (!isSuperAdmin.value || submitting.value) return
+  const targetOffset = requestedOffset
   const current = begin()
   loading.value = true
   error.value = ''
-  items.value = []
-  try { const result = await adminApi.accounts(); if (current()) items.value = result.items }
+  try { const result = await adminApi.accounts(targetOffset); if (current()) { offset.value = targetOffset; items.value = result.items; hasMore.value = result.hasMore } }
   catch (value) { if (current()) error.value = errorMessage(value) }
   finally { if (current()) loading.value = false }
+}
+function changePage(back: boolean) {
+  if (loading.value || submitting.value || (back ? !offset.value : !hasMore.value)) return
+  requestedOffset = Math.max(0, offset.value + (back ? -20 : 20)); void load()
 }
 function open(next: typeof action.value, account: AdminAccount | null = null) {
   if (!isSuperAdmin.value || submitting.value || loading.value) return
@@ -58,7 +64,7 @@ async function submit() {
     password.value = ''
   } catch (value) { if (current()) dialogError.value = errorMessage(value) }
   finally { if (current()) submitting.value = false }
-  if (current() && !dialogOpen.value) await load()
+  if (current() && !dialogOpen.value) { if (action.value === 'create') requestedOffset = 0; await load() }
 }
 onMounted(load)
 </script>
@@ -163,6 +169,19 @@ onMounted(load)
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination">
+        <span>第 {{ offset / 20 + 1 }} 页</span><el-button
+          :disabled="loading || submitting || !offset"
+          @click="changePage(true)"
+        >
+          上一页
+        </el-button><el-button
+          :disabled="loading || submitting || !hasMore"
+          @click="changePage(false)"
+        >
+          下一页
+        </el-button>
+      </div>
     </div>
     <el-dialog
       v-model="dialogOpen"

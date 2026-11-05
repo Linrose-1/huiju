@@ -1,5 +1,13 @@
 # API 契约
 
+## 品牌及后台账号分页（2026-11-05）
+
+- `GET /platform/brand`：公开、no-store，仅返回 `{ displayName, visible }`；默认有聚点/true。
+- `GET /admin/platform/brand`：仅超管，返回上述字段及 `version`（未配置为0）。`PUT` 同路径接受1至30字非空名称、布尔显示开关及当前版本，要求Cookie、Origin、CSRF和超管身份；同事务保存与审计，冲突为 `BRAND_VERSION_CONFLICT`/409。
+- `GET /admin/accounts`：仅超管，接受PageQuery（offset默认0、limit默认20且最大100），稳定按createdAt/id排序，返回 `{ items, hasMore }`；无权限不查询账号内容。
+- 登录接口仍有每来源15分钟30次及数据库每账号5次失败锁15分钟。仅显式 `ADMIN_TRUST_LOOPBACK_PROXY=true` 并来自回环连接时采用XFF最右有效IP；部署要求见 `infra/deploy/README.md`，默认不信任转发头。
+- 0018本机已授权执行；服务器尚未应用本轮变更。OpenAPI与客户端由实际路由生成，不能将生成契约视为上线。
+
 ## 报名名单公开字段（第5项）
 
 活动问题输入增加可选 `publicToParticipants` 布尔值，新建省略为false，编辑省略保留原值；问题输出包含该标记，报名表据此提前告知。手机号、微信号、二维码、邮箱等联系方式题目不允许开启，返回 `QUESTION_CONTACT_PRIVATE`；已有首次报名后false变true返回 `QUESTION_VISIBILITY_LOCKED`（409），关闭公开不改答案及题目内容。活动编辑的生命周期限制继续有效。

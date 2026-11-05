@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import BrandMark from '@/components/base/BrandMark.vue'
+import { usePlatformBrand } from '@/services/platform-brand'
+const brand = usePlatformBrand()
 import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
@@ -124,6 +127,10 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view>
+    <BrandMark
+      :display-name="brand.displayName"
+      :visible="brand.visible"
+    />
     <view
       v-if="shareError"
       class="error"

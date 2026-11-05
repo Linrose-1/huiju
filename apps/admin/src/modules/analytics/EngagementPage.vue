@@ -23,23 +23,26 @@ function moreInviters() { void searchInviters(inviterSearch.value, true) }
 const items = ref<AnalyticsMember[]>([]), total = ref(0), more = ref(false), loading = ref(false), exporting = ref(false), error = ref('')
 const detail = ref<MemberDetail | null>(null), detailOpen = ref(false), detailLoading = ref(false), detailError = ref(''), selectedId = ref('')
 const events = ref<AnalyticsEvent[]>([]), eventOffset = ref(0), eventMore = ref(false), eventLoading = ref(false), eventError = ref('')
+let requestedEventOffset = 0, requestedOffset = 0
 const beginEvents = useRequestScope()
 async function loadEvents() {
-  const current = beginEvents(); eventLoading.value = true; eventError.value = ''; events.value = []
-  try { const value = await adminApi.engagementEvents(selectedId.value, applied.value.days, eventOffset.value); if (current()) { events.value = value.items; eventMore.value = value.hasMore } }
+  const targetOffset = requestedEventOffset
+  const current = beginEvents(); eventLoading.value = true; eventError.value = ''
+  try { const value = await adminApi.engagementEvents(selectedId.value, applied.value.days, targetOffset); if (current()) { eventOffset.value = targetOffset; events.value = value.items; eventMore.value = value.hasMore } }
   catch (e) { if (current()) eventError.value = errorMessage(e) }
   finally { if (current()) eventLoading.value = false }
 }
-function eventPage(back: boolean) { eventOffset.value = Math.max(0, eventOffset.value + (back ? -40 : 40)); void loadEvents() }
+function eventPage(back: boolean) { requestedEventOffset = Math.max(0, eventOffset.value + (back ? -40 : 40)); void loadEvents() }
 const begin = useRequestScope(), beginExport = useRequestScope(), beginDetail = useRequestScope()
 async function load(reset = false) {
-  if (reset) { applied.value = { ...form.value, inviterId: inviter.value.trim() || undefined, offset: 0 } }
-  const current = begin(); loading.value = true; error.value = ''; items.value = []
-  try { const result = await adminApi.engagement(applied.value); if (current()) { items.value = result.items; total.value = result.total; more.value = result.hasMore } }
+  if (reset) { applied.value = { ...form.value, inviterId: inviter.value.trim() || undefined, offset: 0 }; requestedOffset = 0; items.value = []; total.value = 0; more.value = false }
+  const targetOffset = requestedOffset
+  const current = begin(); loading.value = true; error.value = ''
+  try { const result = await adminApi.engagement({ ...applied.value, offset: targetOffset }); if (current()) { applied.value.offset = targetOffset; items.value = result.items; total.value = result.total; more.value = result.hasMore } }
   catch (e) { if (current()) error.value = errorMessage(e) }
   finally { if (current()) loading.value = false }
 }
-function page(back: boolean) { applied.value.offset = Math.max(0, applied.value.offset + (back ? -40 : 40)); void load() }
+function page(back: boolean) { requestedOffset = Math.max(0, applied.value.offset + (back ? -40 : 40)); void load() }
 async function exportRows() {
   if (exporting.value || loading.value) return
   const current = beginExport(); exporting.value = true; error.value = ''
@@ -47,7 +50,7 @@ async function exportRows() {
   catch (e) { if (current()) error.value = errorMessage(e) }
   finally { if (current()) exporting.value = false }
 }
-async function showMember(id: string) { const current = beginDetail(); selectedId.value = id; eventOffset.value = 0; void loadEvents(); detailOpen.value = true; detail.value = null; detailLoading.value = true; detailError.value = ''
+async function showMember(id: string) { const current = beginDetail(); selectedId.value = id; requestedEventOffset = 0; eventOffset.value = 0; events.value = []; eventMore.value = false; void loadEvents(); detailOpen.value = true; detail.value = null; detailLoading.value = true; detailError.value = ''
   try { const value = await adminApi.member(id); if (current()) detail.value = value }
   catch (e) { if (current()) detailError.value = errorMessage(e) }
   finally { if (current()) detailLoading.value = false }

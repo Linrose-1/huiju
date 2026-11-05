@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import BrandMark from '@/components/base/BrandMark.vue'
+import { usePlatformBrand } from '@/services/platform-brand'
+const brand = usePlatformBrand()
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
@@ -95,6 +98,10 @@ onUnload(() => { active = false; generation++ })
 </script>
 <template>
   <view>
+    <BrandMark
+      :display-name="brand.displayName"
+      :visible="brand.visible"
+    />
     <view class="mine-hero">
       <image
         class="hero-image"

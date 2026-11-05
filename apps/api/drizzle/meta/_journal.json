@@ -127,6 +127,13 @@
       "when": 1793284744422,
       "tag": "0017_registration_question_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1793870388218,
+      "tag": "0018_platform_brand",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from 'vue'
 import { adminApi, errorMessage } from '../../services/admin'
+import { brand } from '../../services/brand'
 
 const username = ref('')
 const password = ref('')
@@ -22,7 +23,9 @@ async function submit() {
 <template>
   <section class="auth-card panel">
     <div class="brand">
-      有聚点 <span>管理后台</span>
+      <template v-if="brand.visible">
+        {{ brand.displayName }}
+      </template><span>管理后台</span>
     </div>
     <h1 class="auth-title">
       欢迎登录

@@ -26,7 +26,8 @@ for(const pagePath of ['activity/organized','registration/index']) {
     const session=reactive({token:'a',epoch:0}),pending=[];let unload
     const deps={
       '@dcloudio/uni-app':{onShow(fn){Promise.resolve().then(fn)},onHide(){},onReachBottom(){},onPullDownRefresh(){},onUnload(fn){unload=fn}},
-      '@/services/api':{api:{organizedActivities:request,registrations:request},errorMessage:e=>e.message},
+      '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
+    '@/services/api':{api:{organizedActivities:request,registrations:request},errorMessage:e=>e.message},
       '@/services/my-activities':states,
       '@/services/navigation':{},'@/stores/session':{useSessionStore:()=>session},
       '@/components/base/RequestState.vue':{},'@/components/business/MyActivityCard.vue':{}
@@ -51,6 +52,7 @@ test('mine uses the organized total, keeps active registration count and ignores
   let pending=false
   const deps={
     '@dcloudio/uni-app':{onShow(){},onHide(fn){hide=fn},onUnload(){}},
+    '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api':{refreshMember:async()=>{},errorMessage:e=>e.message,api:{
       registrations:async()=>({items:[{status:'active'},{status:'cancelled'}],activeCount:75}),
       notifications:async()=>({items:[],unreadCount:pending?0:103}),

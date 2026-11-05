@@ -18,6 +18,7 @@ function page(t, localTest = true) {
     '@/stores/session': { useSessionStore: () => session },
     '@/services/api/environment': { LOCAL_TEST: localTest },
     '@/services/navigation': {},
+    '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api': { errorMessage: e => e.message, api: {
       platformContent: async () => ({ canEdit: false }),
       registrations: async () => ({ activeCount: totals[session.token] }),

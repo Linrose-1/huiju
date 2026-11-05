@@ -15,9 +15,11 @@ function uploaded(image: AdvertisingImage) { imageId.value = image.id; url.value
 async function load() { const current = begin(); loading.value = true; error.value = ''; try { const value = await advertisingApi.background(); if (current()) { imageId.value = value.imageId; original.value = value.imageId; url.value = value.imageUrl || ''; sourceId.value = value.sourceImageId || ''; sourceUrl.value = value.sourceImageUrl || ''; version.value = value.version; loaded.value = true } } catch (e) { if (current()) error.value = errorMessage(e) } finally { if (current()) loading.value = false } }
 async function save() {
   if (!loaded.value || loading.value || saving.value || uploading.value) return
-  try { await ElMessageBox.confirm('确认替换小程序“我的”背景图？', '保存背景', { type: 'warning' }) } catch { return }
   const current = begin(); saving.value = true; error.value = ''
-  try { const value = await advertisingApi.saveBackground(imageId.value, version.value); if (current()) { version.value = value.version; original.value = imageId.value; ElMessage.success('背景图已保存') } } catch (e) { if (current()) error.value = errorMessage(e) } finally { if (current()) saving.value = false }
+  try {
+  try { await ElMessageBox.confirm('确认替换小程序“我的”背景图？', '保存背景', { type: 'warning' }) } catch { return }
+    if (!current()) return
+    const value = await advertisingApi.saveBackground(imageId.value, version.value); if (current()) { version.value = value.version; original.value = imageId.value; ElMessage.success('背景图已保存') } } catch (e) { if (current()) error.value = errorMessage(e) } finally { if (current()) saving.value = false }
 }
 async function leave() { if (saving.value || uploading.value) return false; if (!dirty.value) return true; try { await ElMessageBox.confirm('背景图尚未保存，确定放弃修改？', '离开编辑', { type: 'warning' }); return true } catch { return false } }
 onBeforeRouteLeave(leave)

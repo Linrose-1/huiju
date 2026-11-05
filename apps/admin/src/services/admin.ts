@@ -35,6 +35,9 @@ export class AdminRequestError extends Error {
 }
 
 const messages: Record<string, string> = {
+  BRAND_VERSION_CONFLICT: '品牌设置已被其他管理员更新，请点击“重新读取”后再保存。',
+  INVALID_BRAND_NAME: '展示名称须为1至30字。',
+  ADMIN_LOGIN_LIMITED: '登录尝试过于频繁，请稍后再试。',
   ADMIN_LOGIN_FAILED: '账号或密码不正确，请重试。',
   ADMIN_SESSION_REQUIRED: '登录已失效，请重新登录。',
   FORBIDDEN: '你没有执行此操作的权限。',
@@ -110,7 +113,7 @@ export const adminApi = {
   restoreActivity: (id: string, reason: string) => unwrap(client.POST('/api/v1/admin/activities/{id}/restore', {
     ...options(), params: { path: { id }, header: csrfHeader() }, body: { reason },
   })),
-  accounts: () => unwrap(client.GET('/api/v1/admin/accounts', options())),
+  accounts: (offset = 0) => unwrap(client.GET('/api/v1/admin/accounts', { ...options(), params: { query: { offset, limit: 20 } } })),
   createAccount: (username: string, displayName: string, temporaryPassword: string) => unwrap(client.POST('/api/v1/admin/accounts', {
     ...options(), params: { header: csrfHeader() }, body: { username, displayName, temporaryPassword },
   })),

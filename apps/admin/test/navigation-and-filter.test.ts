@@ -29,6 +29,7 @@ function pageScript(path: string, exported: string, dependencies: Record<string,
 function app() {
   return pageScript('../src/App.vue', 'restore, ready, startupError', {
     './services/admin': admin,
+    './services/brand': { brand: vue.reactive({ displayName: '有聚点', visible: true }), refreshBrand: async () => {} },
     './router': { router, allowedRoute },
     'vue-router': { useRoute: () => ({ get path() { return router.currentRoute.value.path } }) },
     'element-plus': { ElMessage: { error: vi.fn() } },
@@ -258,5 +259,57 @@ describe('admin page navigation and filtering', () => {
     expect(page.dialogOpen.value).toBe(false)
     expect(page.submitting.value).toBe(false)
     expect(page.items.value[0]?.state).toBe('ended')
+  })
+})
+
+
+describe('pagination and authorization regression coverage', () => {
+  function view<T>(path: string, exported: string, network: Record<string, unknown>) {
+    return pageScript('../src/modules/' + path + '.vue', exported, {
+      '../../services/admin': { ...admin, adminApi: network, isSuperAdmin: { value: true } },
+      '../../services/request-scope': { useRequestScope },
+      'vue-router': { useRoute: () => ({ query: {} }) },
+      'element-plus': { ElMessage: { success: vi.fn() } },
+    }) as T
+  }
+  const tick = () => new Promise(resolve => setTimeout(resolve, 0))
+  it.each([
+    ['activities/ActivitiesPage', 'activities', 20],
+    ['feedback/FeedbackPage', 'feedback', 40],
+    ['accounts/AccountsPage', 'accounts', 20],
+  ] as const)('%s keeps the displayed page and retries the same failed target', async (path, method, size) => {
+    const request = vi.fn().mockResolvedValueOnce({ items: [{ id: 'first' }], total: 100, hasMore: true }).mockRejectedValueOnce(new Error('network')).mockResolvedValue({ items: [{ id: 'second' }], total: 100, hasMore: false })
+    const p = view<{ load(): Promise<void>; changePage(back: boolean): void; items: vue.Ref<{id:string}[]>; offset: vue.Ref<number>; hasMore: vue.Ref<boolean> }>(path, 'load,changePage,items,offset,hasMore', { [method]: request })
+    await p.load(); p.changePage(false); await tick()
+    expect(p.offset.value).toBe(0); expect(p.items.value[0]!.id).toBe('first')
+    await p.load()
+    const offsets = request.mock.calls.map(args => method === 'activities' ? args[0].offset : method === 'feedback' ? args[2] : args[0])
+    expect(offsets).toEqual([0,size,size]); expect(p.offset.value).toBe(size); expect(p.hasMore.value).toBe(false)
+  })
+  it('engagement and member events retain their committed pages after failed forward loads', async () => {
+    const request = () => vi.fn().mockResolvedValueOnce({ items: [{ id:'first' }], total: 100, hasMore: true }).mockRejectedValueOnce(new Error('network')).mockResolvedValue({ items:[{id:'second'}],total:100,hasMore:false })
+    const engagement=request(), events=request()
+    const p=view<{load():Promise<void>;page(back:boolean):void;loadEvents():Promise<void>;eventPage(back:boolean):void;items:vue.Ref<{id:string}[]>;events:vue.Ref<{id:string}[]>;applied:vue.Ref<{offset:number}>;eventOffset:vue.Ref<number>}>('analytics/EngagementPage','load,page,loadEvents,eventPage,items,events,applied,eventOffset',{engagement,engagementEvents:events})
+    await p.load();p.page(false);await tick();expect(p.applied.value.offset).toBe(0);expect(p.items.value[0]!.id).toBe('first');await p.load();expect(engagement.mock.calls.map(a=>a[0].offset)).toEqual([0,40,40])
+    await p.loadEvents();p.eventPage(false);await tick();expect(p.eventOffset.value).toBe(0);expect(p.events.value[0]!.id).toBe('first');await p.loadEvents();expect(events.mock.calls.map(a=>a[2])).toEqual([0,40,40])
+  })
+  it('activity registration and operation lists retain failed pages and retry their targets', async () => {
+    const make = () => vi.fn().mockResolvedValueOnce({items:[{id:'first'}],total:100,hasMore:true}).mockRejectedValueOnce(new Error('network')).mockResolvedValue({items:[],total:100,hasMore:false})
+    const registrations=make(),history=make()
+    const p=view<{detail:vue.Ref<unknown>;loadRegistrations():Promise<void>;registrationPage(back:boolean):void;loadHistory():Promise<void>;changeHistory(back:boolean):void;registrationOffset:vue.Ref<number>;historyOffset:vue.Ref<number>;registrations:vue.Ref<unknown[]>;history:vue.Ref<unknown[]>}>('activities/ActivitiesPage','detail,loadRegistrations,registrationPage,loadHistory,changeHistory,registrationOffset,historyOffset,registrations,history',{activityRegistrations:registrations,activityOperations:history})
+    p.detail.value={id:'activity'};await p.loadRegistrations();p.registrationPage(false);await tick();expect(p.registrationOffset.value).toBe(0);expect(p.registrations.value).toHaveLength(1);await p.loadRegistrations();expect(registrations.mock.calls.map(a=>a[1])).toEqual([0,40,40])
+    await p.loadHistory();p.changeHistory(false);await tick();expect(p.historyOffset.value).toBe(0);expect(p.history.value).toHaveLength(1);await p.loadHistory();expect(history.mock.calls.map(a=>a[1])).toEqual([0,20,20])
+  })
+  it('content list completion cannot be invalidated by a failed concurrent grant', async () => {
+    let finish!: (value: unknown) => void
+    const contentEditors=vi.fn(()=>new Promise(resolve=>{finish=resolve})),setContentEditor=vi.fn().mockRejectedValue(new Error('grant failed'))
+    const p=view<{loadEditors():Promise<void>;grant(id:string,enabled:boolean):Promise<void>;editorLoading:vue.Ref<boolean>;editorError:vue.Ref<string>;editors:vue.Ref<unknown[]>}>('content/ContentPage','loadEditors,grant,editorLoading,editorError,editors',{contentEditors,setContentEditor})
+    const pending=p.loadEditors();await p.grant('member',true);finish({items:[{memberId:'old'}],hasMore:false});await pending
+    expect(p.editorLoading.value).toBe(false);expect(p.editorError.value).toBe('grant failed');expect(p.editors.value).toHaveLength(1)
+  })
+  it.each([['history','loadHistory','history','historyOffset','contentHistory',20],['editors','loadEditors','editors','editorOffset','contentEditors',20],['search','search','candidates','searchOffset','members',40]] as const)('content %s pagination keeps data and retries the failing page',async(kind,loadName,itemsName,offsetName,apiName,size)=>{
+    const request=vi.fn().mockResolvedValueOnce({items:[{id:'first'}],hasMore:true}).mockRejectedValueOnce(new Error('network')).mockResolvedValue({items:[],hasMore:false})
+    const p=view<{load(reset?:boolean):Promise<void>;page(kind:string,back:boolean):void;items:vue.Ref<unknown[]>;offset:vue.Ref<number>;query:vue.Ref<string>}>('content/ContentPage',`${loadName} as load,page,${itemsName} as items,${offsetName} as offset,query`,{[apiName]:request})
+    p.query.value='member';await p.load();p.page(kind,false);await tick();expect(p.offset.value).toBe(0);expect(p.items.value).toHaveLength(1);await p.load(false);expect(request.mock.calls.map(a=>apiName==='members'?a[0].offset:a[0])).toEqual([0,size,size])
   })
 })

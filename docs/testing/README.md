@@ -1,5 +1,12 @@
 # 验证与验收
 
+## 2026-11-05 品牌与后台修复入口
+
+- `apps/api/test/admin-boundaries.spec.ts`：可信回环代理/IP规范化/伪造头、限流边界和时间恢复、账号分页SQL及末页；`platform-brand.spec.ts`：真实Nest回环HTTP配合存储替身验证公开白名单、超管、Cookie/Origin/CSRF、输入、版本冲突和审计失败回滚，非真实数据库。
+- `apps/admin/test/{admin,navigation-and-filter,advertising-page,brand}.test.ts`：账号分页传参、翻页失败目标重试、筛选重置、授权加载恢复、过期确认禁止写入、品牌权限与失败保留/重复提交。小程序 `platform-brand.test.mjs` 覆盖刷新、隐藏开关、失败保留及离页迟到响应。
+- 已授权本机0018后，忽略目录 `brand-http-rollback-20261105.mjs` 以真实凭据散列/HTTP登录/真实MySQL外层事务验证品牌及账号分页，结束44表摘要一致。该脚本须显式 `--authorized-local-rollback` 且只接受127.0.0.1:3306/huiju，不属于普通test，回执见当月日志。
+- 浏览器品牌表单/标题同步/开关/账号第二页失败重试使用明确内存页面夹具，不等同真实后台身份、生产反代或真实库浏览器验收；小程序本轮动态品牌真机未验。
+
 先按本次文件和风险选择检查。以下命令在仓库根目录执行，使用已安装依赖；不自动安装或升级。`corepack pnpm verify:plan <文件...>` 只列建议，不执行检查、不读取 `.env`，也不会自动选中其他未提交文件。
 
 ## 最小验证矩阵

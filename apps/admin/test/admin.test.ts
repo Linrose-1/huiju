@@ -22,6 +22,17 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('admin session and transport', () => {
+  it('requests explicit account pagination and exposes the login-rate-limit message', async () => {
+    authenticated()
+    network.mockResolvedValueOnce(response({ items: [], hasMore: false }))
+    await admin.adminApi.accounts(40)
+    const request = network.mock.calls[0]![0] as Request
+    expect(request.credentials).toBe('include')
+    expect(new URL(request.url).searchParams.get('offset')).toBe('40')
+    expect(new URL(request.url).searchParams.get('limit')).toBe('20')
+    network.mockResolvedValueOnce(response({ code: 'ADMIN_LOGIN_LIMITED' }, 429))
+    await expect(admin.adminApi.login('operator', 'Example12345')).rejects.toThrow('登录尝试过于频繁')
+  })
   it('uses the existing paginated circle contract and rejects forbidden moderation', async () => {
     authenticated()
     network.mockResolvedValueOnce(response({ items: [], hasMore: false }))

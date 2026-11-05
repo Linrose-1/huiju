@@ -16,6 +16,7 @@ function harness(t) {
     '@dcloudio/uni-app': {
       onShareAppMessage() {}, onShareTimeline() {}, onLoad() {}, onShow(fn) { show = fn }, onHide(fn) { hide = fn }, onUnload() {}, onPullDownRefresh() {}, onReachBottom(fn) { bottom = fn }
     },
+    '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api': { api: { activities: query => new Promise((resolve, reject) => requests.push({ query, resolve, reject })) }, errorMessage: e => e.message },
     '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
     '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': {},

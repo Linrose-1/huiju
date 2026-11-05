@@ -18,11 +18,11 @@ const begin = useRequestScope(), beginAction = useRequestScope()
 const applied = ref({ q: '', status: 'all' as 'all' | AdStatus, placement: 'all' as 'all' | Placement })
 const labels = { draft: '草稿', published: '已上架', offline: '已下架' }, positions = { activity: '活动', circle: '学友圈', assistant: '助手' }
 async function load(reset = false) {
-  if (reset) { offset.value = 0; applied.value = { q: q.value.trim(), status: status.value, placement: placement.value } }
+  if (reset) { displayedOffset.value = 0; ads.value = []; introductions.value = []; total.value = 0; offset.value = 0; applied.value = { q: q.value.trim(), status: status.value, placement: placement.value } }
   if (tab.value === 'background') return
   const current = begin(); loading.value = true; error.value = ''
-  try { const query = { q: applied.value.q, status: applied.value.status, offset: offset.value, limit: 20 }; if (tab.value === 'ads') { const result = await advertisingApi.ads({ ...query, placement: applied.value.placement }); if (current()) { ads.value = result.items; total.value = result.total; displayedOffset.value = offset.value } } else { const result = await advertisingApi.introductions(query); if (current()) { introductions.value = result.items; total.value = result.total; displayedOffset.value = offset.value } } }
-  catch (e) { if (current()) { error.value = errorMessage(e); offset.value = displayedOffset.value } }
+  try { const query = { q: applied.value.q, status: applied.value.status, offset: offset.value, limit: 20 }; if (tab.value === 'ads') { const result = await advertisingApi.ads({ ...query, placement: applied.value.placement }); if (current()) { ads.value = result.items; total.value = result.total; displayedOffset.value = query.offset } } else { const result = await advertisingApi.introductions(query); if (current()) { introductions.value = result.items; total.value = result.total; displayedOffset.value = query.offset } } }
+  catch (e) { if (current()) { error.value = errorMessage(e) } }
   finally { if (current()) loading.value = false }
 }
 async function selectTab(value: 'ads' | 'introductions' | 'background') {
@@ -36,10 +36,14 @@ function saved() { adEditor.value = false; introEditor.value = false; void load(
 async function changeStatus(row: AdvertisingAd | AdvertisingIntroduction) {
   if (changing.value || loading.value) return
   const next = row.status === 'published' ? 'offline' : 'published'
-  try { await ElMessageBox.confirm(next === 'published' ? '确认上架？内容和商务联系方式将公开展示。' : '确认下架？介绍下架后，关联广告也将停止展示。', next === 'published' ? '上架内容' : '下架内容', { type: 'warning' }) } catch { return }
-  const current = beginAction(); changing.value = true; error.value = ''
-  try { if (tab.value === 'ads') await advertisingApi.adStatus(row.id, row.version, next); else await advertisingApi.introductionStatus(row.id, row.version, next); if (current()) { ElMessage.success(next === 'published' ? '已上架' : '已下架'); void load() } }
-  catch (e) { if (current()) error.value = errorMessage(e) }
+  const current = beginAction(), selectedTab = tab.value, id = row.id, version = row.version
+  changing.value = true; error.value = ''
+  try {
+    try { await ElMessageBox.confirm(next === 'published' ? '确认上架？内容和商务联系方式将公开展示。' : '确认下架？介绍下架后，关联广告也将停止展示。', next === 'published' ? '上架内容' : '下架内容', { type: 'warning' }) } catch { return }
+    if (!current()) return
+    if (selectedTab === 'ads') await advertisingApi.adStatus(id, version, next); else await advertisingApi.introductionStatus(id, version, next)
+    if (current()) { ElMessage.success(next === 'published' ? '已上架' : '已下架'); void load() }
+  } catch (e) { if (current()) error.value = errorMessage(e) }
   finally { if (current()) changing.value = false }
 }
 async function openPreview(id: string) { if (changing.value) return; const current = beginAction(); changing.value = true; error.value = ''; try { const value = await advertisingApi.introduction(id); if (current()) preview.value = value } catch (e) { if (current()) error.value = errorMessage(e) } finally { if (current()) changing.value = false } }
@@ -274,14 +278,14 @@ onMounted(() => { void load() })
         </el-table-column>
       </el-table>
       <div class="pagination">
-        <span>共 {{ total }} 条 · 第 {{ Math.floor(offset / 20) + 1 }} 页</span><el-button
-          :disabled="!offset || loading || changing"
-          @click="offset -= 20; load()"
+        <span>共 {{ total }} 条 · 第 {{ Math.floor(displayedOffset / 20) + 1 }} 页</span><el-button
+          :disabled="!displayedOffset || loading || changing"
+          @click="offset = Math.max(0, displayedOffset - 20); load()"
         >
           上一页
         </el-button><el-button
-          :disabled="offset + 20 >= total || loading || changing"
-          @click="offset += 20; load()"
+          :disabled="displayedOffset + 20 >= total || loading || changing"
+          @click="offset = displayedOffset + 20; load()"
         >
           下一页
         </el-button>

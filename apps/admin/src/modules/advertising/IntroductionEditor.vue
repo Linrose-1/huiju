@@ -29,9 +29,11 @@ async function save() {
   error.value = ''
   if (![form.value.name, form.value.companyName, form.value.contactName].every(v => v.trim()) || (!form.value.phone.trim() && !form.value.wechatId.trim())) { error.value = '请填写项目名称、企业名称、联系人，以及电话或微信号。'; return }
   if (!form.value.coverImageId || !form.value.blocks.length || form.value.blocks.some(b => b.type === 'text' ? !b.text?.trim() : !b.imageId)) { error.value = '请设置封面，并完成每一段介绍文字或图片。'; return }
-  if (initial?.status === 'published') { try { await ElMessageBox.confirm('保存将立即更新所有关联广告展示的介绍内容，是否继续？', '更新已公开内容', { type: 'warning' }) } catch { return } }
   const current = begin(); saving.value = true
-  try { const result = initial ? await advertisingApi.updateIntroduction(initial.id, { ...form.value, version: version.value }) : await advertisingApi.createIntroduction(form.value); if (current()) { baseline.value = JSON.stringify(form.value); version.value = result.version; ElMessage.success('介绍内容已保存'); emit('saved', result) } }
+  try {
+  if (initial?.status === 'published') { try { await ElMessageBox.confirm('保存将立即更新所有关联广告展示的介绍内容，是否继续？', '更新已公开内容', { type: 'warning' }) } catch { return } }
+    if (!current()) return
+    const result = initial ? await advertisingApi.updateIntroduction(initial.id, { ...form.value, version: version.value }) : await advertisingApi.createIntroduction(form.value); if (current()) { baseline.value = JSON.stringify(form.value); version.value = result.version; ElMessage.success('介绍内容已保存'); emit('saved', result) } }
   catch (e) { if (current()) error.value = errorMessage(e) }
   finally { if (current()) saving.value = false }
 }

@@ -30,6 +30,7 @@ function harness(scanner) {
   const source = readFileSync(new URL('../src/pages/activity/index.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const page = execute(source + '\nexport { scanActivity, scanning };', {
     '@dcloudio/uni-app': { onShareAppMessage() {}, onShareTimeline() {}, onShow() {}, onHide() {}, onPullDownRefresh() {}, onReachBottom() {}, onLoad() {}, onUnload: f => { unload = f } },
+    '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api': { api: {}, errorMessage: e => e.message },
     '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
     '@/services/api/environment': {}, '@/services/presentation': {},

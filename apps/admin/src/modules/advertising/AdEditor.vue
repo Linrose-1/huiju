@@ -36,9 +36,11 @@ async function save() {
   if (saving.value || uploading.value) return
   error.value = ''
   if (!form.value.title.trim() || !form.value.placements.length || !form.value.introductionId) { error.value = '请填写广告标题、展示位置并选择介绍内容。'; return }
-  if (initial?.status === 'published') { try { await ElMessageBox.confirm('保存后立即更新已上架广告，是否继续？', '更新广告', { type: 'warning' }) } catch { return } }
   const current = begin(); saving.value = true
-  try { if (initial) await advertisingApi.updateAd(initial.id, { ...form.value, version: initial.version }); else await advertisingApi.createAd(form.value); if (current()) { baseline.value = JSON.stringify(form.value); ElMessage.success('广告已保存'); emit('saved') } }
+  try {
+  if (initial?.status === 'published') { try { await ElMessageBox.confirm('保存后立即更新已上架广告，是否继续？', '更新广告', { type: 'warning' }) } catch { return } }
+    if (!current()) return
+    if (initial) await advertisingApi.updateAd(initial.id, { ...form.value, version: initial.version }); else await advertisingApi.createAd(form.value); if (current()) { baseline.value = JSON.stringify(form.value); ElMessage.success('广告已保存'); emit('saved') } }
   catch (e) { if (current()) error.value = errorMessage(e) }
   finally { if (current()) saving.value = false }
 }

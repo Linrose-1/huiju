@@ -1,12 +1,13 @@
-import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common'
+import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common'
 import { ApiCookieAuth, ApiHeader, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { ErrorDto, OkDto } from '../flow/dto.js'
 import { AdminAccountDto, AdminAccountListDto, AdminCreateInput, AdminLoginInput, AdminPasswordInput, AdminSessionDto, AdminStatusInput, AdminTemporaryPasswordInput } from './dto.js'
 import { AdminService } from './service.js'
-import { cookieHeader } from './security.js'
+import { adminLoginSource, cookieHeader } from './security.js'
+import { PageQuery } from '../flow/pagination.js'
 
 type Response = { setHeader(name: string, value: string): void }
-type Request = { socket: { remoteAddress?: string }; headers: { cookie?: string; origin?: string; 'x-csrf-token'?: string } }
+type Request = { socket: { remoteAddress?: string }; headers: { cookie?: string; origin?: string; 'x-csrf-token'?: string; 'x-forwarded-for'?: string | string[] } }
 const context = (request: Request) => ({ cookie: request.headers.cookie, origin: request.headers.origin, csrfToken: request.headers['x-csrf-token'] })
 
 @Controller('admin') @ApiTags('admin') @ApiCookieAuth('admin_session')
@@ -18,7 +19,7 @@ export class AdminController {
 
   @Post('auth/login') @HttpCode(200) @Header('Cache-Control', 'no-store') @ApiOperation({ security: [] }) @ApiOkResponse({ type: AdminSessionDto })
   async login(@Body() input: AdminLoginInput, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    const result = await this.admin.login(input.username, input.password, request.headers.origin, request.socket.remoteAddress ?? 'unknown')
+    const result = await this.admin.login(input.username, input.password, request.headers.origin, adminLoginSource(request.socket.remoteAddress, request.headers['x-forwarded-for']))
     response.setHeader('Set-Cookie', cookieHeader(result.token))
     return result.session
   }
@@ -40,7 +41,7 @@ export class AdminController {
     return result
   }
   @Get('accounts') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: AdminAccountListDto })
-  accounts(@Req() request: Request) { return this.admin.listAccounts(context(request)) }
+  accounts(@Req() request: Request, @Query() query: PageQuery = new PageQuery()) { return this.admin.listAccounts(context(request), query) }
 
   @Post('accounts') @HttpCode(200) @ApiOkResponse({ type: AdminAccountDto })
   @ApiHeader({ name: 'X-CSRF-Token', required: true })

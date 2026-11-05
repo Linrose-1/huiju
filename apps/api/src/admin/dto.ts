@@ -41,4 +41,5 @@ export class AdminSessionDto {
 }
 export class AdminAccountListDto {
   @ApiProperty({ type: [AdminAccountDto] }) items!: AdminAccountDto[]
+  @ApiProperty() hasMore!: boolean
 }

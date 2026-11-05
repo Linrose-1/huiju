@@ -6,6 +6,7 @@ import { adminAccounts, adminSessions } from '../database/schema/members.js'
 import { fail, FlowDatabase } from '../flow/common.js'
 import { AdminAccountDto, AdminCreateInput, AdminPasswordInput } from './dto.js'
 import { checkOrigin, checkPassword, csrfFor, digest, hashPassword, readToken, verifyPassword } from './security.js'
+import { PageQuery } from '../flow/pagination.js'
 
 export interface AdminRequestContext { cookie?: string; origin?: string; csrfToken?: string }
 export type AdminTransaction = Parameters<Parameters<FlowDatabase['db']['transaction']>[0]>[0]
@@ -97,8 +98,13 @@ export class AdminService {
     }, { write: true })
   }
 
-  listAccounts(context: AdminRequestContext) {
-    return this.withSession(context, async (tx) => ({ items: (await tx.select({ account: adminAccounts, credential: adminCredentials }).from(adminAccounts).innerJoin(adminCredentials, eq(adminCredentials.adminAccountId, adminAccounts.id)).orderBy(adminAccounts.createdAt)).map(present) }), { superOnly: true })
+  listAccounts(context: AdminRequestContext, query: PageQuery = new PageQuery()) {
+    return this.withSession(context, async (tx) => {
+      const rows = await tx.select({ account: adminAccounts, credential: adminCredentials }).from(adminAccounts)
+        .innerJoin(adminCredentials, eq(adminCredentials.adminAccountId, adminAccounts.id))
+        .orderBy(adminAccounts.createdAt, adminAccounts.id).limit(query.limit + 1).offset(query.offset)
+      return { items: rows.slice(0, query.limit).map(present), hasMore: rows.length > query.limit }
+    }, { superOnly: true })
   }
 
   async createAccount(context: AdminRequestContext, input: AdminCreateInput) {
