@@ -71,14 +71,26 @@ describe('organizer write boundaries', () => {
     expect(() => requireOrganizer(undefined, 'owner')).toThrow('活动不存在')
   })
 
-  it('permanently locks questions and fees after any registration even when all cancelled', () => {
+  it('permanently locks existing question content, deletion and fees even when all registrations cancelled', () => {
     const q = { id: 'question', type: 'single', prompt: '选一个', required: true, options: ['甲', '乙'] } as Question
     const locked = { ...base, hasRegistrationEver: true, activeRegistrationCount: 0 }
     const body = { ...input, questions: [{ id: q.id, type: 'single' as const, prompt: q.prompt, required: true, options: q.options }] }
     expect(() => validateActivityEdit(locked, [q], body, now)).not.toThrow()
-    for (const change of [{ ...body, questions: [] }, { ...body, questions: [{ ...body.questions[0], options: ['甲'] }] }, { ...body, feeType: 'paid' as const, feeAmountCents: 100 }]) {
+    for (const change of [{ ...body, questions: [] },
+      ...[{ options: ['甲'] }, { prompt: '新标题' }, { required: false }, { type: 'multiple' as const }].map(change => ({ ...body, questions: [{ ...body.questions[0], ...change }] })),
+      { ...body, feeType: 'paid' as const, feeAmountCents: 100 }]) {
       expect(() => validateActivityEdit(locked, [q], change, now)).toThrow('已有报名记录')
     }
+  })
+
+  it('allows inserting private required questions and reordering existing questions after registration', () => {
+    const questions = ['first', 'second'].map(id => ({ id, type: 'short_text', prompt: id, required: false, options: null, publicToParticipants: false })) as Question[]
+    const added = { type: 'long_text' as const, prompt: '新增必填', required: true }
+    const locked = { ...base, hasRegistrationEver: true }
+    const body = { ...input, questions: [questions[1], added, questions[0]] }
+    expect(validateActivityEdit(locked, questions, body, now).sameQuestions).toBe(false)
+    expect(() => validateActivityEdit(locked, questions, { ...body, questions: [questions[1], { ...added, publicToParticipants: true }, questions[0]] }, now)).toThrow('不能将私密填写项改为公开')
+    expect(() => validateActivityEdit(locked, questions, body, base.startsAt)).toThrow('已开始')
   })
 
   it('rejects foreign question ids, overbooking capacity and past starts', () => {

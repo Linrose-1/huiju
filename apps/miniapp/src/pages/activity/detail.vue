@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
 import { onShareAppMessage, onShareTimeline, onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
@@ -62,15 +63,16 @@ async function loadReaders(more = false) {
     finally { if (isCurrent()) readersLoading.value = false }
 }
 function retryReaders() { const more = readersOffset > 0; readersError.value = ''; void loadReaders(more) }
-async function loadRoster(more = false) {
+async function loadRoster(more = false, retain = false) {
     if (!activity.value || rosterLoading.value || (more && (!rosterHasMore.value || rosterMoreError.value || rosterError.value))) return
     const isCurrent = currentRequest()
-    if (!more) { rosterOffset = 0; rosterError.value = ''; rosterMoreError.value = ''; roster.value = [] }
+    if (!more) { rosterOffset = 0; rosterError.value = ''; rosterMoreError.value = ''; if (!retain) roster.value = [] }
     rosterLoading.value = true
     try {
         const result = await api.roster(id.value, { offset: rosterOffset })
         if (!isCurrent()) return
         rosterOffset += result.items.length
+        if (!more) roster.value = []
         const known = new Set(roster.value.map(item => item.memberId))
         roster.value.push(...result.items.filter(item => !known.has(item.memberId)))
         rosterHasMore.value = result.hasMore
@@ -93,14 +95,16 @@ async function loadRegistration(isCurrent = currentRequest()) {
         }
     } finally { if (current()) registrationLoading.value = false }
 }
-async function load() { if (!id.value)
+async function load(background = false) { if (!id.value)
     return
     const current = ++generation, token = session.token, epoch = session.epoch
     const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
-    loading.value = true; error.value = ''; activity.value = null; registration.value = null
+    const retain = background === true && !!activity.value
+    loading.value = !retain; error.value = ''; if (!retain) activity.value = null; registration.value = null
     registrationGeneration++; registrationLoading.value = false; registrationError.value = ''; registrationKnown.value = !token
-    roster.value = []; rosterOffset = 0; rosterHasMore.value = false; rosterError.value = ''; rosterMoreError.value = ''; rosterLoading.value = false; readersOffset = 0
-    readers.value = { items: [], total: 0, hasMore: false }; readersError.value = ''; readersLoading.value = false
+    if (!retain) { roster.value = []; rosterHasMore.value = false; readers.value = { items: [], total: 0, hasMore: false } }
+    rosterOffset = 0; rosterError.value = ''; rosterMoreError.value = ''; rosterLoading.value = false; readersOffset = 0
+    readersError.value = ''; readersLoading.value = false
     void loadRegistration(isCurrent)
     try {
     const result = await api.activity(id.value)
@@ -113,7 +117,7 @@ async function load() { if (!id.value)
         if (!isCurrent()) return
     }
     void loadReaders()
-    await loadRoster()
+    await loadRoster(false, retain)
 }
 catch (e) {
     if (isCurrent())
@@ -147,7 +151,7 @@ onLoad(options => { id.value = String(options?.id || ''); searchId.value = Strin
     loading.value = false
     error.value = '活动链接不完整，请从活动列表重新进入'
 } })
-onShow(() => { shown = true; visit = null; void load() })
+onShow(() => { shown = true; visit = null; void load(true) })
 onHide(() => { shown = false; generation++; registrationGeneration++; registration.value = null; registrationKnown.value = false; registrationError.value = ''; registrationLoading.value = false; loading.value = false })
 onPullDownRefresh(load)
 function openPeople(kind: 'roster' | 'readers') { navigate(routes.activityPeople + '?id=' + encodeURIComponent(id.value) + '&kind=' + kind) }
@@ -157,6 +161,7 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view class="page-pad with-footer activity-detail">
+    <PageReturn />
     <view
       v-if="shareError"
       class="error"
@@ -175,7 +180,7 @@ onShareTimeline(shareTimeline)
       :loading="loading"
       :error="error"
       @retry="load"
-    /><template v-if="activity && !loading && !error">
+    /><template v-if="activity && !loading">
       <ActivityImageGallery :urls="activityImages(activity)" />
       <view class="card summary-card">
         <view class="section-title mark activity-title">{{ activity.title }}</view><view class="row badges">

@@ -7,12 +7,13 @@ import { createRequire } from 'node:module'
 import ts from 'typescript'
 import activityImages from './activity-images-fixture.mjs'
 const require = createRequire(import.meta.url)
-function harness(info = options => options.success({ width: 2000, height: 1200, path: 'local-image' }), exportFile) {
+function harness(info = options => options.success({ width: 2000, height: 1200, path: 'local-image' }), exportFile, windowInfo = { windowWidth: 375 }) {
   const source = readFileSync(new URL('../src/components/business/ActivityCoverCropper.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const code = ts.transpileModule(source + '\nexport { open, finish, confirm, visible, saving, setZoom, geometry, start, move };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const page = {}, draws = [], exports = []
   const vue = { ...require('vue'), getCurrentInstance: () => ({ proxy: {} }), onBeforeUnmount() {} }
-  const uni = { getImageInfo: info, getSystemInfoSync: () => ({ windowWidth: 375 }), createCanvasContext: () => ({ drawImage: (...args) => draws.push(args), draw: (_reserve, callback) => callback() }), canvasToTempFilePath: options => { exports.push(options); if (exportFile) exportFile(options); else options.success({tempFilePath:'cropped-image'}) } }
+  const query = { in: () => query, select: () => query, boundingClientRect: callback => { callback({width:390}); return query }, exec() {} }
+  const uni = { getImageInfo: info, getWindowInfo: () => windowInfo, getSystemInfoSync: () => windowInfo, createSelectorQuery: () => query, createCanvasContext: () => ({ drawImage: (...args) => draws.push(args), draw: (_reserve, callback) => callback() }), canvasToTempFilePath: options => { exports.push(options); if (exportFile) exportFile(options); else options.success({tempFilePath:'cropped-image'}) } }
   new Function('require', 'exports', 'uni', 'defineExpose', code)(name => name === 'vue' ? vue : activityImages, page, uni, () => {})
   return { page, draws, exports }
 }
@@ -24,6 +25,18 @@ test('crop cancellation during image loading cannot reopen modal or leave pendin
   pending.success({ width:2000, height:1200, path:'old-image' })
   assert.equal(await result, null)
   assert.equal(h.page.visible.value, false)
+})
+
+test('missing simulator window width measures the rendered crop container before exporting', async () => {
+  const h = harness(undefined, undefined, {}), result = h.page.open('local-image')
+  await setImmediate()
+  const geometry = h.page.geometry.value
+  assert.ok(Number.isFinite(geometry.scale) && geometry.scale > 0)
+  assert.equal(geometry.sourceWidth * geometry.scale, 326)
+  assert.equal(geometry.sourceHeight * geometry.scale, 326 * .8)
+  await h.page.confirm()
+  assert.equal(await result, 'cropped-image')
+  assert.ok(h.draws[0].slice(1).every(Number.isFinite))
 })
 test('crop drag/zoom exports selected source rectangle at 1250 by 1000 and resolves once', async () => {
   const h = harness(), result = h.page.open('local-image')

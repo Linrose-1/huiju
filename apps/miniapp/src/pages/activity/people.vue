@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -12,19 +13,26 @@ const id = ref(''), kind = ref<'roster' | 'readers'>('roster'), people = ref<(Pu
 const loading = ref(false), moreLoading = ref(false), error = ref(''), moreError = ref(''), hasMore = ref(false)
 const session = useSessionStore()
 let generation = 0, offset = 0, visible = false, opening = false
-async function load(more = false) {
+async function load(more = false, background = false) {
+  const targetCount = background === true ? offset : 0, retain = targetCount > 0
   if (more && (loading.value || moreLoading.value || !hasMore.value || moreError.value)) return
-  if (!more) { generation++; offset = 0; people.value = []; hasMore.value = false; error.value = ''; moreError.value = ''; moreLoading.value = false }
+  if (!more) { generation++; if (!retain) { offset = 0; people.value = []; hasMore.value = false }; error.value = ''; moreError.value = ''; moreLoading.value = false }
   const current = generation, epoch = session.epoch, token = session.token
   const active = () => visible && current === generation && epoch === session.epoch && token === session.token
   if (!id.value) { error.value = '活动链接不完整'; uni.stopPullDownRefresh(); return }
-  if (more) moreLoading.value = true; else loading.value = true
+  if (more || retain) moreLoading.value = true; else loading.value = true
   try {
-    const result = kind.value === 'readers' ? await api.activityReaders(id.value, offset) : await api.roster(id.value, { offset })
+    let result = kind.value === 'readers' ? await api.activityReaders(id.value, more ? offset : 0) : await api.roster(id.value, { offset: more ? offset : 0 })
+    const nextItems = [...result.items]
+    while (active() && result.hasMore && result.items.length && nextItems.length < targetCount) {
+      result = kind.value === 'readers' ? await api.activityReaders(id.value, nextItems.length) : await api.roster(id.value, { offset: nextItems.length })
+      nextItems.push(...result.items)
+    }
     if (!active()) return
-    offset += result.items.length
+    if (!more) { offset = 0; people.value = [] }
+    offset += nextItems.length
     const known = new Set(people.value.map(person => person.memberId))
-    const items: typeof people.value = result.items
+    const items: typeof people.value = nextItems
     people.value.push(...items.filter(person => !known.has(person.memberId)))
     hasMore.value = result.hasMore
   } catch (e) { if (active()) { if (more) moreError.value = errorMessage(e); else error.value = errorMessage(e) } }
@@ -44,8 +52,8 @@ onLoad(options => {
   kind.value = options?.kind === 'readers' ? 'readers' : 'roster'
   uni.setNavigationBarTitle({ title: kind.value === 'readers' ? '阅读留痕' : '报名名单' })
 })
-onShow(() => { visible = true; void load() })
-onHide(() => { visible = false; generation++; loading.value = false; moreLoading.value = false })
+onShow(() => { visible = true; void load(false, true) })
+onHide(() => { visible = false; generation++; loading.value = false; moreLoading.value = false; for (const person of people.value) person.publicAnswers = [] })
 const stop = watch(() => [session.token, session.epoch], () => { generation++; people.value = []; if (visible) void load() })
 onUnload(() => { visible = false; generation++; stop() })
 onReachBottom(() => { void load(true) })
@@ -53,12 +61,13 @@ onPullDownRefresh(() => { void load() })
 </script>
 <template>
   <view class="people-page">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"
       @retry="load()"
     />
-    <template v-if="!loading && !error">
+    <template v-if="people.length || (!loading && !error)">
       <view
         v-if="!people.length"
         class="empty"

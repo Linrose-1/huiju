@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -14,18 +15,25 @@ const loading = ref(false), loadingMore = ref(false), error = ref(''), moreError
 let generation = 0, offset = 0, visible = false
 function currentRequest() { const g = generation, token = session.token, epoch = session.epoch; return () => visible && g === generation && token === session.token && epoch === session.epoch }
 function clear() { generation++; inviter.value = null; items.value = []; total.value = 0; offset = 0; hasMore.value = false; loading.value = false; loadingMore.value = false; error.value = ''; moreError.value = ''; ready.value = false }
-async function load() {
-  clear(); loading.value = true
+async function load(background = false) {
+  const targetCount = background === true ? offset : 0, retain = background === true && ready.value
+  if (retain) { generation++; error.value = ''; moreError.value = '' } else clear()
+  loading.value = !retain; loadingMore.value = retain
   const g = generation
   try {
     const allowed = await requireProfile(routes.fellows)
     if (!visible || g !== generation) return
     if (!allowed) { error.value = '完善资料后可查看我的学友'; return }
-    const current = currentRequest(), result = await api.fellows({offset:0,limit:20})
+    const current = currentRequest()
+    let result = await api.fellows({offset:0,limit:20})
+    const nextItems = [...result.items]
+    while (current() && result.hasMore && result.items.length && nextItems.length < targetCount) {
+      result = await api.fellows({offset:nextItems.length,limit:20}); nextItems.push(...result.items)
+    }
     if (!current()) return
-    inviter.value = result.inviter; items.value = result.items; total.value = result.total; hasMore.value = result.hasMore; offset = result.items.length; ready.value = true
+    inviter.value = result.inviter; items.value = nextItems; total.value = result.total; hasMore.value = result.hasMore; offset = nextItems.length; ready.value = true
   } catch (e) { if (visible && g === generation) error.value = errorMessage(e) }
-  finally { if (g === generation) { loading.value = false; uni.stopPullDownRefresh() } }
+  finally { if (g === generation) { loading.value = false; loadingMore.value = false; uni.stopPullDownRefresh() } }
 }
 async function more() {
   if (!ready.value || loading.value || loadingMore.value || moreError.value || !hasMore.value) return
@@ -42,21 +50,22 @@ async function more() {
 function retryMore() { moreError.value = ''; void more() }
 function open(person: FellowSummary) { if (person.canOpenCard && person.memberId) navigate(routes.memberCard+'?id='+encodeURIComponent(person.memberId)) }
 const stop = watch(() => [session.token,session.epoch], () => { clear(); if (visible) void load() }, {flush:'sync'})
-onShow(() => { visible = true; void load() })
-onHide(() => { visible = false; clear() })
+onShow(() => { visible = true; void load(true) })
+onHide(() => { visible = false; generation++; loading.value = false; loadingMore.value = false })
 onUnload(() => { visible = false; clear(); stop() })
 onReachBottom(more)
 onPullDownRefresh(load)
 </script>
 <template>
   <view class="page-pad fellows-page">
+    <PageReturn />
     <view class="notice">这里展示直接邀请你的人，以及你直接邀请的人。邀请关系建立后保持不变。</view>
     <RequestState
       :loading="loading"
       :error="error"
       @retry="load"
     />
-    <template v-if="ready && !loading && !error">
+    <template v-if="ready && !loading">
       <view class="group-label">邀请我的学友</view>
       <view class="card person-card">
         <FellowPerson

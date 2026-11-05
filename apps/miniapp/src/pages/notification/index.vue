@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -23,16 +24,23 @@ function clear() {
   items.value = []; error.value = ''; actionError.value = ''; hasMore.value = false
   loading.value = false; busy.value = false; loadingMore.value = false; moreError.value = ''; offset = 0
 }
-async function load() {
-  clear()
+async function load(background = false) {
+  const targetCount = background === true ? offset : 0
+  const retain = targetCount > 0
+  if (retain) { generation++; error.value = ''; moreError.value = '' } else clear()
   const active = currentRequest()
-  if (!session.token) { loading.value = false; uni.stopPullDownRefresh(); return }
-  loading.value = true
+  if (!session.token) { loading.value = false; loadingMore.value = false; uni.stopPullDownRefresh(); return }
+  loading.value = !retain; loadingMore.value = retain
   try {
-    const result = await api.notifications({ offset: 0 })
-    if (active()) { items.value = result.items; hasMore.value = result.hasMore; offset = result.items.length }
+    let result = await api.notifications({ offset: 0 })
+    const nextItems = [...result.items]
+    while (active() && result.hasMore && result.items.length && nextItems.length < targetCount) {
+      result = await api.notifications({ offset: nextItems.length })
+      nextItems.push(...result.items)
+    }
+    if (active()) { items.value = nextItems; hasMore.value = result.hasMore; offset = nextItems.length }
   } catch (e) { if (active()) error.value = errorMessage(e) }
-  finally { if (active()) { loading.value = false; uni.stopPullDownRefresh() } }
+  finally { if (active()) { loading.value = false; loadingMore.value = false; uni.stopPullDownRefresh() } }
 }
 async function more() {
   if (loading.value || loadingMore.value || error.value || moreError.value || !hasMore.value || !session.token) return
@@ -64,14 +72,15 @@ async function open(item: ActivityNotification) {
   finally { if (active()) busy.value = false }
 }
 const stop = watch(() => [session.token, session.epoch], () => { clear(); if (shown) void load() }, { flush: 'sync' })
-onShow(() => { shown = true; void load() })
-onHide(() => { shown = false; clear() })
+onShow(() => { shown = true; void load(true) })
+onHide(() => { shown = false; generation++; busy.value = false; loading.value = false; loadingMore.value = false })
 onUnload(() => { shown = false; clear(); stop() })
 onReachBottom(more)
 onPullDownRefresh(load)
 </script>
 <template>
   <view class="page-pad notifications-page">
+    <PageReturn />
     <view
       v-if="!session.token"
       class="empty"
@@ -104,7 +113,7 @@ onPullDownRefresh(load)
       >
         {{ actionError }}
       </view>
-      <template v-if="!loading && !error">
+      <template v-if="items.length || (!loading && !error)">
         <view
           v-for="item in items"
           :key="item.id"

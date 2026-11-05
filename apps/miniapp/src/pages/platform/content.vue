@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -40,6 +41,7 @@ onShow(load); onHide(invalidate); onUnload(invalidate)
 </script>
 <template>
   <view class="content-settings">
+    <PageReturn />
     <view
       v-if="loading"
       class="muted"

@@ -6,6 +6,7 @@ import { createRequire } from 'node:module'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
+const { reactive } = require('vue')
 class ApiError extends Error {
   constructor(code, message, status = 0) { super(message); this.code = code; this.status = status }
 }
@@ -17,10 +18,11 @@ function evaluate(source, dependencies, globals = {}) {
   )
   return exports
 }
-function formHarness({ existing = null, lookupError = null } = {}) {
+function formHarness({ existing = null, lookupError = null, recoverSession = false } = {}) {
   let registration = existing
   let submitted = 0
   const navigations = []
+  const session = reactive({ token: 'old', epoch: 0, member: { id: 'member-a', boundPhone: '13800000000' } })
   const activity = { registrationState: 'open', questions: [] }
   const api = {
     activity: async () => activity,
@@ -44,14 +46,23 @@ function formHarness({ existing = null, lookupError = null } = {}) {
     '@/services/presentation': { canEdit: () => true },
     '@/services/navigation': {
       routes: { form: '/pages/registration/form', result: '/pages/registration/detail' },
-      requireProfile: async () => true, loginPage() {},
+      requireProfile: async () => { if (recoverSession) { session.epoch++; session.token = 'renewed' }; return true }, loginPage() {},
       navigate: (...args) => navigations.push(args),
     },
-    '@/stores/session': { useSessionStore: () => ({ member: { id: 'member-a', boundPhone: '13800000000' } }) },
+    '@/stores/session': { useSessionStore: () => session },
   })
   page.id.value = 'activity-a'
   return { page, navigations, submitted: () => submitted }
 }
+
+test('session recovery during the profile gate loads the form instead of leaving a blank page', async () => {
+  const h = formHarness({ recoverSession: true })
+  await h.page.load()
+  assert.equal(h.page.allowed.value, true)
+  assert.equal(h.page.loading.value, false)
+  assert.equal(h.page.error.value, '')
+  assert.equal(h.page.phone.value, '13800000000')
+})
 
 test('a committed registration with a lost response recovers to its record even when full', async () => {
   const h = formHarness()

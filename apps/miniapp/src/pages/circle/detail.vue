@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
 import { onShareAppMessage, onShareTimeline, onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
@@ -20,16 +21,17 @@ watch(() => [session.token, session.epoch], (_, old) => {
   clear()
   if (visible) void load()
 }, { flush: 'sync' })
-async function load() {
+async function load(background = false) {
   const current = ++version, token = session.token, epoch = session.epoch
-  loading.value = true; error.value = ''; post.value = null
+  const retain = background === true && !!post.value
+  loading.value = !retain; error.value = ''; if (!retain) post.value = null
   const valid = () => current === version && token === session.token && epoch === session.epoch && visible
   try {
     if (!id.value) throw new Error('帖子链接不完整，请从学友圈重新进入')
     const result = await api.circlePost(id.value)
     if (!valid()) return
     post.value = result
-    galleryIndex.value = 0
+    galleryIndex.value = retain ? Math.min(galleryIndex.value, Math.max(0, result.images.length - 1)) : 0
     if (pendingIntent && result.state === 'open' && !result.isOwner && session.member?.profileComplete) {
       pendingIntent = false; phone.value = session.member.boundPhone || ''; sheet.value = true
     }
@@ -76,12 +78,12 @@ async function submit() {
 function goHome() { uni.switchTab({url:routes.circle}) }
 function preview(index: number) { if (post.value?.images.length) uni.previewImage({ current: index, urls: post.value.images.map(x => mediaUrl(x.url)) }) }
 onLoad(options => { id.value = String(options?.id || ''); pendingIntent = options?.intent === '1'; session.captureInvite(options?.inviteCode) })
-onShow(() => { visible = true; void load() })
+onShow(() => { visible = true; void load(true) })
 onPullDownRefresh(async () => {
   try { if (!sheet.value && !sending.value) await load() }
   finally { uni.stopPullDownRefresh() }
 })
-onHide(() => { visible = false; clear() })
+onHide(() => { visible = false; version++; loading.value = false; sheet.value = false; phone.value = ''; actionError.value = ''; sending.value = false; intentRequest = null })
 onUnload(() => { visible = false; pendingIntent = false; clear() })
 const { shareReady, shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => post.value && post.value.state !== 'removed' ? {path: routes.circleDetail, id: id.value, title: post.value.title} : null, true)
 onShareAppMessage(shareMessage)
@@ -89,6 +91,7 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view class="circle-page circle-safe circle-detail">
+    <PageReturn />
     <view
       v-if="shareError"
       class="error"

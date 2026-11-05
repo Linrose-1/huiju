@@ -38,11 +38,14 @@ export function scanActivityCode(): Promise<{ path?: string; result: string } | 
   })
 }
 export async function chooseActivityImagePath(): Promise<string | null> {
+  return (await chooseActivityImagePaths(1))[0] || null
+}
+export async function chooseActivityImagePaths(count: number): Promise<string[]> {
   // #ifdef MP-WEIXIN
-  const path = await new Promise<string | null>((resolve, reject) => {
-    uni.chooseImage({ count: 1, sizeType: ['compressed'], sourceType: ['album', 'camera'],
-      success: result => resolve(result.tempFilePaths[0]),
-      fail: result => result.errMsg?.includes('cancel') ? resolve(null) : reject(new Error('选图失败，请检查相册权限后重试')) })
+  const path = await new Promise<string[]>((resolve, reject) => {
+    uni.chooseImage({ count: Math.max(1, Math.min(9, count)), sizeType: ['compressed'], sourceType: ['album', 'camera'],
+      success: result => resolve(Array.isArray(result.tempFilePaths) ? result.tempFilePaths : [result.tempFilePaths]),
+      fail: result => result.errMsg?.includes('cancel') ? resolve([]) : reject(new Error('选图失败，请检查相册权限后重试')) })
   })
   return path
   // #endif

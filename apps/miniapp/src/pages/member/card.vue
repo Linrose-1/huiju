@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage, refreshMember } from '@/services/api'
@@ -10,21 +11,21 @@ import MemberCard from '@/components/business/MemberCard.vue'
 const session = useSessionStore(), id = ref(''), card = ref<Card | null>(null), loading = ref(false), error = ref(''), needsProfile = ref(false)
 let generation = 0, visible = false
 function completeProfile() { loginPage(routes.memberCard + '?id=' + encodeURIComponent(id.value)) }
-async function load() {
-  const current = ++generation
-  card.value = null; error.value = ''; needsProfile.value = false; loading.value = false
+async function load(background = false) {
+  const current = ++generation, retain = background === true && !!card.value
+  if (!retain) card.value = null; error.value = ''; needsProfile.value = false; loading.value = false
   if (!id.value) { error.value = '名片链接无效'; return }
-  if (!session.token) { needsProfile.value = true; return }
-  loading.value = true
+  if (!session.token) { card.value = null; needsProfile.value = true; return }
+  loading.value = !retain
   try {
     const member = await refreshMember()
     if (current !== generation) return
-    if (!member?.profileComplete) { needsProfile.value = true; return }
+    if (!member?.profileComplete) { card.value = null; needsProfile.value = true; return }
     const result = await api.memberCard(id.value)
     if (current === generation) card.value = result
   } catch (e) {
     if (current !== generation) return
-    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) needsProfile.value = true
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) { card.value = null; needsProfile.value = true }
     else error.value = errorMessage(e)
   } finally { if (current === generation) loading.value = false }
 }
@@ -33,12 +34,13 @@ const stop = watch(() => [session.token, session.epoch], () => {
   if (visible) void load()
 }, { flush: 'sync' })
 onLoad(options => { id.value = typeof options?.id === 'string' ? options.id : '' })
-onShow(() => { visible = true; void load() })
-onHide(() => { visible = false; generation++; card.value = null })
+onShow(() => { visible = true; void load(true) })
+onHide(() => { visible = false; generation++; loading.value = false })
 onUnload(() => { generation++; stop() })
 </script>
 <template>
   <view class="card-page">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"

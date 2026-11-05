@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { reactive, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, refreshMember, errorMessage } from '@/services/api'
@@ -87,6 +88,7 @@ onUnload(() => { resetKeyboard(); generation++; stop() })
 </script>
 <template>
   <view class="profile-page">
+    <PageReturn />
     <view
       v-if="!session.token"
       class="empty"

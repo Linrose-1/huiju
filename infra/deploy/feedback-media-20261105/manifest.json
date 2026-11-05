@@ -1,0 +1,36 @@
+{
+  "status": "authorized-pending-execution",
+  "preparedDate": "2026-11-05",
+  "apiBaseUrl": "https://106.55.240.34:8443/api/v1",
+  "sourceCatalog": "../demo-20261019/content.json",
+  "background": {
+    "expectedImageId": "3cfb660e-9db3-46fd-bf8b-da94f0d96c66",
+    "desiredImageId": null,
+    "fallbackAsset": "apps/miniapp/src/static/huiju/campus.jpg",
+    "deleteOldAsset": false
+  },
+  "expectedActivityCoverUrl": "/api/v1/media/covers/7f2edd42-2e25-4170-9a4f-082e241ec325_6ae9e065-9d34-46a7-b0e0-61e6d538bb90.jpg",
+  "activities": [
+    {
+      "id": "c7193a47-bfa2-4c2a-ab16-a0fde3cb93a2",
+      "purpose": "特邀免费",
+      "coverFile": "prepared/meeting-cover.jpg",
+      "coverSourceFile": "../demo-20261019/assets/meeting.jpg",
+      "imageFiles": ["prepared/meeting-cover.jpg"]
+    },
+    {
+      "id": "a861fbb7-3651-41cf-954c-f4e82cc1e457",
+      "purpose": "字段公开",
+      "coverFile": "prepared/office-cover.jpg",
+      "coverSourceFile": "../demo-20261019/assets/office.jpg",
+      "imageFiles": ["prepared/office-cover.jpg"]
+    },
+    {
+      "id": "288c92c8-452c-4aac-9792-85c060c5172f",
+      "purpose": "三图预览",
+      "coverFile": "prepared/workshop-cover.jpg",
+      "coverSourceFile": "../demo-20261019/assets/workshop.jpg",
+      "imageFiles": ["prepared/workshop-cover.jpg", "../demo-20261019/assets/meeting.jpg", "../demo-20261019/assets/office.jpg"]
+    }
+  ]
+}

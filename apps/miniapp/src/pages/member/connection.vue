@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch, computed } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
@@ -58,14 +59,15 @@ function returnToCard() {
 }
 const stop = watch(() => [session.token,session.epoch], () => { clear(); if (visible) void load() }, {flush:'sync'})
 onLoad(options => { id.value = String(options?.id || '') })
-onShow(() => { visible = true; void load() })
-onHide(() => { visible = false; clear() })
+onShow(() => { visible = true; if (!ready.value) void load() })
+onHide(() => { visible = false; generation++; loading.value = false; loadingMore.value = false })
 onUnload(() => { visible = false; clear(); stop() })
 onReachBottom(more)
 onPullDownRefresh(load)
 </script>
 <template>
   <view class="page-pad connection-page">
+    <PageReturn />
     <view
       v-if="source && target"
       class="connection-summary"

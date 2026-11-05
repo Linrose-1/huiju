@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onLoad,onShow,onHide,onUnload,onReachBottom,onPullDownRefresh } from '@dcloudio/uni-app'
 import { api,errorMessage } from '@/services/api'
@@ -16,9 +17,10 @@ const {items,loading,loadingMore,error,moreError,hasMore}=list
 const thumbnail=ref(''), thumbnailError=ref(false), preparing=ref(false)
 let generation=0,visible=false
 onLoad(o=>{id.value=String(o?.id||'')})
-async function load(){
-  const current=++generation
-  post.value=null;thumbnail.value='';thumbnailError.value=false;list.clear();preparing.value=true
+async function load(background = false){
+  const current=++generation, retain=background === true && list.ready.value
+  if (!retain) { post.value=null;thumbnail.value='';thumbnailError.value=false;list.clear() }
+  preparing.value=!retain
   try{
     if(!id.value)throw new Error('帖子不存在')
     await bootstrapIdentity()
@@ -28,7 +30,7 @@ async function load(){
     const data=await api.circlePost(id.value,true)
     if(!valid())return
     post.value=data
-    await Promise.all([list.load(),(async()=>{
+    await Promise.all([retain ? list.refresh() : list.load(),(async()=>{
       if(!data.images[0])return
       try{const image=await circleImagePreview(data.images[0].url,data.state==='removed');if(valid())thumbnail.value=image}
       catch{if(valid())thumbnailError.value=true}
@@ -42,10 +44,11 @@ watch(() => [session.token, session.epoch], async () => {
   await Promise.resolve()
   if(visible && current===generation)void load()
 }, {flush:'sync'})
-onShow(()=>{visible=true;void load()});onHide(()=>{visible=false;clear()});onUnload(()=>{visible=false;clear()});onReachBottom(()=>list.load(true));onPullDownRefresh(load)
+onShow(()=>{visible=true;void load(true)});onHide(()=>{visible=false;generation++;list.pause();preparing.value=false});onUnload(()=>{visible=false;clear()});onReachBottom(()=>list.load(true));onPullDownRefresh(load)
 </script>
 <template>
   <view class="circle-page">
+    <PageReturn />
     <view
       v-if="post"
       class="circle-card row"

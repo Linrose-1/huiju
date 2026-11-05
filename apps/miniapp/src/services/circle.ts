@@ -15,9 +15,10 @@ export function circleTime(value: string) {
 export function newRequestId() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.floor(Math.random() * 16); return (c === 'x' ? r : (r & 3) | 8).toString(16) }) }
 export function useCircleList<T extends { id: string }>(fetchPage: (offset: number) => Promise<{ items: T[]; hasMore: boolean }>) {
   const session = useSessionStore(), items = ref<T[]>([]) as Ref<T[]>
-  const loading = ref(false), loadingMore = ref(false), error = ref(''), moreError = ref(''), hasMore = ref(false)
+  const loading = ref(false), loadingMore = ref(false), error = ref(''), moreError = ref(''), hasMore = ref(false), ready = ref(false)
   let version = 0, offset = 0
-  function clear() { version++; items.value = []; offset = 0; loading.value = false; loadingMore.value = false; error.value = ''; moreError.value = ''; hasMore.value = false }
+  function pause() { version++; loading.value = false; loadingMore.value = false }
+  function clear() { pause(); items.value = []; offset = 0; error.value = ''; moreError.value = ''; hasMore.value = false; ready.value = false }
   async function load(append = false) {
     if (append && (loading.value || loadingMore.value || !hasMore.value || moreError.value)) return
     if (!append) clear()
@@ -30,12 +31,28 @@ export function useCircleList<T extends { id: string }>(fetchPage: (offset: numb
       const seen = new Set(items.value.map(x => x.id))
       items.value = [...items.value, ...page.items.filter(x => !seen.has(x.id) && !!seen.add(x.id))]
       offset += page.items.length; hasMore.value = page.hasMore
+      ready.value = true
     } catch (e) { if (valid()) { if (append) moreError.value = errorMessage(e); else error.value = errorMessage(e) } }
     finally { if (valid()) { loading.value = false; loadingMore.value = false }; uni.stopPullDownRefresh() }
   }
   function retryMore() { moreError.value = ''; return load(true) }
+  async function refresh() {
+    if (!ready.value) return load()
+    const targetCount = offset, current = ++version, token = session.token, epoch = session.epoch
+    const valid = () => current === version && token === session.token && epoch === session.epoch
+    loadingMore.value = true; error.value = ''; moreError.value = ''
+    try {
+      let page = await fetchPage(0)
+      const nextItems = [...page.items]
+      while (valid() && page.hasMore && page.items.length && nextItems.length < targetCount) {
+        page = await fetchPage(nextItems.length); nextItems.push(...page.items)
+      }
+      if (valid()) { items.value = nextItems; offset = nextItems.length; hasMore.value = page.hasMore }
+    } catch (e) { if (valid()) error.value = errorMessage(e) }
+    finally { if (valid()) loadingMore.value = false }
+  }
   watch(() => [session.token, session.epoch], clear, { flush: 'sync' })
-  return { items, loading, loadingMore, error, moreError, hasMore, load, clear, retryMore }
+  return { items, loading, loadingMore, error, moreError, hasMore, ready, load, clear, pause, refresh, retryMore }
 }
 export async function circleImagePreview(url: string, privateImage = false): Promise<string> {
   if (!privateImage) return mediaUrl(url)

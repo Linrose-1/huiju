@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { onShow, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage, refreshMember } from '@/services/api'
@@ -44,6 +45,7 @@ onUnload(() => { generation++; stop() })
 </script>
 <template>
   <view class="settings-page">
+    <PageReturn />
     <view
       v-if="!session.token"
       class="empty"

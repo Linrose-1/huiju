@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { computed, ref, watch } from 'vue'
 import { onShareAppMessage, onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
@@ -52,22 +53,30 @@ const state = computed(() => {
   if (activity.value.lifecycle === 'cancelled') return '已取消'
   return Date.parse(activity.value.endsAt) <= Date.now() ? '已结束' : '已发布'
 })
-async function load() {
-  clear()
+async function load(background = false) {
+  const retain = background === true && !!activity.value, targetCount = retain ? rosterOffset : 0
+  if (retain) { generation++; rosterGeneration++; error.value = ''; rosterError.value = ''; rosterMoreError.value = '' } else clear()
+  busy.value = false; cancelling.value = false; attendanceBusy.value = ''
   const active = currentRequest(), activityId = id.value
   if (!id.value) { error.value = '活动链接不完整'; uni.stopPullDownRefresh(); return }
-  if (!session.token) { loading.value = false; uni.stopPullDownRefresh(); return }
-  loading.value = true
+  if (!session.token) { loading.value = false; rosterLoading.value = false; uni.stopPullDownRefresh(); return }
+  loading.value = !retain; rosterLoading.value = retain
   try {
-    const [detail, registrations] = await Promise.all([api.managedActivity(activityId), api.organizerRoster(activityId, { offset: 0, status: filter.value, ...(targetRegistration.value ? { registrationId: targetRegistration.value } : {}) })])
+    const [detail, firstPage] = await Promise.all([api.managedActivity(activityId), api.organizerRoster(activityId, { offset: 0, status: filter.value, ...(targetRegistration.value ? { registrationId: targetRegistration.value } : {}) })])
+    let registrations = firstPage
+    const nextItems = [...registrations.items]
+    while (active() && registrations.hasMore && registrations.items.length && nextItems.length < targetCount) {
+      registrations = await api.organizerRoster(activityId, { offset: nextItems.length, status: filter.value, ...(targetRegistration.value ? { registrationId: targetRegistration.value } : {}) })
+      nextItems.push(...registrations.items)
+    }
     if (active()) {
-      activity.value = detail; roster.value = registrations.items; rosterOffset = registrations.items.length
+      activity.value = detail; roster.value = nextItems; rosterOffset = nextItems.length
       rosterHasMore.value = registrations.hasMore; attendanceCount.value = registrations.attendedCount; activeCount.value = registrations.activeCount
       if (targetRegistration.value) expanded.value = targetRegistration.value
       void loadStats()
     }
   } catch (e) { if (active()) error.value = errorMessage(e) }
-  finally { if (active()) { loading.value = false; uni.stopPullDownRefresh() } }
+  finally { if (active()) { loading.value = false; rosterLoading.value = false; uni.stopPullDownRefresh() } }
 }
 async function loadRoster(more = false) {
   if (!activity.value || !session.token || loading.value || busy.value) return
@@ -87,10 +96,10 @@ async function loadRoster(more = false) {
   finally { if (current()) rosterLoading.value = false }
 }
 function selectFilter(value: string) {
-  if (filter.value !== value && !busy.value && !loading.value) { filter.value = value; void loadRoster() }
+  if (filter.value !== value && !busy.value && !loading.value) { generation++; filter.value = value; void loadRoster() }
 }
 function retryRosterMore() { rosterMoreError.value = ''; void loadRoster(true) }
-function showAllRegistrations() { if (busy.value || loading.value) return; targetRegistration.value = ''; filter.value = 'all'; void loadRoster() }
+function showAllRegistrations() { if (busy.value || loading.value) return; generation++; targetRegistration.value = ''; filter.value = 'all'; void loadRoster() }
 async function publish() {
   if (busy.value || !session.token || activity.value?.lifecycle !== 'draft') return
   const active = currentRequest(), activityId = id.value
@@ -99,7 +108,7 @@ async function publish() {
     const result = await uni.showModal({ title: '确认发布', content: '发布后会员即可浏览和报名，请确认活动信息准确。', confirmText: '发布' })
     if (!active() || !result.confirm) return
     await api.publishActivity(activityId)
-    if (active()) await load()
+    if (active()) await load(true)
   } catch (e) { if (active()) { actionError.value = errorMessage(e); if (e instanceof ApiError && e.code === 'PROFILE_INCOMPLETE') loginPage(routes.manage+'?id='+activityId) } }
   finally { if (active()) busy.value = false }
 }
@@ -112,7 +121,7 @@ async function cancel() {
     const result = await uni.showModal({ title: '取消整场活动', content: '取消后不能恢复，报名记录会保留，并向当前已报名会员发送站内通知。'+(activity.value?.feeType === 'paid' ? feeDisclaimer : ''), confirmText: '确认取消', confirmColor: '#a74b33' })
     if (!active() || !result.confirm) return
     await api.cancelActivity(activityId, cancellationReason)
-    if (active()) await load()
+    if (active()) await load(true)
   } catch (e) { if (active()) actionError.value = errorMessage(e) }
   finally { if (active()) busy.value = false }
 }
@@ -124,7 +133,7 @@ async function markAttendance(item: OrganizerRegistration) {
     const result = await uni.showModal({ title: '标记到场', content: '确认这位报名者已到场？标记后将计入活动到场人数。', confirmText: '确认到场' })
     if (!active() || !result.confirm) return
     await api.markAttendance(activityId, registrationId)
-    if (active()) await load()
+    if (active()) await load(true)
   } catch (e) { if (active()) { actionError.value = errorMessage(e); if (e instanceof ApiError && e.code === 'PROFILE_INCOMPLETE') loginPage(routes.manage+'?id='+activityId) } }
   finally { if (active()) { busy.value = false; attendanceBusy.value = '' } }
 }
@@ -134,8 +143,8 @@ function answer(item: OrganizerRegistration, questionId: string) {
 }
 const stop = watch(() => [session.token, session.epoch], () => { clear(); if (shown) void load() }, { flush: 'sync' })
 onLoad(options => { id.value = String(options?.id || ''); targetRegistration.value = String(options?.registrationId || ''); if (targetRegistration.value) filter.value = 'all' })
-onShow(() => { shown = true; void load() })
-onHide(() => { shown = false; clear() })
+onShow(() => { shown = true; void load(true) })
+onHide(() => { shown = false; generation++; rosterGeneration++; loading.value = false; rosterLoading.value = false; busy.value = false; attendanceBusy.value = ''; cancelling.value = false })
 onUnload(() => { shown = false; clear(); stop() })
 onReachBottom(() => loadRoster(true))
 onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void load() })
@@ -144,6 +153,7 @@ onShareAppMessage(shareMessage)
 </script>
 <template>
   <view class="page-pad manage-page">
+    <PageReturn />
     <view
       v-if="shareError"
       class="error"
@@ -181,7 +191,7 @@ onShareAppMessage(shareMessage)
       >
         {{ actionError }}
       </view>
-      <template v-if="activity && !loading && !error">
+      <template v-if="activity && !loading">
         <view class="card">
           <view class="row between"><text class="tag">{{ state }}</text><text class="tag fee-tag">{{ fee(activity) }}</text></view>
           <view class="title">{{ activity.title }}</view>
@@ -197,7 +207,7 @@ onShareAppMessage(shareMessage)
             v-if="activity.hasRegistrationEver"
             class="muted small lock-note"
           >
-            已有报名记录，题目和收费金额已锁定。
+            已有报名记录，可新增私密填写项及调整顺序；已有填写项内容和费用已锁定。
           </view>
           <view class="actions">
             <button

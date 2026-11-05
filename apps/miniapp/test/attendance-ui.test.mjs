@@ -40,12 +40,24 @@ test('attendance confirmation is invalidated by account switch, hide or unload',
   const h = harness(t)
   for (const invalidate of [() => h.session.epoch++, h.hide, h.unload]) {
     await h.loaded()
+    const rows = [...h.page.roster.value]
     const task = h.page.markAttendance(h.page.roster.value[0])
     invalidate(); h.modals.at(-1)({ confirm: true }); await task
     assert.equal(h.page.attendanceBusy.value, ''); assert.equal(h.page.busy.value, false)
-    assert.deepEqual(h.page.roster.value, [])
+    assert.deepEqual(h.page.roster.value, invalidate === h.hide ? rows : [])
   }
   assert.deepEqual(h.mutations, [])
+})
+
+test('a returning-page refresh invalidates an older attendance confirmation while retaining the roster', async t => {
+  const h = harness(t); await h.loaded()
+  const task = h.page.markAttendance(h.page.roster.value[0])
+  const refresh = h.page.load(true)
+  assert.equal(h.page.roster.value.length, 2)
+  h.modals.at(-1)({ confirm: true }); await task
+  assert.deepEqual(h.mutations, [])
+  h.resolveLoad(); await refresh
+  assert.equal(h.page.busy.value, false)
 })
 
 test('attendance prevents duplicate clicks through confirmation and request, refreshes authoritative roster on success', async t => {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onShow, onUnload } from '@dcloudio/uni-app'
 import { refreshMember, errorMessage } from '@/services/api'
@@ -35,6 +36,7 @@ onUnload(() => { generation++; stop() })
 </script>
 <template>
   <view class="page-pad invitation-page">
+    <PageReturn />
     <view
       v-if="!session.member?.profileComplete"
       class="empty"

@@ -27,14 +27,16 @@ function serviceFixture() {
 }
 
 describe('activity images', () => {
-  it('validates 0..3 unique URLs and rejects nullable or malformed image lists', async () => {
-    for (const imageUrls of [[], [cover], [cover, extra], [cover, extra, third]]) {
+  it('validates 0..9 unique URLs and rejects nullable or malformed image lists', async () => {
+    const nine = Array.from({ length: 9 }, (_, index) => `${prefix}${owner}_00000000-0000-4000-8000-${String(index + 2).padStart(12, '0')}.png`)
+    for (const imageUrls of [[], [cover], [cover, extra], [cover, extra, third], nine]) {
       await expect(pipe.transform({ ...input, imageUrls }, { type: 'body', metatype: ActivityWriteInput })).resolves.toBeInstanceOf(ActivityWriteInput)
       expect(activityValues({ ...input, imageUrls })).toMatchObject({ coverUrl: imageUrls[0] ?? null, imageUrls: { urls: imageUrls, coverSourceUrl: imageUrls[0] ?? null } })
     }
-    for (const imageUrls of [null, 'bad', [cover, extra, third, 'fourth'], [cover, cover], [''], [5]]) {
+    for (const imageUrls of [null, 'bad', [...nine, 'tenth'], [cover, cover], [''], [5]]) {
       await expect(pipe.transform({ ...input, imageUrls }, { type: 'body', metatype: ActivityWriteInput })).rejects.toThrow()
     }
+    expect(() => activityValues({ ...input, imageUrls: [...nine, 'tenth'] })).toThrow('最多9张')
     expect(() => activityValues({ ...input, coverUrl: cover, imageUrls: [extra] })).toThrow('第一张')
   })
 

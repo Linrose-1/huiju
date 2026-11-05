@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
@@ -49,6 +50,7 @@ onShow(() => { visible = true; void load() }); onHide(hide); onUnload(hide); onP
 </script>
 <template>
   <view class="introduction-page">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"

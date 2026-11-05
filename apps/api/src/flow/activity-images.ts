@@ -17,9 +17,9 @@ export function activityCoverSource(activity: Images): string | null {
 export function activityImageValues(input: { coverUrl?: string | null; imageUrls?: string[] | null; coverSourceUrl?: string | null }) {
   let urls: string[]
   if (input.imageUrls !== undefined) {
-    if (!Array.isArray(input.imageUrls) || input.imageUrls.length > 3
+    if (!Array.isArray(input.imageUrls) || input.imageUrls.length > 9
       || input.imageUrls.some(url => typeof url !== 'string' || !url || url.length > 2048)
-      || new Set(input.imageUrls).size !== input.imageUrls.length) fail('INVALID_ACTIVITY_IMAGES', '活动图片最多3张，不能重复或留空')
+      || new Set(input.imageUrls).size !== input.imageUrls.length) fail('INVALID_ACTIVITY_IMAGES', '活动图片最多9张，不能重复或留空')
     if (input.coverUrl !== undefined && input.coverUrl !== (input.imageUrls[0] ?? null)) fail('INVALID_ACTIVITY_IMAGES', '第一张活动图片须与封面一致')
     urls = input.imageUrls
   } else {

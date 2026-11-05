@@ -56,6 +56,30 @@ test('invite record entry scopes roster by registration and returning to all res
 })
 
 for (const path of ['activity/organized', 'registration/index', 'notification/index', 'activity/manage']) {
+  test(path + ': return refresh preserves both pages until replacement and resumes the next offset', async t => {
+    const h = harness(t, path), first = h.page.load()
+    h.requests[0].resolve(response(records(0, 20))); await first
+    const second = h.hooks.onReachBottom()
+    h.requests[1].resolve(response(records(20, 20))); await second
+    h.hooks.onHide()
+    assert.equal(h.items.value.length, 40)
+    h.hooks.onShow()
+    assert.equal(h.items.value.length, 40)
+    h.hooks.onReachBottom()
+    assert.equal(h.requests.length, 3, 'append is blocked while refreshing')
+    h.requests[2].resolve(response(records(0, 20))); await setImmediate()
+    assert.equal(h.requests[3].query.offset, 20)
+    assert.equal(h.items.value.length, 40)
+    h.requests[3].resolve(response(records(20, 20))); await setImmediate()
+    const next = h.hooks.onReachBottom()
+    assert.equal(h.requests[4].query.offset, 40)
+    h.requests[4].resolve(response([], false)); await next
+    const failed = h.page.load(true)
+    h.requests[5].reject(new Error('background offline')); await failed
+    assert.equal(h.items.value.length, 40, 'background failure preserves the current rows')
+    h.session.epoch++
+    assert.deepEqual(h.items.value, [], 'account invalidation still clears private rows')
+  })
   test(path + ': appends, deduplicates, preserves first page on failure, retries same raw offset and stops at end', async t => {
     const h = harness(t, path), first = h.page.load()
     assert.equal(h.requests[0].query.offset, 0)

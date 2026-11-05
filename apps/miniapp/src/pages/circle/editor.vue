@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, computed, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -88,6 +89,7 @@ onUnload(()=>{visible=false;reset()})
 </script>
 <template>
   <view class="circle-page circle-safe circle-editor">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"

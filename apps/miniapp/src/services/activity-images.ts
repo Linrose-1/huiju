@@ -3,7 +3,7 @@ export function activityImages(activity: { imageUrls?: string[]; coverUrl?: stri
 }
 
 export function imageSlotsPayload(slots: string[]): string[] {
-  if (slots.length > 3) throw new Error('活动图片最多 3 张')
+  if (slots.length > 9) throw new Error('活动图片最多 9 张')
   if (!slots[0] && slots.slice(1).some(Boolean)) throw new Error('请先设置并裁剪封面，再保存活动图片')
   return slots.filter(Boolean)
 }

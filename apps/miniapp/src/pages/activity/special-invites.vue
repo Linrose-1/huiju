@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -17,6 +18,16 @@ const filters = [{ value: 'all', label: '全部' }, { value: 'unused', label: '�
 const labels: Record<string, string> = { unused: '未使用', used: '已使用', expired: '已失效', paused: '已暂停' }
 let generation = 0, listGeneration = 0, offset = 0, alive = true, shown = false
 const canCreate = computed(() => activity.value?.feeType === 'paid' && activity.value.lifecycle === 'published' && activity.value.moderation === 'normal' && activity.value.registrationState === 'open')
+const unavailableReason = computed(() => {
+  const value = activity.value
+  if (!value) return ''
+  if (value.lifecycle === 'cancelled') return '活动已取消，不能发放特邀码'
+  if (value.moderation === 'removed') return '活动已下架，暂不能发放特邀码'
+  if (value.feeType !== 'paid') return '免费活动无需发放特邀码'
+  if (value.lifecycle !== 'published') return '请先发布活动，再发放特邀码'
+  if (value.registrationState === 'full') return '活动已报满，暂不能发放特邀码'
+  return '报名已截止，不能发放特邀码'
+})
 function currentRequest() { const g = generation, token = session.token, epoch = session.epoch; return () => alive && shown && g === generation && token === session.token && epoch === session.epoch }
 function clear() { generation++; listGeneration++; activity.value = null; items.value = []; total.value = 0; offset = 0; hasMore.value = false; loading.value = false; listLoading.value = false; busy.value = false; error.value = ''; listError.value = ''; moreError.value = ''; actionError.value = ''; created.value = null }
 async function load() {
@@ -81,6 +92,7 @@ onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void l
 </script>
 <template>
   <view class="page-pad special-invites">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"
@@ -102,7 +114,7 @@ onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void l
           :disabled="busy"
           :cursor-spacing="130"
         >
-        <view class="small muted invite-hint">一人一码，仅限此号码对应本人使用。同一号码已有有效码时将返回原码。</view>
+        <view class="small muted invite-hint">仅限该手机号本人使用，一码一次。已有可用码时会复用原码。</view>
         <button
           class="primary create-button"
           :disabled="busy"
@@ -116,7 +128,7 @@ onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void l
         v-else
         class="notice"
       >
-        当前不能发码。只有已发布、正常展示且可报名的收费活动可以发放；历史记录仍可查看。
+        {{ unavailableReason }}
       </view>
       <view
         v-if="actionError"
@@ -198,7 +210,7 @@ onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void l
           v-if="item.status==='paused'"
           class="small muted invite-hint"
         >
-          当前暂停使用，恢复可报名条件且仍在有效期内后可恢复。
+          暂不可用，活动恢复报名后可在有效期内使用。
         </view>
       </view>
       <ListMore
@@ -208,7 +220,7 @@ onPullDownRefresh(() => { if (busy.value) uni.stopPullDownRefresh(); else void l
         :error="moreError"
         @retry="retryMore"
       />
-      <view class="notice">报名成功才消耗特邀码；取消报名不会恢复原码。此码不改变双方的学友邀请关系。</view>
+      <view class="notice">凭码报名可免费参加本次活动。报名成功后码即失效，取消报名不退码。</view>
     </template>
   </view>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -32,10 +33,11 @@ function clear() {
     commentCount.value = 0; reviewCount.value = 0
     statsError.value = ''; statsLoading.value = false
 }
-async function load() {
-    clear()
+async function load(background = false) {
+    const retain = background === true && !!activity.value, targetCount = retain ? offset : 0
+    if (retain) { generation++; error.value = ''; listError.value = '' } else clear()
     if (!id.value) { error.value = '活动链接不完整'; uni.stopPullDownRefresh(); return }
-    const active = currentRequest(); loading.value = true
+    const active = currentRequest(); loading.value = !retain; loadingMore.value = retain
     try {
         const [nextActivity, nextContext, comments, reviews] = await Promise.all([
             api.activity(id.value), api.feedbackContext(id.value), api.feedbackComments(id.value, 0, mine.value), api.feedbackReviews(id.value)
@@ -43,11 +45,17 @@ async function load() {
         if (!active()) return
         activity.value = nextActivity; context.value = nextContext
         commentCount.value = comments.total; reviewCount.value = reviews.total
-        const list = tab.value === 'comment' ? comments : reviews
-        items.value = list.items; offset = list.items.length; hasMore.value = list.hasMore
+        let list = tab.value === 'comment' ? comments : reviews
+        const nextItems: (Comment | Review)[] = [...list.items]
+        while (active() && list.hasMore && list.items.length && nextItems.length < targetCount) {
+            list = tab.value === 'comment' ? await api.feedbackComments(id.value, nextItems.length, mine.value) : await api.feedbackReviews(id.value, nextItems.length)
+            nextItems.push(...list.items)
+        }
+        if (!active()) return
+        items.value = nextItems; offset = nextItems.length; hasMore.value = list.hasMore
         if (nextContext.isOrganizer) void loadStats()
     } catch (e) { if (active()) error.value = errorMessage(e) }
-    finally { if (active()) { loading.value = false; uni.stopPullDownRefresh() } }
+    finally { if (active()) { loading.value = false; loadingMore.value = false; uni.stopPullDownRefresh() } }
 }
 async function loadStats() {
     if (!context.value?.isOrganizer || statsLoading.value) return
@@ -113,20 +121,21 @@ async function remove(item: Comment | Review, value: 'comment' | 'review') {
 }
 const stop = watch(() => [session.token, session.epoch], () => { mine.value = false; clear(); if (visible) void load() }, { flush: 'sync' })
 onLoad(options => { id.value = String(options?.id || '') })
-onShow(() => { visible = true; void load() })
-onHide(() => { visible = false; clear() })
+onShow(() => { visible = true; void load(true) })
+onHide(() => { visible = false; generation++; loading.value = false; loadingMore.value = false; busy.value = false; editor.value = false; statsLoading.value = false })
 onUnload(() => { visible = false; clear(); stop() })
 onReachBottom(more)
 onPullDownRefresh(() => { if (busy.value || editor.value) uni.stopPullDownRefresh(); else void load() })
 </script>
 <template>
   <view class="feedback-page">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"
       @retry="load"
     />
-    <template v-if="activity && !loading && !error">
+    <template v-if="activity && !loading">
       <view class="activity-card">
         <image
           v-if="activity.coverUrl"

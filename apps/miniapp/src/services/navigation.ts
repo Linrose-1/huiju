@@ -17,6 +17,11 @@ export const routes = {
   login: '/pages/login/index', detail: '/pages/activity/detail', form: '/pages/registration/form', result: '/pages/registration/detail', registrations: '/pages/registration/index'
 }
 let navigating: { page: unknown } | null = null
+export function hasPreviousPage() { return getCurrentPages().length > 1 }
+export function backOrHome() {
+  if (hasPreviousPage()) uni.navigateBack({ delta: 1 })
+  else uni.switchTab({ url: routes.activity })
+}
 export function navigate(url: string, replace = false) {
   const page = getCurrentPages().slice(-1)[0]
   if (navigating && navigating.page === page) return

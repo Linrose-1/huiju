@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch, nextTick, getCurrentInstance } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage, ApiError } from '@/services/api'
@@ -125,6 +126,7 @@ onUnload(() => { disposed = true; visible = false; clear() })
 </script>
 <template>
   <view class="search-page">
+    <PageReturn />
     <view class="intro">说说你想参加什么活动</view>
     <view class="muted">例如：下周在深圳，最好免费，想交流园区运营经验。</view>
     <view

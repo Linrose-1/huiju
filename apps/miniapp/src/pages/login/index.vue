@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, computed, watch } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
@@ -130,6 +131,7 @@ async function phone(event: { detail: { code?: string; errMsg?: string } }) {
 </script>
 <template>
   <view class="login">
+    <PageReturn />
     <view
       v-if="LOCAL_TEST"
       class="error test-notice"

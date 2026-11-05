@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { computed, ref, watch } from 'vue'
 import { onShareAppMessage, onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
@@ -42,12 +43,12 @@ async function openMap() {
     catch (e) { if (current === generation) toolsError.value = errorMessage(e) }
     finally { if (current === generation) locationBusy.value = false }
 }
-async function load() {
-    const current = ++generation
-    activity.value = null; registration.value = null; loading.value = false; error.value = ''
+async function load(background = false) {
+    const current = ++generation, retain = background === true && !!activity.value && !!registration.value
+    if (!retain) { activity.value = null; registration.value = null }; loading.value = false; error.value = ''
     if (!id.value) { error.value = '报名链接不完整'; return }
     if (!session.token) { error.value = '请登录后查看本人的报名'; return }
-    loading.value = true
+    loading.value = !retain
     try {
         const [nextActivity, nextRegistration] = await Promise.all([api.activity(id.value), api.myRegistration(id.value)])
         if (current !== generation) return
@@ -81,14 +82,15 @@ async function cancel() {
 function copyContact() { if (activity.value?.consultationContact) uni.setClipboardData({ data: activity.value.consultationContact }) }
 const stop = watch(() => [session.token, session.epoch], () => { clear(); if (visible) void load() }, { flush: 'sync' })
 onLoad(options => { id.value = String(options?.id || '') })
-onShow(() => { visible = true; void load() })
-onHide(() => { visible = false; clear() })
+onShow(() => { visible = true; void load(true) })
+onHide(() => { visible = false; generation++; loading.value = false; busy.value = false; calendarOpen.value = false; calendarBusy.value = false; locationBusy.value = false })
 onUnload(() => { visible = false; clear(); stop() })
 const { shareError, shareBusy, retryShare, shareMessage } = usePageShare(() => activity.value && activity.value.registrationState !== 'removed' ? {path: routes.detail, id: id.value, title: activity.value.title} : null, false)
 onShareAppMessage(shareMessage)
 </script>
 <template>
   <view class="registration-detail">
+    <PageReturn />
     <view
       v-if="shareError"
       class="error"
@@ -115,7 +117,7 @@ onShareAppMessage(shareMessage)
     >
       微信登录
     </button>
-    <template v-if="activity && registration && !loading && !error">
+    <template v-if="activity && registration && !loading">
       <view class="detail-card summary">
         <image
           v-if="activity.coverUrl"

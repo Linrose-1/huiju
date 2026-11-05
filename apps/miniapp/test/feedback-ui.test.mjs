@@ -66,7 +66,7 @@ test('stats failure is independently retryable and late stats cannot restore ano
   const retry = h.page.loadStats(); h.latest('reviewStats').resolve({ count: 2, averageScore: 4.5 }); await retry
   assert.equal(h.page.statsError.value, ''); assert.equal(h.page.stats.value.averageScore, 4.5)
   const stale = h.page.loadStats(); h.hide(); h.latest('reviewStats').resolve({ count: 7, averageScore: 5 }); await stale
-  assert.equal(h.page.stats.value, null); assert.equal(h.page.statsLoading.value, false)
+  assert.equal(h.page.stats.value.averageScore, 4.5); assert.equal(h.page.statsLoading.value, false)
 })
 
 

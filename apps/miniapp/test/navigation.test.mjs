@@ -15,6 +15,7 @@ function harness() {
     '@/stores/session': { useSessionStore: () => ({ member }) }
   }
   const uni = {
+    switchTab: options => calls.push({ ...options, method: 'switchTab' }),
     navigateBack: () => calls.push({ method: 'navigateBack' }),
     navigateTo: options => calls.push({ ...options, method: 'navigateTo' }), redirectTo: options => calls.push({ ...options, method: 'redirectTo' }),
     showToast: options => toasts.push(options)
@@ -26,6 +27,17 @@ function harness() {
   new Function('require', 'exports', 'uni', 'getCurrentPages', code)(name => deps[name], nav, uni, () => previous ? [previous,page] : [page])
   return { nav, calls, toasts, uni, enter: route => { page = { route } }, previous: value => { previous=value } }
 }
+
+test('back returns one level when possible and direct entry returns to the activity home', () => {
+  const direct = harness()
+  direct.nav.backOrHome()
+  assert.equal(direct.calls[0].method, 'switchTab')
+  assert.equal(direct.calls[0].url, '/pages/activity/index')
+  const nested = harness()
+  nested.previous({ route: 'pages/activity/detail' })
+  nested.nav.backOrHome()
+  assert.equal(nested.calls[0].method, 'navigateBack')
+})
 
 test('connection returns to the exact previous member card or replaces direct entry with its fixed target', () => {
   const h=harness(); h.enter('pages/member/connection'); h.previous({route:'pages/member/card',options:{id:'target-a'}})

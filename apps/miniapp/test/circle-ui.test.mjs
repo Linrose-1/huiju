@@ -90,6 +90,22 @@ test('ended owner post stays read only',async()=>{
   const h=harness('editor',{api:{circlePost:async()=>({...post(),state:'ended',isOwner:true})}});h.page.id.value='post-a';await h.page.activate();await h.page.save();assert.equal(h.saved.length,0)
 })
 function listHarness(fetchPage){const session=reactive({token:'a',epoch:0});const circle=evaluate(source('services/circle.ts'),{'@/stores/session':{useSessionStore:()=>session},'@/services/api':{errorMessage:e=>e.message},'@/services/api/environment':{mediaUrl:x=>x}},{uni:{stopPullDownRefresh(){}}});return {session,list:circle.useCircleList(fetchPage)}}
+test('hiding a public list preserves loaded pages and cancels late appends without resetting the offset',async()=>{
+  const pending=deferred(),offsets=[]
+  const h=listHarness(async offset=>{offsets.push(offset);if(offset===0)return {items:[{id:'a'}],hasMore:true};return pending.promise})
+  await h.list.load()
+  const append=h.list.load(true);h.list.pause();pending.resolve({items:[{id:'late'}],hasMore:true});await append
+  assert.deepEqual(h.list.items.value.map(x=>x.id),['a']);assert.equal(h.list.ready.value,true);assert.equal(h.list.loadingMore.value,false)
+  await h.list.load(true);assert.deepEqual(offsets,[0,1,1])
+})
+test('background detail refresh retains the displayed post until the current response arrives',async()=>{
+  const h=harness();await h.page.activate()
+  const pending=deferred();h.api.circlePost=()=>pending.promise
+  const refresh=h.page.load(true)
+  assert.equal(h.page.post.value.title,'园区资源')
+  pending.resolve({...post(),title:'更新内容'});await refresh
+  assert.equal(h.page.post.value.title,'更新内容')
+})
 test('pagination retries same raw offset, preserves rows and deduplicates',async()=>{
   const offsets=[];let fail=true;const h=listHarness(async offset=>{offsets.push(offset);if(offset===0)return {items:[{id:'a'},{id:'b'}],hasMore:true};if(fail){fail=false;throw new Error('弱网')}return {items:[{id:'b'},{id:'c'}],hasMore:false}})
   await h.list.load();await h.list.load(true);assert.deepEqual(h.list.items.value.map(x=>x.id),['a','b']);assert.equal(h.list.moreError.value,'弱网');await h.list.retryMore();assert.deepEqual(offsets,[0,2,2]);assert.deepEqual(h.list.items.value.map(x=>x.id),['a','b','c']);assert.equal(h.list.hasMore.value,false)

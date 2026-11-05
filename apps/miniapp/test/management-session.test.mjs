@@ -71,7 +71,8 @@ test('cancel snapshots the activity and reason, requires confirmation, refreshes
   h.modals.at(-1)({ confirm: true }); await setImmediate()
   assert.deepEqual(h.mutations, [['cancel', 'activity-a', '原因']])
   h.latest('cancel').resolve(); await setImmediate()
-  assert.equal(h.page.busy.value, false); assert.equal(h.page.loading.value, true)
+  assert.equal(h.page.busy.value, false); assert.equal(h.page.loading.value, false)
+  assert.equal(h.page.activity.value.lifecycle, 'published', 'refresh retains the displayed content')
   h.latest('activity').resolve({ lifecycle: 'cancelled' }); h.latest('roster').resolve({ items: [] }); await accepted
   assert.equal(h.page.activity.value.lifecycle, 'cancelled'); assert.equal(h.page.loading.value, false)
 })
@@ -90,7 +91,9 @@ test('notification read completion after hide/unload/account switch cannot navig
   for (const invalidate of [() => h.session.token = 'b', h.hide, h.unload]) {
     await h.loaded(); const item = h.page.items.value[0], pending = h.page.open(item)
     await h.page.open(item); invalidate(); h.latest('read').resolve(); await pending
-    assert.equal(item.readAt, null); assert.deepEqual(h.page.items.value, []); assert.equal(h.page.busy.value, false)
+    assert.equal(item.readAt, null)
+    assert.deepEqual(h.page.items.value, invalidate === h.hide ? [item] : [])
+    assert.equal(h.page.busy.value, false)
   }
   assert.deepEqual(h.navigated, []); assert.equal(h.mutations.length, 3)
 })

@@ -52,6 +52,19 @@ test('roster and readers navigate to separate list views for the current activit
   assert.deepEqual(targets, ['/pages/activity/people?id=activity-a&kind=roster', '/pages/activity/people?id=activity-a&kind=readers'])
 })
 
+test('return refresh keeps activity content mounted while refreshing registration and server state', async t => {
+  const h = harness(t)
+  const initial = h.page.load()
+  await h.publicResponse('Original')
+  await initial
+  const refresh = h.page.load(true)
+  assert.equal(h.page.activity.value.title, 'Original')
+  assert.equal(h.page.loading.value, false)
+  await h.publicResponse('Updated')
+  await refresh
+  assert.equal(h.page.activity.value.title, 'Updated')
+})
+
 test('public details finish before login, then late identity loads the existing registration', async t => {
   const h = harness(t)
   const initial = h.page.load()

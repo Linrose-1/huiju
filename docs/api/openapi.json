@@ -12283,7 +12283,7 @@
             "nullable": true
           },
           "imageUrls": {
-            "maxItems": 3,
+            "maxItems": 9,
             "description": "有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空",
             "type": "array",
             "items": {

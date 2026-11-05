@@ -88,8 +88,13 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
     return q.id === other.id && q.type === other.type && q.prompt === other.prompt.trim() && q.required === other.required
       && JSON.stringify(q.options ?? []) === JSON.stringify(other.options ?? [])
   })
-  if (activity.hasRegistrationEver && (!sameQuestions || activity.feeType !== values.feeType || activity.feeAmountCents !== values.feeAmountCents)) {
-    fail('ACTIVITY_FIELDS_LOCKED', '已有报名记录，报名问题、收费模式和金额不能修改', 409)
+  const existingQuestionsUnchanged = questions.every(q => {
+    const other = input.questions.find(item => item.id === q.id)
+    return other && q.type === other.type && q.prompt === other.prompt.trim() && q.required === other.required
+      && JSON.stringify(q.options ?? []) === JSON.stringify(other.options ?? [])
+  })
+  if (activity.hasRegistrationEver && (!existingQuestionsUnchanged || activity.feeType !== values.feeType || activity.feeAmountCents !== values.feeAmountCents)) {
+    fail('ACTIVITY_FIELDS_LOCKED', '已有报名记录，已有报名问题、收费模式和金额不能修改或删除', 409)
   }
   if (activity.hasRegistrationEver && input.questions.some(q => q.publicToParticipants === true && !questions.find(old => old.id === q.id)?.publicToParticipants)) {
     fail('QUESTION_VISIBILITY_LOCKED', '已有报名记录，不能将私密填写项改为公开', 409)
@@ -275,7 +280,18 @@ export class OrganizerService {
       const { values, sameQuestions } = validateActivityEdit(activity, questions, input)
       await this.checkImages(values, member.id, activity)
       await tx.update(activities).set(values).where(eq(activities.id, id))
-      if (!sameQuestions) await this.questions(tx, id, input, questions)
+      if (!sameQuestions && activity.hasRegistrationEver) {
+        // Preserve existing question IDs and answer references; only new questions are inserted.
+        for (const [sortOrder, question] of input.questions.entries()) {
+          if (question.id) await tx.update(registrationQuestions).set({ sortOrder,
+            publicToParticipants: question.publicToParticipants ?? questions.find(old => old.id === question.id)!.publicToParticipants,
+          }).where(and(eq(registrationQuestions.activityId, id), eq(registrationQuestions.id, question.id)))
+          else await tx.insert(registrationQuestions).values({ id: randomUUID(), activityId: id, type: question.type,
+            prompt: question.prompt.trim(), required: question.required, publicToParticipants: false,
+            options: question.options?.length ? question.options : null, sortOrder })
+        }
+      }
+      else if (!sameQuestions) await this.questions(tx, id, input, questions)
       else for (const question of input.questions) {
         if (question.publicToParticipants !== undefined && question.publicToParticipants !== questions.find(old => old.id === question.id)?.publicToParticipants) {
           await tx.update(registrationQuestions).set({ publicToParticipants: question.publicToParticipants })

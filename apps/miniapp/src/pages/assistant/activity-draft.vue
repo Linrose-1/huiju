@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref } from 'vue'
 import { onShow, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
@@ -61,6 +62,7 @@ onUnload(() => { disposed = true; generation++ })
 
 <template>
   <view class="draft-page">
+    <PageReturn />
     <view class="content">
       <view class="intro-title">把活动想法写下来</view>
       <view class="intro-text">时间、地点、人数、费用和报名问题，都可以一起说</view>

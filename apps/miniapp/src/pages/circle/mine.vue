@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -21,7 +22,7 @@ const list = useCircleList<OwnerCard>(async offset => {
 })
 const { items, loading, loadingMore, error, moreError, hasMore } = list
 let generation = 0, visible = false
-async function load() { const current=++generation; preparing.value=true; try { await bootstrapIdentity(); if(current===generation) await list.load() } catch(e) { if(current!==generation)return; error.value=errorMessage(e); if(!session.token)loginPage(routes.circleMine) } finally { if(current===generation)preparing.value=false;uni.stopPullDownRefresh() } }
+async function load(background = false) { const current=++generation; preparing.value=background !== true || !list.ready.value; try { await bootstrapIdentity(); if(current===generation) { if (background === true) await list.refresh(); else await list.load() } } catch(e) { if(current!==generation)return; error.value=errorMessage(e); if(!session.token)loginPage(routes.circleMine) } finally { if(current===generation)preparing.value=false;uni.stopPullDownRefresh() } }
 async function end(post: CirclePost) {
   if(ending.value)return
   const token=session.token, epoch=session.epoch, current=generation
@@ -30,7 +31,7 @@ async function end(post: CirclePost) {
     const confirm=await new Promise<boolean>(yes=>uni.showModal({title:'标记已结束',content:'结束后不再接收新意向，帖子内容和历史意向保留。',success:r=>yes(r.confirm),fail:()=>yes(false)}))
     if(!confirm || token!==session.token || epoch!==session.epoch || current!==generation)return
     await api.endCirclePost(post.id)
-    if(token===session.token && epoch===session.epoch && current===generation)await list.load()
+    if(token===session.token && epoch===session.epoch && current===generation)await list.refresh()
   } catch(e) { if(current===generation && token===session.token)actionError.value=errorMessage(e) }
   finally { if(current===generation)ending.value='' }
 }
@@ -40,10 +41,11 @@ watch(() => [session.token, session.epoch], async () => {
   await Promise.resolve()
   if(visible && current===generation)void load()
 }, {flush:'sync'})
-onShow(()=>{visible=true;void load()});onHide(()=>{visible=false;clear()});onUnload(()=>{visible=false;clear()});onReachBottom(()=>list.load(true));onPullDownRefresh(load)
+onShow(()=>{visible=true;void load(true)});onHide(()=>{visible=false;generation++;list.pause();ending.value='';preparing.value=false});onUnload(()=>{visible=false;clear()});onReachBottom(()=>list.load(true));onPullDownRefresh(load)
 </script>
 <template>
   <view class="circle-page">
+    <PageReturn />
     <RequestState
       :loading="preparing || loading"
       :error="error"

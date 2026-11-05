@@ -24,7 +24,7 @@ const activity = overrides => ({
   lifecycle: 'draft', moderation: 'normal', hasRegistrationEver: false, questions: [], ...overrides,
 })
 const script = readFileSync(new URL('../src/pages/activity/editor.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-function harness({ record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseActivityLocation = async () => null, DateClass = Date } = {}) {
+function harness({ record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseImages = async () => [], chooseActivityLocation = async () => null, DateClass = Date, windowInfo = { windowWidth: 375 } } = {}) {
   const session = reactive({ token: 'token-a', epoch: 1, member: { id: 'member-a' } })
   const navigations = [], creates = [], updates = [], publishes = []
   let onUnload
@@ -44,7 +44,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     '@/services/activity-images': activityImages,
     '@/services/ai-draft': { takeActivityDraft: () => null },
     '@/services/presentation': { feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
-    '@/services/wechat': { chooseActivityImagePath: chooseCover, readActivityImage: async image => image, chooseActivityLocation },
+    '@/services/wechat': { chooseActivityImagePath: chooseCover, chooseActivityImagePaths: chooseImages, readActivityImage: async image => image, chooseActivityLocation },
     '@/services/api/environment': { mediaUrl: value => value },
     '@/services/navigation': {
       routes: { editor: '/pages/activity/editor', manage: '/pages/activity/manage' },
@@ -52,13 +52,13 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
   new Function('require', 'exports', 'uni', 'Date', code)(
     name => name in dependencies ? dependencies[name] : require(name), page,
-    { getSystemInfoSync: () => ({ windowWidth: 375 }), pageScrollTo() {}, showModal: options => options.success({ confirm: true }) }, DateClass,
+    { getWindowInfo: () => windowInfo, getSystemInfoSync: () => windowInfo, pageScrollTo() {}, showModal: options => options.success({ confirm: true }) }, DateClass,
   )
   page.cropper.value = { open: async path => path, cancel() {} }
   function fill() {
@@ -66,6 +66,29 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
   }
   return { page, session, api, creates, updates, publishes, navigations, fill, unload: () => onUnload() }
 }
+
+test('question dragging without simulator width moves by a finite row height', async () => {
+  const h = harness({ windowInfo: {} })
+  await h.page.load()
+  h.page.questions.value = [1,2,3].map(key => ({key,prompt:'题'+key,type:'short_text',required:false,options:''}))
+  h.page.startQuestionDrag(2,{touches:[{clientY:200}]})
+  h.page.moveQuestionDrag({touches:[{clientY:140}]})
+  await h.page.endQuestionDrag()
+  assert.deepEqual(h.page.questions.value.map(q=>q.key),[1,3,2])
+  h.unload()
+})
+
+test('leaving editor before drag reset completes prevents delayed reordering', async () => {
+  const h = harness()
+  await h.page.load()
+  h.page.questions.value = [1,2].map(key => ({ key, prompt: '题'+key, type: 'short_text', required: false, options: '' }))
+  h.page.startQuestionDrag(1, { touches: [{ clientY: 200 }] })
+  h.page.moveQuestionDrag({ touches: [{ clientY: 140 }] })
+  const pending = h.page.endQuestionDrag()
+  h.unload()
+  await pending
+  assert.deepEqual(h.page.questions.value.map(q => q.key), [1,2])
+})
 
 test('editor date conversion uses Beijing time independently of local date getters and preserves seconds', () => {
   class NoLocalDate extends Date {
@@ -93,6 +116,7 @@ test('publish failure keeps created draft and question IDs, retry updates the sa
   h.fill()
   h.page.beginQuestion()
   h.page.editingQuestion.value.prompt = '希望交流什么'
+  h.page.editingQuestion.value.requirementConfirmed = true
   h.page.saveQuestion()
   await h.page.submit(true)
   assert.equal(h.creates.length, 1)
@@ -212,6 +236,7 @@ test('moving between basic information and registration preserves unsaved input 
   h.fill()
   h.page.beginQuestion()
   h.page.editingQuestion.value.prompt = '想了解的问题'
+  h.page.editingQuestion.value.requirementConfirmed = true
   h.page.saveQuestion()
   h.page.changeStep(1)
   assert.equal(h.page.step.value, 1)
@@ -257,10 +282,12 @@ test('question sheet isolates unsaved changes, validates choice options and pres
   h.page.editingQuestion.value = null
   h.page.beginQuestion()
   Object.assign(h.page.editingQuestion.value, { prompt: '多选问题', type: 'multiple', options: 'A\nA' })
+  h.page.editingQuestion.value.requirementConfirmed = true
   h.page.saveQuestion()
   assert.match(h.page.questionError.value, /不同选项/)
   assert.equal(h.page.questions.value.length, 1)
   h.page.editingQuestion.value.options = 'A\nB'
+  h.page.editingQuestion.value.requirementConfirmed = true
   h.page.saveQuestion()
   h.page.moveQuestion(1, 0)
   assert.equal(h.page.payload().questions[0].prompt, '多选问题')
@@ -270,21 +297,21 @@ test('question sheet isolates unsaved changes, validates choice options and pres
   h.unload()
 })
 
-test('drag reorders only editable questions and locked actions cannot mutate the list', async () => {
+test('existing questions remain content-locked after registration while reordering stays available', async () => {
   const record = activity({ questions: [{ id: 'q1', type: 'short_text', prompt: '题一', required: true, options: null },{ id: 'q2', type: 'short_text', prompt: '题二', required: false, options: null }] })
   const h = harness({ record })
   h.page.id.value = record.id
   await h.page.load()
   h.page.startQuestionDrag(0, { touches: [{ clientY: 100 }] })
   h.page.moveQuestionDrag({ touches: [{ clientY: 140 }] })
-  h.page.endQuestionDrag()
+  await h.page.endQuestionDrag()
   assert.deepEqual(h.page.questions.value.map(q => q.id), ['q2', 'q1'])
   h.page.source.value.hasRegistrationEver = true
   h.page.moveQuestion(1,0)
   h.page.removeQuestion(h.page.questions.value[0].key)
   h.page.beginQuestion(h.page.questions.value[0])
   assert.equal(h.page.editingQuestion.value, null)
-  assert.deepEqual(h.page.questions.value.map(q => q.id), ['q2', 'q1'])
+  assert.deepEqual(h.page.questions.value.map(q => q.id), ['q1', 'q2'])
   h.unload()
 })
 
@@ -451,6 +478,7 @@ test('common and historical fields copy only configuration, retain current ID an
     assert.equal(h.page.editingQuestion.value.prompt, prompt)
   }
   assert.ok(!h.page.commonQuestions.includes('手机号'))
+  h.page.editingQuestion.value.requirementConfirmed = true
   h.page.saveQuestion()
   assert.equal(h.page.payload().questions.length, 2)
   h.unload()
@@ -487,7 +515,7 @@ test('activity image slots keep extras after cover removal and block save until 
   h.page.id.value = 'activity-a'; await h.page.load()
   assert.deepEqual(h.page.payload().imageUrls, ['/old','/second','/third'])
   h.page.removeImage(0)
-  assert.deepEqual([...h.page.extraImages.value], ['/second','/third'])
+  assert.deepEqual([...h.page.extraImages.value].filter(Boolean), ['/second','/third'])
   assert.throws(() => h.page.payload(), /封面/)
   await h.page.submit(); assert.equal(h.updates.length, 0)
   h.page.coverUrl.value = '/new'
@@ -601,5 +629,74 @@ test('choosing a historical question clears a previous public setting', async ()
   const h = harness(); h.page.beginQuestion(); h.page.editingQuestion.value.publicToParticipants = true
   h.page.selectQuestionTemplate({ prompt: '邮箱', type: 'short_text', options: null })
   assert.equal(h.page.editingQuestion.value.publicToParticipants, false)
+  h.unload()
+})
+
+
+test('new questions after registration require an explicit required/optional choice and remain private', async () => {
+  const h = harness({ record: activity({ hasRegistrationEver: true, questions: [{ id: 'old', prompt: '旧题', type: 'short_text', required: true, options: null }] }) })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  h.page.beginQuestion()
+  assert.equal(h.page.editingQuestion.value.required, false)
+  h.page.editingQuestion.value.prompt = '新问题'
+  h.page.saveQuestion()
+  assert.match(h.page.questionError.value, /明确选择/)
+  assert.equal(h.page.questions.value.length, 1)
+  h.page.editingQuestion.value.requirementConfirmed = true
+  h.page.editingQuestion.value.required = true
+  h.page.saveQuestion()
+  const added = h.page.questions.value[1]
+  assert.equal(added.required, true)
+  assert.equal(h.page.visibilityDisabled(added), true)
+  h.page.changeVisibility(added, true)
+  assert.equal(added.publicToParticipants, false)
+  h.page.moveQuestion(1, 0)
+  await h.page.load()
+  assert.equal(h.page.questions.value[0].prompt, '新问题')
+  h.page.beginQuestion(h.page.questions.value[0])
+  assert.equal(h.page.editingQuestion.value.prompt, '新问题')
+  h.unload()
+})
+
+test('batch selection uses remaining slots, crops only cover and preserves nine-image order', async () => {
+  let limit, uploads = 0
+  const h = harness({ chooseImages: async count => { limit = count; return Array.from({ length: count }, (_, i) => 'image-' + i) }, apiOverrides: { uploadCover: async () => ({ coverUrl: '/uploaded-' + ++uploads }) } })
+  await h.page.load(); h.fill()
+  const crops = []
+  h.page.cropper.value.open = async path => { crops.push(path); return 'cropped' }
+  await h.page.addImages()
+  assert.equal(limit, 9)
+  assert.deepEqual(crops, ['image-0'])
+  assert.equal(h.page.payload().imageUrls.length, 9)
+  assert.equal(h.page.coverSourceUrl.value, '/uploaded-1')
+  assert.deepEqual(h.page.payload().imageUrls, Array.from({ length: 9 }, (_, i) => '/uploaded-' + (i + 2)))
+  h.page.removeImage(4); await h.page.addImages()
+  assert.equal(limit, 1)
+  assert.equal(h.page.payload().imageUrls.length, 9)
+  h.unload()
+})
+
+test('promoting an extra image crops it and moves it first; cancellation preserves all images', async () => {
+  const h = harness({ record: activity({ coverUrl: '/old', imageUrls: ['/old','/two','/three'] }), apiOverrides: { uploadCover: async () => ({ coverUrl: '/cropped' }) } })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  h.page.cropper.value.open = async () => null
+  await h.page.promoteImage(2)
+  assert.deepEqual(h.page.payload().imageUrls, ['/old','/two','/three'])
+  h.page.cropper.value.open = async path => { assert.equal(path, '/three'); return 'crop' }
+  await h.page.promoteImage(2)
+  assert.deepEqual(h.page.payload().imageUrls, ['/cropped','/old','/two'])
+  assert.equal(h.page.coverSourceUrl.value, '/three')
+  h.unload()
+})
+
+test('batch failure retains successful uploads and does not discard the form', async () => {
+  let attempts = 0
+  const h = harness({ record: activity({ coverUrl: '/cover' }), chooseImages: async () => ['one','two'], apiOverrides: { uploadCover: async () => { if (++attempts === 2) throw new Error('上传失败'); return { coverUrl: '/one' } } } })
+  h.page.id.value = 'activity-a'; await h.page.load()
+  await h.page.addImages()
+  assert.deepEqual(h.page.payload().imageUrls, ['/cover','/one'])
+  assert.match(h.page.coverError.value, /已上传图片已保留/)
+  assert.equal(h.page.busy.value, false)
+  assert.equal(h.page.form.title, '交流活动')
   h.unload()
 })

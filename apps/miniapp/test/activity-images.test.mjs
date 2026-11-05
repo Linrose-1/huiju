@@ -11,7 +11,7 @@ test('removing cover never promotes an extra image and prevents invalid save', (
   assert.throws(() => imageSlotsPayload(['','/b','/c']), /封面/)
   assert.deepEqual(imageSlotsPayload(['/a','','/c']), ['/a','/c'])
   assert.deepEqual(imageSlotsPayload(['','','']), [])
-  assert.throws(() => imageSlotsPayload(['/a','/b','/c','/d']), /3/)
+  assert.throws(() => imageSlotsPayload(Array(10).fill('/image')), /9/)
 })
 test('crop always covers 5:4 frame, bounds dragging and maps to source pixels', () => {
   for (const [width,height] of [[1200,2000],[2000,600],[1250,1000]]) {

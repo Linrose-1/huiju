@@ -35,8 +35,8 @@ export class ActivityWriteInput {
   @ApiPropertyOptional({ type: DescriptionDeltaDto, nullable: true }) @IsOptional() @IsObject() descriptionDelta?: DescriptionDelta | null
   @ApiPropertyOptional({ type: String, nullable: true }) @IsOptional() @IsString() @Length(0, 500) registrationNotice?: string | null
   @ApiPropertyOptional({ type: String, nullable: true }) @IsOptional() @IsString() @Length(1, 2048) coverUrl?: string | null
-  @ApiPropertyOptional({ type: [String], maxItems: 3, description: '有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空' })
-  @ValidateIf((_object, value) => value !== undefined) @IsArray() @ArrayMaxSize(3) @ArrayUnique() @IsString({ each: true }) @Length(1, 2048, { each: true }) imageUrls?: string[]
+  @ApiPropertyOptional({ type: [String], maxItems: 9, description: '有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空' })
+  @ValidateIf((_object, value) => value !== undefined) @IsArray() @ArrayMaxSize(9) @ArrayUnique() @IsString({ each: true }) @Length(1, 2048, { each: true }) imageUrls?: string[]
   @ApiPropertyOptional({ type: String, nullable: true, description: '本人上传的封面原图，用于再次裁剪；清空封面时同步清空' }) @IsOptional() @IsString() @Length(1, 2048) coverSourceUrl?: string | null
   @ApiProperty() @IsString() @Length(1, 500) @Matches(/\S/) location!: string
   @ApiPropertyOptional({ type: Number, nullable: true, minimum: -90, maximum: 90, description: '微信地图 GCJ-02 纬度，与经度成对提供或清空' }) @IsOptional() @IsNumber() @Min(-90) @Max(90) locationLatitude?: number | null

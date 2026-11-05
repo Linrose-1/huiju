@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { setTimeout } from 'node:timers'
 import { URL } from 'node:url'
 import ts from 'typescript'
 
@@ -10,10 +11,10 @@ const { effectScope } = require('vue')
 
 function harness(t) {
   const requests = []
-  let bottom, hide
+  let bottom, hide, show
   const deps = {
     '@dcloudio/uni-app': {
-      onShareAppMessage() {}, onShareTimeline() {}, onLoad() {}, onShow() {}, onHide(fn) { hide = fn }, onUnload() {}, onPullDownRefresh() {}, onReachBottom(fn) { bottom = fn }
+      onShareAppMessage() {}, onShareTimeline() {}, onLoad() {}, onShow(fn) { show = fn }, onHide(fn) { hide = fn }, onUnload() {}, onPullDownRefresh() {}, onReachBottom(fn) { bottom = fn }
     },
     '@/services/api': { api: { activities: query => new Promise((resolve, reject) => requests.push({ query, resolve, reject })) }, errorMessage: e => e.message },
     '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
@@ -27,8 +28,28 @@ function harness(t) {
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { stopPullDownRefresh() {} }))
   t.after(() => scope.stop())
-  return { page, requests, bottom: () => bottom(), hide: () => hide() }
+  return { page, requests, bottom: () => bottom(), hide: () => hide(), show: () => show() }
 }
+
+test('returning from a detail preserves all loaded pages and the next offset', async t => {
+  const h = harness(t)
+  const first = h.page.load()
+  h.requests[0].resolve({ items: [{ id: 'a' }], hasMore: true }); await first
+  const second = h.page.more()
+  h.requests[1].resolve({ items: [{ id: 'b' }], hasMore: true }); await second
+  h.hide(); h.show()
+  assert.equal(h.requests.length, 3)
+  assert.deepEqual(h.page.items.value.map(item => item.id), ['a', 'b'])
+  h.requests[2].resolve({ items: [{ id: 'a', title: '最新状态' }], hasMore: true })
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(h.requests[3].query.offset, 1)
+  h.requests[3].resolve({ items: [{ id: 'b' }], hasMore: true })
+  await new Promise(resolve => setTimeout(resolve, 0))
+  assert.equal(h.page.items.value[0].title, '最新状态')
+  const third = h.page.more()
+  assert.equal(h.requests[4].query.offset, 2)
+  h.requests[4].resolve({ items: [], hasMore: false }); await third
+})
 
 test('activity list appends pages once, preserves cards on failure and retries same offset', async t => {
   const h = harness(t)

@@ -31,7 +31,7 @@ async function loadContent() {
 onShow(loadContent)
 onHide(() => { contentGeneration++ })
 onUnload(() => { contentGeneration++ })
-let disposed = false
+let disposed = false, loaded = false
 async function scanActivity() {
     if (scanning.value || disposed) return
     scanning.value = true
@@ -50,23 +50,29 @@ async function scanActivity() {
         if (current()) uni.showModal({ title: '扫码失败', content: errorMessage(e), showCancel: false })
     } finally { scanning.value = false }
 }
-onHide(() => { generation++; globalThis.clearTimeout(searchTimer) })
+onHide(() => { generation++; loading.value = false; loadingMore.value = false; globalThis.clearTimeout(searchTimer) })
 onUnload(() => { disposed = true; generation++; globalThis.clearTimeout(searchTimer) })
-async function load() {
+async function load(background = false) {
+    const retain = background === true && loaded, targetCount = retain ? offset : 0
+    if (!retain) loaded = false
     const current = ++generation
-    offset = 0
-    items.value = []
-    hasMore.value = false
-    loading.value = true
-    loadingMore.value = false
+    if (!retain) { offset = 0; items.value = []; hasMore.value = false }
+    loading.value = !retain
+    loadingMore.value = retain
     error.value = ''
     moreError.value = ''
     try {
-        const result = await api.activities({ sort: tab.value === '即将开始' ? 'upcoming' : 'latest', q: search.value.trim() })
+        let result = await api.activities({ sort: tab.value === '即将开始' ? 'upcoming' : 'latest', q: search.value.trim() })
+        const nextItems = [...result.items]
+        while (current === generation && result.hasMore && result.items.length && nextItems.length < targetCount) {
+            result = await api.activities({ offset: nextItems.length, sort: tab.value === '即将开始' ? 'upcoming' : 'latest', q: search.value.trim() })
+            nextItems.push(...result.items)
+        }
         if (current === generation) {
-            items.value = result.items
-            offset = result.items.length
+            items.value = nextItems
+            offset = nextItems.length
             hasMore.value = result.hasMore
+            loaded = true
         }
     }
     catch (e) {
@@ -75,7 +81,7 @@ async function load() {
     }
     finally {
         if (current === generation)
-            loading.value = false
+            { loading.value = false; loadingMore.value = false }
         if (current === generation) uni.stopPullDownRefresh()
     }
 }
@@ -99,6 +105,7 @@ function chooseTab(value: string) { if (value === '推荐') {
     return
 } if (tab.value !== value) { tab.value = value; globalThis.clearTimeout(searchTimer); void load() } }
 watch(search, () => {
+    loaded = false
     globalThis.clearTimeout(searchTimer)
     generation++
     items.value = []
@@ -108,7 +115,7 @@ watch(search, () => {
     searchTimer = globalThis.setTimeout(() => { if (!disposed) void load() }, 300)
 })
 onLoad(options => { useSessionStore().captureInvite(options?.inviteCode) })
-onShow(load)
+onShow(() => { void load(true) })
 onPullDownRefresh(load)
 onReachBottom(more)
 const { shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => ({path: routes.activity, title: '有聚点活动'}), true)
@@ -211,7 +218,7 @@ onShareTimeline(shareTimeline)
         :empty-text="search?'没有找到匹配的活动':'暂无公开活动，稍后再来看看'"
         @retry="load"
       />
-      <view v-if="!loading && !error">
+      <view v-if="items.length || (!loading && !error)">
         <view
           v-for="activity in items"
           :key="activity.id"

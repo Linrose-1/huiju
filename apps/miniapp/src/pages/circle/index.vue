@@ -22,7 +22,7 @@ function selectCategory(key: string) { if (category.value === key) return; categ
 let visible = false
 const session = useSessionStore()
 watch(() => [session.token,session.epoch], () => { if(visible) void list.load() }, {flush:'sync'})
-onShow(() => { visible=true;void list.load() }); onHide(() => {visible=false;list.clear()}); onUnload(() => {visible=false;list.clear()})
+onShow(() => { visible=true;void list.refresh() }); onHide(() => {visible=false;list.pause()}); onUnload(() => {visible=false;list.clear()})
 onReachBottom(() => list.load(true)); onPullDownRefresh(() => list.load())
 const { shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => ({path: routes.circle, title: '有聚点学友圈'}), true)
 onShareAppMessage(shareMessage)

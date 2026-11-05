@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
@@ -11,7 +12,7 @@ import RequestState from '@/components/base/RequestState.vue'
 const id = ref(''), editing = ref(false), activity = ref<Activity | null>(null), phone = ref(''), answers = ref<Record<string, string | string[]>>({}), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref(''), allowed = ref(false)
 const recommendationToken = ref('')
 const inviteCode = ref(''), verifiedCode = ref(''), inviteError = ref(''), verifying = ref(false)
-let generation = 0, verification = 0, alive = true
+let generation = 0, loadGeneration = 0, verification = 0, alive = true
 const session = useSessionStore()
 function currentRequest() { const g = generation, token = session.token, epoch = session.epoch; return () => alive && g === generation && token === session.token && epoch === session.epoch }
 function removeInvite() { verification++; inviteCode.value = ''; verifiedCode.value = ''; inviteError.value = ''; verifying.value = false }
@@ -32,7 +33,9 @@ let initialized = false
 let formOwner = ''
 const questions = computed(() => activity.value?.questions || [])
 async function load() { if (!id.value)
-    return; const current = currentRequest(); loading.value = true; error.value = ''; allowed.value = false; try {
+    return; const request = ++loadGeneration
+    let current = () => alive && request === loadGeneration
+    loading.value = true; error.value = ''; allowed.value = false; try {
     const target = returnTarget()
     if (!await requireProfile(target)) {
         if (!current()) return
@@ -40,6 +43,11 @@ async function load() { if (!id.value)
         return
     }
     if (!current()) return
+    // Identity recovery may replace the expired token while this page is loading.
+    // Bind data requests to the recovered session, not the token before the gate.
+    const sessionCurrent = currentRequest()
+    current = () => alive && request === loadGeneration && sessionCurrent()
+    loading.value = true
     const detail = await api.activity(id.value)
     if (!current()) return
     activity.value = detail
@@ -148,11 +156,12 @@ onLoad(options => { id.value = String(options?.id || ''); editing.value = option
     error.value = '报名链接不完整，请从活动详情重新进入'
 } })
 onShow(load)
-onHide(() => { generation++; verification++; verifying.value = false; busy.value = false })
-onUnload(() => { alive = false; generation++; verification++ })
+onHide(() => { generation++; loadGeneration++; verification++; verifying.value = false; busy.value = false })
+onUnload(() => { alive = false; generation++; loadGeneration++; verification++ })
 </script>
 <template>
   <view class="page-pad with-footer">
+    <PageReturn />
     <RequestState
       :loading="loading"
       :error="error"

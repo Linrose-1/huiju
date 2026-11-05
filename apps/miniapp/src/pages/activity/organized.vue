@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageReturn from '@/components/base/PageReturn.vue'
 import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
@@ -21,17 +22,25 @@ function clear() {
   generation++; offset = 0; items.value = []; counts.value = null; error.value = ''; moreError.value = ''
   loading.value = false; loadingMore.value = false; hasMore.value = false
 }
-async function load() {
-  clear(); now.value = Date.now()
+async function load(background = false) {
+  const targetCount = background === true ? offset : 0
+  const retain = targetCount > 0
+  if (retain) { generation++; error.value = ''; moreError.value = '' } else clear()
+  now.value = Date.now()
   const current = generation, token = session.token, epoch = session.epoch
   const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
   if (!token) { uni.stopPullDownRefresh(); return }
-  loading.value = true
+  loading.value = !retain; loadingMore.value = retain
   try {
-    const result = await api.organizedActivities({ offset: 0, status: selected.value })
-    if (isCurrent()) { items.value = result.items; offset = result.items.length; hasMore.value = result.hasMore; counts.value = result.counts }
+    let result = await api.organizedActivities({ offset: 0, status: selected.value })
+    const nextItems = [...result.items]
+    while (isCurrent() && result.hasMore && result.items.length && nextItems.length < targetCount) {
+      result = await api.organizedActivities({ offset: nextItems.length, status: selected.value })
+      nextItems.push(...result.items)
+    }
+    if (isCurrent()) { items.value = nextItems; offset = nextItems.length; hasMore.value = result.hasMore; counts.value = result.counts }
   } catch (e) { if (isCurrent()) error.value = errorMessage(e) }
-  finally { if (isCurrent()) { loading.value = false; uni.stopPullDownRefresh() } }
+  finally { if (isCurrent()) { loading.value = false; loadingMore.value = false; uni.stopPullDownRefresh() } }
 }
 async function more() {
   if (loading.value || loadingMore.value || moreError.value || error.value || !hasMore.value || !session.token) return
@@ -52,14 +61,15 @@ function retryMore() { moreError.value = ''; void more() }
 function selectFilter(value: string) { if (selected.value !== value) { selected.value = value; void load() } }
 function open(item: ManagedActivity) { navigate(routes.manage + '?id=' + item.id) }
 const stop = watch(() => [session.token, session.epoch], () => { selected.value = 'all'; clear(); if (shown) void load() }, { flush: 'sync' })
-onShow(() => { shown = true; void load() })
-onHide(() => { shown = false; clear() })
+onShow(() => { shown = true; void load(true) })
+onHide(() => { shown = false; generation++; loading.value = false; loadingMore.value = false })
 onUnload(() => { shown = false; clear(); stop() })
 onReachBottom(more)
 onPullDownRefresh(load)
 </script>
 <template>
   <view class="activities-page">
+    <PageReturn />
     <view class="activity-tabs">
       <view
         class="tab active"
@@ -93,7 +103,7 @@ onPullDownRefresh(load)
           :class="{selected:selected===filter.key}"
           @click="selectFilter(filter.key)"
         >
-          {{ filter.label }}<text v-if="!loading && !error"> ({{ filter.count }})</text>
+          {{ filter.label }}<text v-if="items.length || (!loading && !error)"> ({{ filter.count }})</text>
         </view>
       </view>
     </scroll-view>
@@ -116,7 +126,7 @@ onPullDownRefresh(load)
         :empty-text="items.length?'当前分类下暂无活动':'还没有发起活动，创建第一场活动吧'"
         @retry="load"
       />
-      <template v-if="!loading && !error">
+      <template v-if="items.length || (!loading && !error)">
         <MyActivityCard
           v-for="item in visibleItems"
           :key="item.id"

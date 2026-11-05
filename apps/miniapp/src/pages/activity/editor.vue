@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { ActivityWriteInput, ManagedActivity, ActivityQuestionHistoryItem } from '@/services/api/types'
@@ -7,7 +7,7 @@ import { loginPage, navigate, requireProfile, routes } from '@/services/navigati
 import { mediaUrl } from '@/services/api/environment'
 import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
-import { chooseActivityImagePath, readActivityImage, chooseActivityLocation } from '@/services/wechat'
+import { chooseActivityImagePath, chooseActivityImagePaths, readActivityImage, chooseActivityLocation } from '@/services/wechat'
 import ActivityCoverCropper from '@/components/business/ActivityCoverCropper.vue'
 import ActivityImageGallery from '@/components/business/ActivityImageGallery.vue'
 import { activityImages, imageSlotsPayload } from '@/services/activity-images'
@@ -17,9 +17,10 @@ import type { ActivityRichValue } from '@/services/activity-rich-text'
 import { takeActivityDraft } from '@/services/ai-draft'
 import type { AiActivityDraft } from '@/services/api/types'
 import RequestState from '@/components/base/RequestState.vue'
+import PageReturn from '@/components/base/PageReturn.vue'
 
 type QuestionType = 'short_text' | 'long_text' | 'single' | 'multiple'
-type DraftQuestion = { key: number; id?: string; prompt: string; type: QuestionType; required: boolean; options: string; publicToParticipants?: boolean }
+type DraftQuestion = { key: number; id?: string; prompt: string; type: QuestionType; required: boolean; requirementConfirmed?: boolean; options: string; publicToParticipants?: boolean }
 const questionTypes: QuestionType[] = ['short_text', 'long_text', 'single', 'multiple']
 const questionLabels = ['简答', '长文本', '单选', '多选']
 const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref('')
@@ -28,7 +29,7 @@ const aiDraftMissing = ref(false)
 let fromAi = false
 const source = ref<ManagedActivity | null>(null)
 const coverUrl = ref(''), coverSourceUrl = ref(''), coverError = ref('')
-const extraImages = ref(['', '']), uploadingIndex = ref(-1)
+const extraImages = ref<string[]>(Array(8).fill('')), uploadingIndex = ref(-1)
 const cropper = ref<InstanceType<typeof ActivityCoverCropper> | null>(null)
 const imageSlots = computed(() => [coverUrl.value, ...extraImages.value])
 const previewImages = computed(() => imageSlots.value.filter(Boolean))
@@ -65,7 +66,7 @@ function clearQuestionHistory() {
   historyLoading.value = false; historyError.value = ''; historyHasMore.value = false; historyOffset = 0
 }
 async function loadQuestionHistory(more = false) {
-  if (!editingQuestion.value || busy.value || locked.value || !editable.value || historyLoading.value || (more && (!historyHasMore.value || !!historyError.value))) return
+  if (!editingQuestion.value || busy.value || questionLocked(editingQuestion.value) || !editable.value || historyLoading.value || (more && (!historyHasMore.value || !!historyError.value))) return
   if (!more) { clearQuestionHistory(); historyOpen.value = true }
   const current = historyGeneration, token = session.token, epoch = session.epoch
   const active = () => !disposed && historyOpen.value && !!editingQuestion.value && current === historyGeneration && token === session.token && epoch === session.epoch
@@ -87,7 +88,7 @@ async function loadQuestionHistory(more = false) {
 function showQuestionHistory() { if (!historyOpen.value) void loadQuestionHistory() }
 function retryQuestionHistory() { historyError.value = ''; void loadQuestionHistory(historyOffset > 0) }
 function selectQuestionTemplate(item: ActivityQuestionHistoryItem) {
-  if (!editingQuestion.value || busy.value || locked.value || !editable.value) return
+  if (!editingQuestion.value || busy.value || questionLocked(editingQuestion.value) || !editable.value) return
   // Preserve this activity's identity and required setting; copy only reusable configuration.
   Object.assign(editingQuestion.value, { prompt: item.prompt, type: item.type, options: (item.options || []).join('\n'), publicToParticipants: false })
   questionError.value = ''; clearQuestionHistory()
@@ -114,7 +115,7 @@ function reset() {
   locationError.value = ''
   selectingLocation.value = false
   coverUrl.value = ''; coverSourceUrl.value = ''
-  extraImages.value = ['', '']; uploadingIndex.value = -1; cropper.value?.cancel()
+  extraImages.value = Array(8).fill(''); uploadingIndex.value = -1; cropper.value?.cancel()
   coverError.value = ''
   step.value = 0
   reviewed.value = false
@@ -174,7 +175,7 @@ async function load() {
         const images = activityImages(activity)
         coverUrl.value = images[0] || ''
         coverSourceUrl.value = activity.coverSourceUrl || ''
-        extraImages.value = [images[1] || '', images[2] || '']
+        extraImages.value = Array.from({ length: 8 }, (_, index) => images[index + 1] || '')
         const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
         locationCoordinates.value = activity.locationLatitude != null && activity.locationLongitude != null ? { latitude: activity.locationLatitude, longitude: activity.locationLongitude } : null
@@ -182,7 +183,9 @@ async function load() {
       }
       // 首个报名后，以服务端已锁定的问题和金额为准，防止保留的草稿覆盖它们。
       if (!initialized || activity.hasRegistrationEver) {
-        questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
+        const currentQuestions = questions.value
+        const refreshed = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
+        questions.value = initialized ? [...currentQuestions.map(question => question.id ? refreshed.find(item => item.id === question.id) : question).filter((question): question is DraftQuestion => !!question), ...refreshed.filter(question => !currentQuestions.some(item => item.id === question.id))] : refreshed
         form.feeType = activity.feeType
         form.amount = activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : ''
       }
@@ -293,6 +296,57 @@ async function changeImage(index: number, recrop = false) {
     }
   } finally { if (current()) { busy.value = false; uploadingIndex.value = -1 } }
 }
+async function addImages() {
+  if (busy.value || started.value || !editable.value || !initialized) return
+  const request = generation, token = session.token, epoch = session.epoch
+  const current = () => request === generation && !disposed && token === session.token && epoch === session.epoch
+  const available = imageSlots.value.map((url, index) => url ? -1 : index).filter(index => index >= 0)
+  if (!available.length) return
+  busy.value = true; coverError.value = ''
+  try {
+    const paths = await chooseActivityImagePaths(available.length)
+    for (const [position, selectedPath] of paths.slice(0, available.length).entries()) {
+      if (!current()) return
+      const index = available[position]
+      uploadingIndex.value = index
+      const path = index === 0 ? await cropper.value?.open(selectedPath) : selectedPath
+      if (!path || !current()) return
+      let originalUrl = ''
+      if (index === 0) {
+        const original = await readActivityImage(selectedPath)
+        if (!current()) return
+        originalUrl = (await api.uploadCover(original.base64, original.mimeType)).coverUrl
+        if (!current()) return
+      }
+      const image = await readActivityImage(path)
+      if (!current()) return
+      const uploaded = await api.uploadCover(image.base64, image.mimeType)
+      if (!current()) return
+      if (index === 0) { coverUrl.value = uploaded.coverUrl; coverSourceUrl.value = originalUrl }
+      else extraImages.value[index - 1] = uploaded.coverUrl
+    }
+  } catch (e) { if (current()) coverError.value = errorMessage(e) + '；已上传图片已保留，请重新选择未完成的图片' }
+  finally { if (current()) { busy.value = false; uploadingIndex.value = -1 } }
+}
+async function promoteImage(index: number) {
+  if (busy.value || started.value || !editable.value || !imageSlots.value[index] || index === 0) return
+  const originalUrl = imageSlots.value[index]
+  const request = generation, token = session.token, epoch = session.epoch
+  const current = () => request === generation && !disposed && token === session.token && epoch === session.epoch
+  busy.value = true; uploadingIndex.value = index; coverError.value = ''
+  try {
+    const path = await cropper.value?.open(mediaUrl(originalUrl))
+    if (!path || !current()) return
+    const image = await readActivityImage(path)
+    if (!current()) return
+    const result = await api.uploadCover(image.base64, image.mimeType)
+    if (!current()) return
+    const rest = imageSlots.value.filter((url, position) => !!url && position !== index)
+    coverUrl.value = result.coverUrl; coverSourceUrl.value = originalUrl
+    extraImages.value = Array.from({ length: 8 }, (_, position) => rest[position] || '')
+  } catch (e) { if (current()) coverError.value = errorMessage(e) }
+  finally { if (current()) { busy.value = false; uploadingIndex.value = -1 } }
+}
 function removeImage(index: number) {
   if (busy.value || started.value || !editable.value) return
   if (index === 0) { coverUrl.value = ''; coverSourceUrl.value = '' } else extraImages.value[index - 1] = ''
@@ -309,16 +363,18 @@ function setCapacityLimited(limited: boolean) {
 function privateContactQuestion(prompt: string) { return /手机|电话|联系|微信|微\s*信|二维码|邮箱|邮件|电邮|qq|wechat|weixin|phone|mobile|e[\s-]*mail|qr[\s-]*code|contact/i.test(prompt) }
 function visibilityDisabled(question: DraftQuestion) { return busy.value || !editable.value || privateContactQuestion(question.prompt) || (!!source.value?.hasRegistrationEver && !source.value.questions.find(item => item.id === question.id)?.publicToParticipants) }
 function changeVisibility(question: DraftQuestion, value: boolean) { if (!visibilityDisabled(question)) question.publicToParticipants = value }
+function questionLocked(question?: DraftQuestion | null) { return started.value || (!!source.value?.hasRegistrationEver && !!question?.id && source.value.questions.some(item => item.id === question.id)) }
 function beginQuestion(question?: DraftQuestion) {
-  if (busy.value || locked.value || !editable.value || (!question && questions.value.length >= 100)) return
+  if (busy.value || questionLocked(question) || !editable.value || (!question && questions.value.length >= 100)) return
   clearQuestionHistory()
   questionError.value = ''
-  editingQuestion.value = question ? { ...question } : { key: ++sequence, prompt: '', type: 'short_text', required: false, options: '' }
+  editingQuestion.value = question ? { ...question, requirementConfirmed: true } : { key: ++sequence, prompt: '', type: 'short_text', required: false, requirementConfirmed: false, options: '', publicToParticipants: false }
 }
 function saveQuestion() {
-  if (!editingQuestion.value || busy.value || locked.value || !editable.value) return
+  if (!editingQuestion.value || busy.value || questionLocked(editingQuestion.value) || !editable.value) return
   const draft = { ...editingQuestion.value, prompt: editingQuestion.value.prompt.trim() }
   if (!draft.prompt) { questionError.value = '请填写填写项名称'; return }
+  if (!draft.requirementConfirmed) { questionError.value = '请明确选择此项为必填或选填'; return }
   if (draft.type === 'single' || draft.type === 'multiple') {
     const options = draft.options.split('\n').map(item => item.trim()).filter(Boolean)
     if (!options.length || options.length > 100 || options.some(item => item.length > 200) || new Set(options).size !== options.length) {
@@ -332,21 +388,22 @@ function saveQuestion() {
   closeQuestion()
 }
 function removeQuestion(key: number) {
-  if (busy.value || locked.value || !editable.value) return
+  if (busy.value || questionLocked(questions.value.find(question => question.key === key)) || !editable.value) return
   const index = questions.value.findIndex(question => question.key === key)
   if (index >= 0) questions.value.splice(index, 1)
 }
 function moveQuestion(from: number, to: number) {
-  if (busy.value || locked.value || !editable.value || from < 0 || from >= questions.value.length || to < 0 || to >= questions.value.length || from === to) return
+  if (busy.value || started.value || !editable.value || from < 0 || from >= questions.value.length || to < 0 || to >= questions.value.length || from === to) return
   const [question] = questions.value.splice(from, 1)
   questions.value.splice(to, 0, question)
 }
 type DragEvent = { touches?: ArrayLike<{ clientY: number }> }
 function startQuestionDrag(index: number, event: DragEvent) {
-  if (busy.value || locked.value || !editable.value || !event.touches?.length) return
+  if (busy.value || started.value || !editable.value || !event.touches?.length) return
   dragIndex.value = index
   dragStartY = event.touches[0].clientY
-  dragRowHeight = uni.getSystemInfoSync().windowWidth * 120 / 750
+  const windowWidth = uni.getWindowInfo?.().windowWidth ?? uni.getSystemInfoSync().windowWidth
+  dragRowHeight = (Number.isFinite(windowWidth) && windowWidth > 0 ? windowWidth : 375) * 120 / 750
   dragOffset.value = 0
   suppressSortMenu = false
 }
@@ -354,18 +411,22 @@ function moveQuestionDrag(event: DragEvent) {
   if (dragIndex.value < 0 || !event.touches?.length) return
   dragOffset.value = event.touches[0].clientY - dragStartY
 }
-function endQuestionDrag() {
+async function endQuestionDrag() {
   if (dragIndex.value < 0) return
   const from = dragIndex.value
+  const key = questions.value[from]?.key, token = session.token, epoch = session.epoch
   const to = Math.max(0, Math.min(questions.value.length - 1, from + Math.round(dragOffset.value / dragRowHeight)))
   suppressSortMenu = Math.abs(dragOffset.value) > 5
-  moveQuestion(from, to)
   dragIndex.value = -1
   dragOffset.value = 0
+  // 微信视图层先清除拖动样式，再重排带 key 的行，避免复用旧位移。
+  await nextTick()
+  if (disposed || token !== session.token || epoch !== session.epoch || questions.value[from]?.key !== key) return
+  moveQuestion(from, to)
 }
 function showSortMenu(index: number) {
   if (suppressSortMenu) { suppressSortMenu = false; return }
-  if (busy.value || locked.value || !editable.value) return
+  if (busy.value || started.value || !editable.value) return
   const token = session.token, epoch = session.epoch, key = questions.value[index]?.key
   uni.showActionSheet({ itemList: ['上移一位', '下移一位'], success: result => {
     if (disposed || token !== session.token || epoch !== session.epoch) return
@@ -412,7 +473,7 @@ async function confirmPublish() {
   await submit(source.value?.lifecycle !== 'published')
 }
 function showPublishInformation() {
-  uni.showModal({ title: '发布说明', content: '请核对活动时间、地点、咨询方式和报名设置。首次报名后，填写项及费用模式和金额将锁定。' + feeDisclaimer + '。', showCancel: false })
+  uni.showModal({ title: '发布说明', content: '请核对活动时间、地点、咨询方式和报名设置。首次报名后，已有填写项内容和费用模式、金额将锁定，仍可新增私密填写项及调整顺序。' + feeDisclaimer + '。', showCancel: false })
 }
 function switchValue(event: unknown): boolean {
   return (event as { detail: { value: boolean } }).detail.value
@@ -427,7 +488,7 @@ async function submit(publish = false) {
   busy.value = true
   try {
     if (publish) {
-      const confirmed = await new Promise<boolean>(resolve => uni.showModal({ title: '确认发布活动', content: '发布后会员即可浏览和报名，请确认时间、地点与费用信息准确。', confirmText: '发布', success: result => resolve(!!result.confirm), fail: () => resolve(false) }))
+      const confirmed = await new Promise<boolean>(resolve => uni.showModal({ title: '确认发布活动', content: '发布后会员即可浏览和报名，请确认时间、地点与费用信息准确。' + (questions.value.some(question => !question.required) ? '当前有选填项：' + questions.value.filter(question => !question.required).map(question => question.prompt).join('、') + '，参与者可不填写。' : ''), confirmText: '发布', success: result => resolve(!!result.confirm), fail: () => resolve(false) }))
       if (!confirmed || !current()) return
     }
     if (!await requireProfile(target.value) || !current()) return
@@ -466,6 +527,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
     class="activity-editor"
     :class="{ 'settings-page': step === 1, 'confirmation-page': step === 2 }"
   >
+    <PageReturn />
     <view class="steps">
       <button
         class="step"
@@ -595,7 +657,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
           >
         </view>
         <view class="form-card activity-images-card">
-          <view class="card-heading"><text>活动图片</text><text class="helper">{{ previewImages.length }} / 3 · 选填</text></view>
+          <view class="card-heading"><text>活动图片</text><text class="helper">{{ previewImages.length }} / 9 · 选填</text></view>
           <view class="activity-image-slots">
             <view
               v-for="(url, index) in imageSlots"
@@ -617,7 +679,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
                 class="activity-image-add"
                 :disabled="busy || started || !editable"
                 :loading="uploadingIndex === index"
-                @click="changeImage(index)"
+                @click="addImages()"
               >
                 <text>＋</text><text>{{ index === 0 ? '添加封面' : '添加图片' }}</text>
               </button>
@@ -631,6 +693,13 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
                   @click="changeImage(0, true)"
                 >
                   重裁
+                </button>
+                <button
+                  v-if="index > 0"
+                  :disabled="busy || started || !editable"
+                  @click="promoteImage(index)"
+                >
+                  设为封面
                 </button>
                 <button
                   :disabled="busy || started || !editable"
@@ -648,7 +717,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
               </view>
             </view>
           </view>
-          <text class="helper image-rules">首张封面须裁剪为 5:4，后两张完整展示。PNG / JPG，每张 2 MB 内。</text>
+          <text class="helper image-rules">首张封面须裁剪为 5:4，其余图片完整展示，最多 9 张，可一次多选。PNG / JPG，每张 2 MB 内。</text>
           <text
             v-if="!coverUrl && extraImages.some(Boolean)"
             class="image-warning"
@@ -843,7 +912,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
         </view>
         <view class="settings-card">
           <view class="settings-heading">
-            <text>报名截止时间</text><button
+            <text>报名截止设置</text><button
               class="help-button"
               aria-label="截止时间说明"
               @click="showSettingsHelp('deadline')"
@@ -892,8 +961,8 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
           </view>
         </view>
         <view class="settings-card questions-card">
-          <view class="settings-heading"><text>报名信息收集</text><text class="helper sorting-note">{{ locked ? '已有报名，填写项及顺序已锁定' : '拖动左侧图标可调整填写项顺序' }}</text></view>
-          <view class="settings-description">手机号已作为系统必填项；其他填写项可按需添加</view>
+          <view class="settings-heading"><text>报名信息收集</text><text class="helper sorting-note">{{ started ? '活动已开始，填写项不可修改' : '拖动左侧图标可调整填写项顺序' }}</text></view>
+          <view class="settings-description">手机号为系统必填项；其他项请明确选择必填或选填。已有报名后可新增私密项及排序，原有题目不可修改或删除；新增必填不要求历史报名补填。</view>
           <view class="question-list">
             <button
               class="question-row system-question"
@@ -916,11 +985,11 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
               :key="question.key"
               class="question-row"
               :class="{ dragging: dragIndex === index }"
-              :style="dragIndex === index ? { transform: 'translateY(' + dragOffset + 'px)' } : {}"
+              :style="{ transform: 'translateY(' + (dragIndex === index ? dragOffset : 0) + 'px)' }"
             >
               <button
                 class="question-handle"
-                :disabled="busy || locked || !editable"
+                :disabled="busy || started || !editable"
                 aria-label="调整填写项顺序"
                 @touchstart.stop="startQuestionDrag(index,$event)"
                 @touchmove.stop.prevent="moveQuestionDrag($event)"
@@ -936,7 +1005,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
               </button>
               <button
                 class="question-open"
-                :disabled="busy || locked || !editable"
+                :disabled="busy || questionLocked(question) || !editable"
                 @click="beginQuestion(question)"
               >
                 <view class="question-copy">
@@ -956,7 +1025,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
               </button>
               <button
                 class="delete-question"
-                :disabled="busy || locked || !editable"
+                :disabled="busy || questionLocked(question) || !editable"
                 :aria-label="'删除第' + (index+1) + '题'"
                 @click="removeQuestion(question.key)"
               >
@@ -970,7 +1039,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
           </view>
           <button
             class="add-question-row"
-            :disabled="busy || locked || !editable || questions.length >= 100"
+            :disabled="busy || started || !editable || questions.length >= 100"
             @click="beginQuestion()"
           >
             <text class="plus">＋</text>添加报名填写项
@@ -981,7 +1050,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
           class="settings-card visibility-card"
         >
           <view class="settings-heading">报名名单公开字段</view>
-          <view class="settings-note">仅本活动有效报名会员可见。联系方式不可公开；首次报名后只能关闭公开。</view>
+          <view class="settings-note">开启后，该项答案会显示在本活动报名名单中，仅资料完整且报名有效的参与者可见。关闭时仅发起人和平台管理员可查看；手机号、微信等联系方式始终不能公开。首次报名后，原公开项只能关闭，新增项保持私密。</view>
           <view
             v-for="question in questions"
             :key="question.key"
@@ -1124,7 +1193,20 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
               type="list"
               size="32rpx"
               color="#164f41"
-            /><view><text class="review-label">报名信息收集</text><text class="review-muted">共 {{ questions.length + 1 }} 项（含手机号{{ previewQuestionTypes ? '、' + previewQuestionTypes : '' }}）</text></view>
+            /><view>
+              <text class="review-label">报名信息收集</text><text class="review-muted">共 {{ questions.length + 1 }} 项（含手机号{{ previewQuestionTypes ? '、' + previewQuestionTypes : '' }}）</text><view
+                v-for="question in questions"
+                :key="question.key"
+                class="review-question"
+              >
+                <text :class="['require-badge', { optional: !question.required }]">{{ question.required ? '必填' : '选填' }}</text><text>{{ question.prompt }}</text>
+              </view><text
+                v-if="questions.some(question => !question.required)"
+                class="review-muted"
+              >
+                选填项允许参与者留空，请确认符合收集需求。
+              </text>
+            </view>
           </view>
           <view class="review-detail">
             <uni-icons
@@ -1357,13 +1439,21 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
               />
             </view>
           </picker><view class="question-required">
-            <text>必填</text><switch
-              :checked="editingQuestion.required"
-              color="#20865e"
-              @change="editingQuestion.required = switchValue($event)"
-            />
+            <button
+              :class="{ selected: editingQuestion.requirementConfirmed && editingQuestion.required }"
+              @click="editingQuestion.required = true; editingQuestion.requirementConfirmed = true; questionError = ''"
+            >
+              必填
+            </button>
+            <button
+              :class="{ selected: editingQuestion.requirementConfirmed && !editingQuestion.required }"
+              @click="editingQuestion.required = false; editingQuestion.requirementConfirmed = true; questionError = ''"
+            >
+              选填
+            </button>
           </view>
         </view>
+        <view class="helper">{{ editingQuestion.requirementConfirmed ? (editingQuestion.required ? '必填：新报名及修改报名资料时必须填写' : '选填：参与者可以留空') : '请选择必填或选填，确认后才能保存' }}</view>
         <template v-if="editingQuestion.type === 'single' || editingQuestion.type === 'multiple'">
           <view class="question-form-label">选项</view><textarea
             v-model="editingQuestion.options"
@@ -1380,7 +1470,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
           {{ questionError }}
         </view><button
           class="next-button save-question"
-          :disabled="busy || locked || !editable"
+          :disabled="busy || questionLocked(editingQuestion) || !editable"
           @click="saveQuestion"
         >
           保存填写项
@@ -1456,5 +1546,6 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
 /* 微信模拟器验收尺寸：750rpx设计宽度，正文28rpx，触控区至少80rpx。 */
 .activity-editor{padding-left:28rpx;padding-right:28rpx;padding-bottom:calc(150rpx + env(safe-area-inset-bottom));font-size:28rpx}.steps,.settings-page .steps,.confirmation-page .steps{margin-left:0;margin-right:0;gap:10rpx;height:80rpx;margin-bottom:20rpx}.step{font-size:28rpx;line-height:56rpx;padding:0 18rpx}.last-step{padding-right:18rpx}.step-line{min-width:12rpx}.form-card,.settings-card,.review-card{padding:22rpx 24rpx;margin-bottom:18rpx;border-radius:18rpx}.card-heading,.settings-heading,.review-heading{font-size:30rpx;line-height:44rpx;margin-bottom:14rpx}.helper{font-size:24rpx}.field{min-height:80rpx;height:80rpx;line-height:80rpx;font-size:28rpx}.icon-field input{font-size:28rpx;height:80rpx;line-height:80rpx}.activity-types{gap:16rpx}.type-option{gap:12rpx;padding:18rpx 16rpx;min-height:132rpx}.type-name{font-size:30rpx;white-space:normal}.type-note{font-size:24rpx;white-space:normal;letter-spacing:0;line-height:1.5}.radio-dot{width:30rpx;height:30rpx;margin-top:8rpx}.selected .radio-dot{border-width:9rpx}.format-toolbar{gap:24rpx;padding:0 18rpx;min-height:64rpx}.toolbar-note{font-size:22rpx}.description-input{height:180rpx;min-height:180rpx;font-size:28rpx}.event-times{gap:10rpx}.time-control{height:112rpx;padding:12rpx;gap:8rpx;font-size:24rpx}.time-copy{white-space:normal;line-height:1.5}.time-control:first-child::before{display:none}.end-time{padding-left:14rpx}.time-separator{font-size:26rpx}.icon-field{gap:16rpx}.field-note{font-size:24rpx;line-height:36rpx;margin-left:0;margin-top:10rpx}.two-column{grid-template-columns:minmax(0,1fr);gap:0}.two-column .form-card{padding:18rpx 24rpx}.two-column .field{height:80rpx;min-height:80rpx;line-height:80rpx}.deadline-control text{font-size:28rpx;letter-spacing:0}.contact-card{padding:20rpx 24rpx}.editor-footer,.settings-page .editor-footer{padding:16rpx 28rpx calc(16rpx + env(safe-area-inset-bottom))}.editor-footer button{height:84rpx;line-height:84rpx;font-size:28rpx;padding:0 16rpx}.footer-actions{gap:16rpx}.arrow{font-size:30rpx;margin-left:4rpx}.settings-options{grid-template-columns:minmax(0,1fr);gap:16rpx}.settings-option{height:80rpx;font-size:28rpx;gap:18rpx}.settings-option .radio-dot{width:30rpx;height:30rpx}.setting-value{display:flex;align-items:center;gap:20rpx}.setting-value>.helper{flex-shrink:0;width:110rpx;margin:0}.setting-input{flex:1;min-width:0;height:80rpx;font-size:28rpx}.setting-input input{font-size:28rpx}.settings-date{font-size:26rpx}.settings-date text{letter-spacing:0}.settings-description{font-size:28rpx}.settings-note{font-size:24rpx;line-height:1.5;margin-top:12rpx}.registration-switch{width:92rpx;height:52rpx;flex-shrink:0}.registration-switch view{width:48rpx;height:48rpx}.help-button{width:28rpx;height:28rpx;line-height:24rpx;font-size:22rpx}.questions-card .settings-heading{flex-wrap:wrap}.sorting-note{font-size:24rpx;margin-left:0;font-weight:400}.question-row{height:112rpx;margin-bottom:8rpx}.question-handle,.fixed-handle{width:58rpx;height:110rpx}.question-open{height:110rpx;gap:8rpx}.question-title{font-size:28rpx;line-height:40rpx;gap:8rpx}.question-subtitle{font-size:24rpx;line-height:36rpx}.require-badge{font-size:22rpx;line-height:30rpx;padding:2rpx 10rpx}.system-badge{font-size:22rpx;padding:4rpx 8rpx;margin-right:8rpx}.delete-question{width:42rpx;height:80rpx;margin-left:10rpx}.add-question-row{height:80rpx;font-size:28rpx}.notice-input textarea{font-size:26rpx;height:104rpx;min-height:104rpx}.notice-input>text{font-size:22rpx}.notice-input{padding-bottom:38rpx}.notice-unavailable{font-size:22rpx}.preview-cover{height:280rpx}.preview-title{font-size:32rpx}.preview-meta,.preview-organizer{font-size:28rpx;line-height:42rpx}.preview-description{font-size:28rpx;line-height:1.7}.preview-badges text{font-size:26rpx;line-height:34rpx}.organizer-avatar{width:56rpx;height:56rpx}.review-detail{gap:18rpx;margin:16rpx 0}.review-label{font-size:28rpx;line-height:42rpx}.review-muted{font-size:26rpx;line-height:40rpx}.review-agreement{font-size:24rpx;line-height:36rpx;flex-wrap:wrap}.review-footer .review-checkbox{width:36rpx;height:36rpx;line-height:34rpx}.review-footer .review-guidance{font-size:24rpx;line-height:36rpx;height:36rpx}.confirmation-page{padding-bottom:calc(210rpx + env(safe-area-inset-bottom))}.date-sheet .field{font-size:28rpx;height:80rpx;line-height:80rpx}.date-sheet .question-options-input{height:220rpx;line-height:1.6}.date-actions button,.save-question{font-size:28rpx;padding:20rpx}.date-sheet-title{font-size:30rpx}.question-form-label,.question-form-options,.close-question{font-size:28rpx}
 .question-presets{display:flex;flex-wrap:wrap;gap:12rpx;margin:12rpx 0 24rpx}.preset-button,.phone-included{font-size:24rpx;line-height:36rpx;padding:12rpx 18rpx;border-radius:10rpx;background:#edf7f1;color:#1d654e}.phone-included{background:#f1f3f4;color:#738379}.question-history{border:1rpx solid #dbe8e0;border-radius:12rpx;margin:12rpx 0 20rpx;background:#f8fcfa}.history-heading{display:flex;align-items:center;justify-content:space-between;padding:8rpx 16rpx;font-size:24rpx;color:#657a70}.history-scroll{max-height:280rpx;height:280rpx}.history-item{display:flex;flex-wrap:wrap;align-items:center;gap:12rpx;width:100%;padding:16rpx;text-align:left;background:transparent;border-radius:0;border-top:1rpx solid #e4ede7;font-size:26rpx;line-height:1.5}.history-item>text:first-child{flex:1;min-width:0;overflow-wrap:anywhere}.history-type{font-size:22rpx;color:#738379}.history-options{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:22rpx;color:#738379}.history-action{background:transparent;color:#1d654e;font-size:24rpx;padding:10rpx 16rpx;line-height:36rpx}.history-state{display:block;padding:18rpx;font-size:24rpx;line-height:1.5;color:#738379}
-.activity-image-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx}.activity-image-preview{position:relative;height:170rpx;background:#eaf0ec;border-radius:10rpx;overflow:hidden}.activity-image-preview image{height:100%;width:100%}.activity-image-preview>text{position:absolute;top:6rpx;left:6rpx;background:#18583ede;color:white;font-size:20rpx;padding:3rpx 7rpx;border-radius:5rpx}.activity-image-add{height:170rpx;width:100%;border:1rpx dashed #bfd2c6;background:#f4f9f6;color:#286448;border-radius:10rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24rpx}.activity-image-add>text:first-child{font-size:40rpx}.activity-image-actions{display:flex;justify-content:space-between;margin-top:8rpx;gap:2rpx}.activity-image-actions button{padding:10rpx 2rpx;background:transparent;font-size:22rpx;color:#286448;line-height:1.5}.image-rules{display:block;margin-top:18rpx;line-height:1.7}.image-warning{display:block;color:#b14e32;font-size:24rpx;margin-top:12rpx}
+.activity-image-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx}.activity-image-preview{position:relative;height:170rpx;background:#eaf0ec;border-radius:10rpx;overflow:hidden}.activity-image-preview image{height:100%;width:100%}.activity-image-preview>text{position:absolute;top:6rpx;left:6rpx;background:#18583ede;color:white;font-size:20rpx;padding:3rpx 7rpx;border-radius:5rpx}.activity-image-add{height:170rpx;width:100%;border:1rpx dashed #bfd2c6;background:#f4f9f6;color:#286448;border-radius:10rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24rpx}.activity-image-add>text:first-child{font-size:40rpx}.activity-image-actions{display:flex;flex-wrap:wrap;justify-content:space-between;margin-top:8rpx;gap:2rpx}.activity-image-actions button{padding:10rpx 2rpx;background:transparent;font-size:22rpx;color:#286448;line-height:1.5}.image-rules{display:block;margin-top:18rpx;line-height:1.7}.image-warning{display:block;color:#b14e32;font-size:24rpx;margin-top:12rpx}
+.review-question{display:flex;gap:12rpx;align-items:center;font-size:26rpx;margin-top:12rpx;overflow-wrap:anywhere}.question-required button{font-size:28rpx;min-width:112rpx;border:2rpx solid #c9d7d0;background:white;color:#52675b;padding:10rpx 18rpx;line-height:1.5}.question-required button.selected{color:#12643f;border-color:#16865c;background:#e8f5ee;font-weight:600}
 </style>

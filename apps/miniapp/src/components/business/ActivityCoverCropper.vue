@@ -14,10 +14,22 @@ async function open(path: string): Promise<string | null> {
   const info = await new Promise<{ width: number; height: number; path: string }>((resolve, reject) => uni.getImageInfo({ src: path, success: resolve, fail: () => reject(new Error('无法读取图片尺寸，请重新选择')) }))
   if (request !== sequence) return null
   width.value = info.width; height.value = info.height; src.value = info.path
-  frameWidth.value = Math.min(uni.getSystemInfoSync().windowWidth - 32, 520)
+  const viewportWidth = uni.getWindowInfo?.().windowWidth ?? uni.getSystemInfoSync().windowWidth
+  frameWidth.value = Number.isFinite(viewportWidth) && viewportWidth > 64 ? Math.min(viewportWidth - 64, 520) : 300
   zoom.value = 1; const initial = cropGeometry(width.value, height.value, frameWidth.value)
   x.value = initial.x; y.value = initial.y; error.value = ''; visible.value = true
-  return new Promise(resolve => { resolveCrop = resolve })
+  const result = new Promise<string | null>(resolve => { resolveCrop = resolve })
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 64) {
+    await nextTick()
+    if (request !== sequence) return result
+    uni.createSelectorQuery().in(instance?.proxy).select('.crop-overlay').boundingClientRect(rect => {
+      if (request !== sequence || !rect || Array.isArray(rect) || typeof rect.width !== 'number' || rect.width <= 64) return
+      frameWidth.value = Math.min(rect.width - 64, 520)
+      const centered = cropGeometry(width.value, height.value, frameWidth.value)
+      x.value = centered.x; y.value = centered.y
+    }).exec()
+  }
+  return result
 }
 type Touch = { clientX: number; clientY: number }
 let gesture: { x: number; y: number; left: number; top: number; zoom: number; distance: number } | null = null
@@ -67,19 +79,24 @@ defineExpose({ open, cancel: () => finish(null) })
       固定 5:4 · 拖动图片、双指或滑块缩放
     </text>
     <view
-      class="crop-frame"
-      :style="{ width: frameWidth + 'px', height: frameWidth * .8 + 'px' }"
-      @touchstart="start"
-      @touchmove.stop.prevent="move"
-      @touchend="gesture = null"
+      class="crop-stage"
+      :style="{ width: frameWidth + 32 + 'px', height: frameWidth * .8 + 80 + 'px' }"
     >
-      <image
-        :src="src"
-        :style="imageStyle"
-        class="crop-source"
-        mode="scaleToFill"
-      />
-      <view class="crop-grid" />
+      <view
+        class="crop-frame"
+        :style="{ width: frameWidth + 'px', height: frameWidth * .8 + 'px' }"
+        @touchstart="start"
+        @touchmove.stop.prevent="move"
+        @touchend="gesture = null"
+      >
+        <image
+          :src="src"
+          :style="imageStyle"
+          class="crop-source"
+          mode="scaleToFill"
+        />
+        <view class="crop-grid" /><view class="crop-corners" />
+      </view>
     </view>
     <slider
       class="crop-slider"
@@ -122,5 +139,5 @@ defineExpose({ open, cancel: () => finish(null) })
   </view>
 </template>
 <style scoped>
-.crop-overlay{position:fixed;inset:0;z-index:1000;background:#f5f8f7;display:flex;flex-direction:column;align-items:center;padding:calc(30rpx + env(safe-area-inset-top)) 24rpx calc(30rpx + env(safe-area-inset-bottom));overflow:auto}.crop-heading{font-size:34rpx;font-weight:600;margin:20rpx 0}.crop-help{font-size:25rpx;color:#647b6d;margin-bottom:40rpx}.crop-frame{position:relative;overflow:hidden;background:#172e22;flex-shrink:0}.crop-source{position:absolute;max-width:none}.crop-grid{position:absolute;inset:0;border:2rpx solid white;pointer-events:none;background:linear-gradient(90deg,transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%),linear-gradient(transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%)}.crop-slider{width:90%;margin-top:35rpx}.crop-actions{display:flex;gap:20rpx;width:100%;margin-top:auto;padding-top:30rpx}.crop-action{flex:1}.crop-error{color:#b14e32;font-size:26rpx}.crop-canvas{position:absolute;left:-10000px;top:0;width:1250px;height:1000px}
+.crop-overlay{position:fixed;inset:0;z-index:1000;background:#f5f8f7;display:flex;flex-direction:column;align-items:center;padding:calc(30rpx + env(safe-area-inset-top)) 24rpx calc(30rpx + env(safe-area-inset-bottom));overflow:auto}.crop-heading{font-size:34rpx;font-weight:600;margin:20rpx 0}.crop-help{font-size:25rpx;color:#647b6d;margin-bottom:40rpx}.crop-stage{position:relative;overflow:hidden;box-sizing:border-box;padding:40px 16px;background:#172e22;flex-shrink:0}.crop-frame{position:relative;overflow:visible;background:#172e22;flex-shrink:0}.crop-source{position:absolute;max-width:none}.crop-grid{position:absolute;inset:0;box-shadow:0 0 0 2000px #0009;border:4rpx solid white;box-sizing:border-box;pointer-events:none;background:linear-gradient(90deg,transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%),linear-gradient(transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%)}.crop-corners{position:absolute;inset:-4rpx;border:6rpx solid #6ff0ac;pointer-events:none;box-sizing:border-box}.crop-slider{width:90%;margin-top:35rpx}.crop-actions{display:flex;gap:20rpx;width:100%;margin-top:auto;padding-top:30rpx}.crop-action{flex:1}.crop-error{color:#b14e32;font-size:26rpx}.crop-canvas{position:absolute;left:-10000px;top:0;width:1250px;height:1000px}
 </style>
