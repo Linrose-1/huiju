@@ -321,7 +321,7 @@ watch(() => [session.token, session.epoch, session.member?.inviteCode], (value, 
 .share-page { padding: 24rpx 30rpx calc(40rpx + env(safe-area-inset-bottom)); }
 .activity-name { display: block; margin: 20rpx 0 30rpx; font-size: 38rpx; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
 .share-options, .copy-actions { display: flex; gap: 20rpx; align-items: center; }
-.share-options button { flex: 1; margin: 0; padding: 0 10rpx; font-size: 28rpx; }
+.share-options button { display: flex; flex: 1; align-items: center; justify-content: center; min-width: 0; min-height: 88rpx; margin: 0; padding: 20rpx 16rpx; font-size: 28rpx; line-height: 1.5; }
 .hint { display: block; margin: 18rpx 0; font-size: 26rpx; line-height: 1.6; color: #68776f; }
 .copy-panel { margin: 32rpx 0; padding: 28rpx; border-radius: 20rpx; background: #fff; }
 .copy-header { display: flex; justify-content: space-between; font-size: 32rpx; font-weight: 600; }

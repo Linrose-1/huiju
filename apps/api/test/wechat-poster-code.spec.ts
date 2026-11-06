@@ -1,5 +1,6 @@
 import 'reflect-metadata'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Logger } from '@nestjs/common'
 import { WechatAdapter } from '../src/flow/wechat.js'
 
 const scene = 'p1234567890abcdef12345678'
@@ -10,11 +11,12 @@ const picture = (body = png, type = 'image/png') => new Response(body, { headers
 
 describe('activity mini-program code adapter', () => {
   beforeEach(() => {
+    vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     vi.stubEnv('WECHAT_MINIAPP_APP_ID', 'test-app')
     vi.stubEnv('WECHAT_MINIAPP_SECRET', 'test-secret')
     vi.stubEnv('WECHAT_CODE_ENV_VERSION', '')
   })
-  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers() })
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.useRealTimers(); vi.restoreAllMocks() })
 
   it('requests the fixed public detail destination, release path check and validated PNG', async () => {
     const network = vi.fn().mockResolvedValueOnce(token()).mockResolvedValueOnce(picture())
@@ -117,5 +119,83 @@ describe('activity mini-program code adapter', () => {
     await adapter.activityCode(scene)
     await expect(adapter.phone('test-code')).rejects.toThrow('手机号授权无效')
     expect(network).toHaveBeenCalledTimes(3)
+  })
+
+  it.each([
+    ['token', () => Response.json({ errcode: 40164, errmsg: 'secret test-token private address' }), { reason: 'upstream_error', httpStatus: 200, upstreamCode: 40164 }],
+    ['code', () => Response.json({ errcode: 41030, errmsg: `secret test-token ${scene}` }), { reason: 'upstream_error', httpStatus: 200, upstreamCode: 41030 }],
+    ['token', () => new Response('secret', { status: 502 }), { reason: 'http', httpStatus: 502 }],
+    ['code', () => new Response('secret', { status: 503 }), { reason: 'http', httpStatus: 503 }],
+    ['token', () => Response.json({ access_token: 'secret', expires_in: 'invalid' }), { reason: 'invalid_response', httpStatus: 200 }],
+    ['code', () => Response.json({ errcode: 'secret', errmsg: 'private' }), { reason: 'invalid_response', httpStatus: 200 }],
+    ['token', () => new Response('secret malformed JSON'), { reason: 'invalid_json', httpStatus: 200 }],
+    ['code', () => new Response('secret malformed JSON'), { reason: 'invalid_json', httpStatus: 200 }],
+    ['code', () => picture(Buffer.from('secret'), 'image/png'), { reason: 'invalid_image', httpStatus: 200 }],
+    ['code', () => new Response(null, { headers: { 'content-type': 'image/png' } }), { reason: 'empty_response', httpStatus: 200 }],
+    ['code', () => picture(Buffer.alloc(1048577)), { reason: 'oversized', httpStatus: 200 }],
+  ])('logs only safe diagnostic fields for %s response failures', async (stage, response, details) => {
+    const network = vi.fn()
+    if (stage === 'code') network.mockResolvedValueOnce(token())
+    network.mockResolvedValueOnce(response())
+    vi.stubGlobal('fetch', network)
+    const error = await new WechatAdapter().activityCode(scene).catch(value => value)
+    expect(error.getResponse()).toEqual({ code: 'WECHAT_CODE_UNAVAILABLE', message: '活动小程序码暂不可用，请稍后重试' })
+    expect(Logger.prototype.warn).toHaveBeenCalledExactlyOnceWith({ stage, ...details, env_version: 'release' })
+    expect(JSON.stringify(vi.mocked(Logger.prototype.warn).mock.calls)).not.toMatch(/secret|test-token|private|https|p1234567890/)
+    expect(network).toHaveBeenCalledTimes(stage === 'token' ? 1 : 2)
+  })
+
+  it.each(['token', 'code'])('bounds and cancels oversized JSON in the %s stage', async stage => {
+    const cancelled = vi.fn()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode('x'.repeat(16385))) },
+      cancel: cancelled
+    })
+    const network = vi.fn()
+    if (stage === 'code') network.mockResolvedValueOnce(token())
+    network.mockResolvedValueOnce(new Response(body, { headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', network)
+    await expect(new WechatAdapter().activityCode(scene)).rejects.toThrow('活动小程序码暂不可用')
+    expect(cancelled).toHaveBeenCalledTimes(1)
+    expect(Logger.prototype.warn).toHaveBeenCalledExactlyOnceWith({ stage, reason: 'oversized', httpStatus: 200, env_version: 'release' })
+    expect(network).toHaveBeenCalledTimes(stage === 'token' ? 1 : 2)
+  })
+
+  it.each([
+    ['token', 'TimeoutError', 'timeout'], ['code', 'AbortError', 'timeout'],
+    ['token', 'TypeError', 'network'], ['code', 'TypeError', 'network']
+  ])('classifies %s %s without logging exception contents or retrying', async (stage, name, reason) => {
+    const network = vi.fn()
+    if (stage === 'code') network.mockResolvedValueOnce(token())
+    network.mockRejectedValueOnce(Object.assign(new Error('secret URL https://private.test?access_token=test-token'), { name }))
+    vi.stubGlobal('fetch', network)
+    await expect(new WechatAdapter().activityCode(scene)).rejects.toThrow('活动小程序码暂不可用')
+    expect(Logger.prototype.warn).toHaveBeenCalledExactlyOnceWith({ stage, reason, env_version: 'release' })
+    expect(network).toHaveBeenCalledTimes(stage === 'token' ? 1 : 2)
+  })
+
+  it('logs invalid configuration without disclosing environment contents or making requests', async () => {
+    const network = vi.fn(); vi.stubGlobal('fetch', network)
+    vi.stubEnv('WECHAT_CODE_ENV_VERSION', 'private-secret-value')
+    await expect(new WechatAdapter().activityCode(scene)).rejects.toThrow('活动小程序码暂不可用')
+    expect(Logger.prototype.warn).toHaveBeenLastCalledWith({ stage: 'config', reason: 'invalid_environment', env_version: 'invalid' })
+    vi.stubEnv('WECHAT_CODE_ENV_VERSION', 'trial'); vi.stubEnv('WECHAT_MINIAPP_SECRET', '')
+    await expect(new WechatAdapter().activityCode(scene)).rejects.toThrow('活动小程序码暂不可用')
+    expect(Logger.prototype.warn).toHaveBeenLastCalledWith({ stage: 'config', reason: 'missing_config', env_version: 'trial' })
+    expect(network).not.toHaveBeenCalled()
+  })
+
+  it('retains token diagnostics when a phone call started the shared request', async () => {
+    let finish!: (response: Response) => void
+    const network = vi.fn(() => new Promise<Response>(resolve => { finish = resolve }))
+    vi.stubGlobal('fetch', network)
+    const adapter = new WechatAdapter()
+    const phone = adapter.phone('test-code').catch(error => error)
+    const code = adapter.activityCode(scene).catch(error => error)
+    finish(Response.json({ errcode: 40013, errmsg: 'secret upstream' }))
+    expect((await phone).getResponse()).toEqual({ code: 'WECHAT_AUTH_FAILED', message: '微信授权已失效，请重新授权' })
+    expect((await code).getResponse()).toMatchObject({ code: 'WECHAT_CODE_UNAVAILABLE' })
+    expect(Logger.prototype.warn).toHaveBeenCalledExactlyOnceWith({ stage: 'token', reason: 'upstream_error', httpStatus: 200, upstreamCode: 40013, env_version: 'release' })
+    expect(network).toHaveBeenCalledTimes(1)
   })
 })
