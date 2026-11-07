@@ -2,6 +2,17 @@
 
 ## 接续入口（当前有效，先读此节）
 
+### 2026-11-07 体验版活动海报验收
+
+- **已通过（用户真机确认）**：在体验版生成活动海报，手机扫描新海报上的小程序码，成功进入对应活动详情。
+- **首次邀请绑定：待验。** 用尚无邀请关系的体验账号扫描分享者的新海报，核对首次邀请来源是否绑定到该分享者。
+
+- 用户要求将请求地址切回本地。仅修改忽略的 `apps/miniapp/.env.development.local` 至 `http://127.0.0.1:3012/api/v1`，已重启开发编译并核对 `dist/dev/mp-weixin/services/api/environment.js`、LOCAL_TEST=false。微信工具当前打开 `apps/miniapp/dist/dev/mp-weixin`；正式production配置及build仍为服务器地址，勿将dev目录作为体验版上传包。
+- 普通API使用 `.codex-runtime-logs/stable-api-20261004.mjs` 绑定127.0.0.1:3012，真实本机huiju库20迁移/48表，无新增迁移。观察时API PID47488，miniapp开发编译持续监听；端口/PID为易变事实，重启前重新核对所有权。启动API时仅进程环境指定 `WECHAT_CODE_ENV_VERSION=trial`，未改根.env或服务器配置。
+- 正常本机会话在同一已有活动取码：release返回stage=code/reason=upstream_error/httpStatus=200/upstreamCode=41030；trial（按现有实现check_path=false）成功取得真实微信码并显示完整Canvas海报及保存/分享按钮。日志分别为忽略目录 `poster-local-api-20261107.log`、`poster-local-api-trial-20261107.log`。本地码关联本机数据库，未验证手机扫码、图片转发或线上故障恢复；不把本地短码当作线上可用码。
+- 手机扫本地海报码曾提示“活动链接不完整”。已重新构建上传目录 `apps/miniapp/dist/build/mp-weixin`，产物请求服务器、LOCAL_TEST=false，含scene解析及分享页。17项入口与活动码测试通过。
+- 据用户转交的服务器回执，11月7日20:25:45（北京时间）服务已按trial配置重启，外网HTTPS健康检查200。此前4次release取码均收到微信业务码41030。正式发布后按发布安排切回release，再生成正式版海报复核。
+
 ### 2026-11-07 海报按钮及微信取码诊断（授权仓库同步）
 
 - 分享页按钮恢复88rpx最小高度、上下间距和居中；最新正式构建及微信开发者工具实际页面已核对。微信取码故障仍待闭环：补充安全服务端诊断，保留stage/reason/httpStatus/数值upstreamCode/env_version，不输出凭据或原始响应。
