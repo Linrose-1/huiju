@@ -9,6 +9,8 @@ import { activities, activityOperations } from '../src/database/schema/activitie
 import { notifications } from '../src/database/schema/notifications.js'
 import { registrations } from '../src/database/schema/registrations.js'
 import { ActivityService } from '../src/flow/activity.js'
+import { ActivityPosterService } from '../src/flow/poster-service.js'
+import { PosterCopyProvider } from '../src/ai/poster-provider.js'
 import { FlowDatabase } from '../src/flow/common.js'
 import { IdentityService } from '../src/flow/identity.js'
 import { OrganizerService } from '../src/flow/organizer.js'
@@ -38,10 +40,12 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
           override async exchange(code: string) { return { appId: 'huiju-organizer-rollback-test', openId: code, unionId: null } }
           override async phone() { return '13800000000' }
         }
-        const identity = new IdentityService(database, new FixtureWechat())
+        const wechat = new FixtureWechat()
+        const identity = new IdentityService(database, wechat)
         const login = (code: string, inviteCode?: string) => identity.login(code, inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
         const organizer = new OrganizerService(database, identity)
         const publicActivities = new ActivityService(database, identity)
+        const posters = new ActivityPosterService(database, identity, new PosterCopyProvider(), wechat)
         const owner = await login(randomUUID())
         const attendee = await login(randomUUID())
         const outsider = await login(randomUUID())
@@ -58,12 +62,14 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
         }
         await expect(organizer.create(input, ownerHeader)).rejects.toThrow('绑定手机号')
         // Explicit isolated test fixtures; no file upload, real phone authorization, or production identity changes.
-        for (const session of [owner, attendee]) {
-          await tx.update(members).set({ boundPhone: '13800000000', displayName: '回滚测试会员', nameSetByUser: true, avatarUrl: '/fixture.png', avatarSetByUser: true }).where(eq(members.id, session.member.id))
+        for (const [session, displayName] of [[owner, '回滚发起人'], [attendee, '回滚参与者']] as const) {
+          await tx.update(members).set({ boundPhone: '13800000000', displayName, nameSetByUser: true, avatarUrl: '/fixture.png', avatarSetByUser: true }).where(eq(members.id, session.member.id))
         }
-        const draft = await organizer.create(input, ownerHeader)
+        const units = { hostOrganization: '回滚主办', organizingOrganization: '回滚承办', sponsorOrganization: '回滚赞助' }
+        const draft = await organizer.create({ ...input, ...units }, ownerHeader)
         activityId = draft.id
         expect(draft.lifecycle).toBe('draft')
+        expect(draft).toMatchObject(units)
         await expect(publicActivities.detail(activityId)).rejects.toThrow('活动不存在')
         expect((await publicActivities.list()).items.some(item => item.id === activityId)).toBe(false)
         expect((await organizer.list(ownerHeader)).items.some(item => item.id === activityId)).toBe(true)
@@ -77,17 +83,26 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
         expect((await tx.select().from(activityOperations).where(eq(activityOperations.activityId, activityId))).filter(row => row.action === 'publish')).toHaveLength(1)
         expect((await publicActivities.list()).items.some(item => item.id === activityId)).toBe(true)
         expect(await publicActivities.detail(activityId)).not.toHaveProperty('consultationContact')
+        expect(await publicActivities.detail(activityId)).toMatchObject(units)
+        expect(await posters.read(activityId, outsiderHeader)).toMatchObject({ ...units, organizerName: '回滚发起人', canEdit: false })
         const registration = await publicActivities.write(activityId, attendeeHeader, 'register', {
           contactPhone: '13900000000', answers: [{ questionId: draft.questions[0].id, value: '私密测试答案' }]
         })
         const publicRoster = await publicActivities.roster(activityId)
-        expect(Object.keys(publicRoster.items[0]).sort()).toEqual(['avatarUrl', 'displayName'])
+        expect(Object.keys(publicRoster.items[0]).sort()).toEqual(['avatarUrl', 'displayName', 'memberId', 'publicAnswers'])
+        expect(publicRoster.items[0].memberId).toBe(attendee.member.id)
+        expect(publicRoster.items[0].publicAnswers).toEqual([])
         expect(JSON.stringify(publicRoster)).not.toContain('13900000000')
         expect(JSON.stringify(publicRoster)).not.toContain('私密测试答案')
         await expect(organizer.roster(activityId, attendeeHeader)).rejects.toThrow('仅活动发起人')
         expect((await organizer.roster(activityId, ownerHeader)).items[0]).toMatchObject({ id: registration.id, contactPhone: '13900000000', answers: registration.answers })
         await expect(organizer.edit(activityId, { ...edit, questions: [] }, ownerHeader)).rejects.toThrow('已有报名记录')
         await expect(organizer.edit(activityId, { ...edit, feeAmountCents: 200 }, ownerHeader)).rejects.toThrow('已有报名记录')
+        // The old client's input omits host and sponsor; only the explicitly cleared credit changes.
+        await expect(organizer.edit(activityId, { ...edit, organizingOrganization: null }, outsiderHeader)).rejects.toThrow('仅活动发起人')
+        const expectedUnits = { ...units, organizingOrganization: null }
+        expect(await organizer.edit(activityId, { ...edit, organizingOrganization: null }, ownerHeader)).toMatchObject(expectedUnits)
+        expect(await posters.read(activityId, attendeeHeader)).toMatchObject({ ...expectedUnits, organizerName: '回滚发起人', canEdit: false })
         // Cancelling the only registration never unlocks the original questions or fee.
         await publicActivities.write(activityId, attendeeHeader, 'cancel')
         await expect(organizer.edit(activityId, { ...edit, feeType: 'free', feeAmountCents: null }, ownerHeader)).rejects.toThrow('已有报名记录')

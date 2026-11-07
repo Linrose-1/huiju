@@ -12116,6 +12116,18 @@
       "ActivityDto": {
         "type": "object",
         "properties": {
+          "hostOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizingOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "sponsorOrganization": {
+            "type": "string",
+            "nullable": true
+          },
           "organizer": {
             "nullable": true,
             "type": "object",
@@ -12233,6 +12245,9 @@
           }
         },
         "required": [
+          "hostOrganization",
+          "organizingOrganization",
+          "sponsorOrganization",
           "organizer",
           "id",
           "title",
@@ -12658,6 +12673,24 @@
       "ActivityWriteInput": {
         "type": "object",
         "properties": {
+          "hostOrganization": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "主办单位"
+          },
+          "organizingOrganization": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "承办单位"
+          },
+          "sponsorOrganization": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "赞助单位"
+          },
           "title": {
             "type": "string"
           },
@@ -12760,6 +12793,18 @@
       "ManagedActivityDto": {
         "type": "object",
         "properties": {
+          "hostOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizingOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "sponsorOrganization": {
+            "type": "string",
+            "nullable": true
+          },
           "organizer": {
             "nullable": true,
             "type": "object",
@@ -12899,6 +12944,9 @@
           }
         },
         "required": [
+          "hostOrganization",
+          "organizingOrganization",
+          "sponsorOrganization",
           "organizer",
           "id",
           "title",
@@ -13333,6 +13381,23 @@
       "ActivityPosterDto": {
         "type": "object",
         "properties": {
+          "organizerName": {
+            "type": "string",
+            "nullable": true,
+            "description": "活动发起人的公开昵称"
+          },
+          "hostOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizingOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "sponsorOrganization": {
+            "type": "string",
+            "nullable": true
+          },
           "activityId": {
             "type": "string"
           },
@@ -13392,6 +13457,10 @@
           }
         },
         "required": [
+          "organizerName",
+          "hostOrganization",
+          "organizingOrganization",
+          "sponsorOrganization",
           "activityId",
           "title",
           "coverUrl",

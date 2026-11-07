@@ -248,3 +248,7 @@
 ### 活动海报接口
 
 新增活动海报读、发起人AI候选/确认、本人专属码、匿名scene解析五个接口，见[产品及接口合同](../product/活动海报与分享.md)。`feeAmount` 单位分；基本信息直接读活动事实。公开解析仅返回activityId/inviteCode；确认和AI生成校验本人及完整资料，普通已识别游客可分享。OpenAPI及客户端已同步。
+
+活动创建、编辑接口接受选填字段 `hostOrganization`（主办）、`organizingOrganization`（承办）、`sponsorOrganization`（赞助），每项最多60个字符。编辑时省略保留原值，显式传 null 或空白字符串清空。活动开始前，即使已有报名，发起人仍可修改这三项。活动管理详情和公开详情返回单位字符串或 null；已下架活动的公开详情隐藏署名。
+
+海报读取接口返回上述三项及 `organizerName`（活动发起人当前公开昵称）。署名随活动和会员资料读取，独立于分享者、首次邀请来源及已确认的AI文案。启用前须先应用 `0020_activity_poster_organizations`，为 activities 表新增三个可空列，旧活动默认无单位署名。

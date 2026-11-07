@@ -187,6 +187,9 @@ export class PublicMemberDto {
 }
 
 export class ActivityDto {
+  @ApiProperty({ type: String, nullable: true }) hostOrganization!: string | null
+  @ApiProperty({ type: String, nullable: true }) organizingOrganization!: string | null
+  @ApiProperty({ type: String, nullable: true }) sponsorOrganization!: string | null
   @ApiProperty({
     type: PublicMemberDto,
     nullable: true

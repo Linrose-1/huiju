@@ -248,6 +248,52 @@ test('moving between basic information and registration preserves unsaved input 
   h.unload()
 })
 
+test('optional poster organizations survive draft save, reopening and confirmed publication', async () => {
+  const draft = harness()
+  await draft.page.load()
+  draft.fill()
+  Object.assign(draft.page.form, { hostOrganization: '  主办方  ', organizingOrganization: '承办方', sponsorOrganization: '赞助方' })
+  await draft.page.submit(false)
+  const saved = draft.creates[0]
+  assert.equal(saved.hostOrganization, '主办方')
+  assert.equal(saved.organizingOrganization, '承办方')
+  assert.equal(saved.sponsorOrganization, '赞助方')
+  draft.unload()
+
+  const editor = harness({ record: activity({ ...saved, registrationDeadline: saved.startsAt }) })
+  editor.page.id.value = 'activity-a'
+  await editor.page.load()
+  assert.equal(editor.page.form.sponsorOrganization, '赞助方')
+  editor.page.form.sponsorOrganization = '  '
+  editor.page.changeStep(1)
+  editor.page.changeStep(2)
+  editor.page.reviewed.value = true
+  await editor.page.confirmPublish()
+  const update = editor.updates[0][1]
+  assert.equal(update.hostOrganization, '主办方')
+  assert.equal(update.organizingOrganization, '承办方')
+  assert.equal(update.sponsorOrganization, null)
+  assert.deepEqual(editor.publishes, ['activity-a'])
+  editor.unload()
+})
+
+test('old published activity with registrations can add a sixty-character organization name', async () => {
+  const h = harness({ record: activity({ lifecycle: 'published', hasRegistrationEver: true }) })
+  h.page.id.value = 'activity-a'
+  await h.page.load()
+  assert.equal(h.page.form.hostOrganization, '')
+  assert.equal(h.page.payload().hostOrganization, null)
+  h.page.form.organizingOrganization = '𠮷'.repeat(61)
+  await h.page.submit(false)
+  assert.match(h.page.submitError.value, /承办单位最多 60 字/)
+  assert.equal(h.updates.length, 0)
+  h.page.form.organizingOrganization = '𠮷'.repeat(60)
+  await h.page.submit(false)
+  assert.equal(h.updates[0][1].organizingOrganization, '𠮷'.repeat(60))
+  assert.equal(h.updates[0][1].sponsorOrganization, null)
+  h.unload()
+})
+
 test('date sheet commits only on confirmation and can restore automatic deadline', async () => {
   const h = harness()
   await h.page.load()

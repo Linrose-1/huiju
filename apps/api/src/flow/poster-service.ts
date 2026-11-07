@@ -58,8 +58,11 @@ export class ActivityPosterService {
   }
   private async present(activity: Activity, memberId: string, db: Reader): Promise<ActivityPosterDto> {
     const [copy] = await db.select().from(activityPosterCopies).where(eq(activityPosterCopies.activityId, activity.id))
+    const [organizer] = await db.select({ displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     const sourceHash = posterSourceHash(activity), valid = copy?.sourceHash === sourceHash
     return { activityId: activity.id, title: activity.title, coverUrl: activity.coverUrl,
+      organizerName: organizer?.displayName ?? null, hostOrganization: activity.hostOrganization ?? null,
+      organizingOrganization: activity.organizingOrganization ?? null, sponsorOrganization: activity.sponsorOrganization ?? null,
       startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), location: activity.location,
       feeType: activity.feeType, feeAmount: activity.feeAmountCents, sourceHash, version: copy?.version ?? 0,
       subtitle: valid ? copy.subtitle : '', highlights: valid ? copy.highlights : [],

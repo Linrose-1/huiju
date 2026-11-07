@@ -203,7 +203,8 @@ test('poster creation cleans temporary code and a dirty edit blocks exporting th
 })
 
 test('export rechecks both activity source and confirmed-copy version before sharing or saving', async t => {
-  for (const patch of [{ sourceHash: 'hash-new' }, { version: 2 }]) {
+  for (const patch of [{ sourceHash: 'hash-new' }, { version: 2 }, { organizerName: '新公开昵称' },
+    { hostOrganization: '新增主办' }, { organizingOrganization: '新增承办' }, { sponsorOrganization: '新增赞助' }]) {
     const h = harness(t); await h.load(); await h.makeImage()
     const pending = h.page.exportImage(true)
     assert.deepEqual(h.shares, [])

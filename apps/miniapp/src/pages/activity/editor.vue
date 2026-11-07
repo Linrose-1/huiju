@@ -37,7 +37,13 @@ const descriptionDelta = ref<ActivityRichValue['delta']>(null)
 const richValid = ref(true), locationError = ref(''), selectingLocation = ref(false)
 const registrationNotice = ref('')
 const locationCoordinates = ref<{ latitude: number; longitude: number } | null>(null)
-const form = reactive({ title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+const organizationFields = [
+  { key: 'hostOrganization', label: '主办单位' },
+  { key: 'organizingOrganization', label: '承办单位' },
+  { key: 'sponsorOrganization', label: '赞助单位' },
+] as const
+const form = reactive({ title: '', description: '', location: '', consultationContact: '', hostOrganization: '', organizingOrganization: '', sponsorOrganization: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+const previewOrganizations = computed(() => organizationFields.filter(field => form[field.key].trim()))
 watch(() => form.location, () => { locationCoordinates.value = null }, { flush: 'sync' })
 const customDeadline = ref(false), questions = ref<DraftQuestion[]>([])
 let sequence = 0, initialized = false, formOwner = ''
@@ -125,6 +131,7 @@ function reset() {
   dragOffset.value = 0
   capacityLimited.value = false
   Object.assign(form, { title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+  for (const { key } of organizationFields) form[key] = ''
   questions.value = []
   customDeadline.value = false
   source.value = null
@@ -178,6 +185,7 @@ async function load() {
         extraImages.value = Array.from({ length: 8 }, (_, index) => images[index + 1] || '')
         const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
+        for (const { key } of organizationFields) form[key] = activity[key] ?? ''
         locationCoordinates.value = activity.locationLatitude != null && activity.locationLongitude != null ? { latitude: activity.locationLatitude, longitude: activity.locationLongitude } : null
         customDeadline.value = activity.registrationDeadline !== activity.startsAt
       }
@@ -220,6 +228,9 @@ function payload(): ActivityWriteInput {
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
   if (!richValid.value || form.description.length > 10000) throw new Error('活动介绍格式无效或超过 10000 字，请调整后保存')
   if (registrationNotice.value.length > 500) throw new Error('报名须知最多 500 字')
+  for (const { key, label } of organizationFields) {
+    if ([...form[key].trim()].length > 60) throw new Error(label + '最多 60 字')
+  }
   if (!form.feeType) throw new Error('请选择免费活动或收费活动')
   const startsAt = timestamp(form.startDate, form.startTime, source.value?.startsAt), endsAt = timestamp(form.endDate, form.endTime, source.value?.endsAt)
   if (!startsAt || !endsAt) throw new Error('请选择完整的开始与结束日期、时间')
@@ -241,7 +252,11 @@ function payload(): ActivityWriteInput {
     if (options && (options.length < 1 || options.length > 100 || options.some(option => option.length > 200) || new Set(options).size !== options.length)) throw new Error(`第 ${index + 1} 题需填写 1–100 个不同选项，每行一个，每项不超过 200 字`)
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options, publicToParticipants: !!question.publicToParticipants && !privateContactQuestion(prompt) }
   })
-  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(), startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null, coverSourceUrl: coverUrl.value ? coverSourceUrl.value || null : null, imageUrls: imageSlotsPayload(imageSlots.value) }
+  return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(),
+    hostOrganization: form.hostOrganization.trim() || null,
+    organizingOrganization: form.organizingOrganization.trim() || null,
+    sponsorOrganization: form.sponsorOrganization.trim() || null,
+    startsAt, endsAt, registrationDeadline, capacity, feeType: form.feeType as 'free' | 'paid', feeAmountCents, questions: items, coverUrl: coverUrl.value || null, coverSourceUrl: coverUrl.value ? coverSourceUrl.value || null : null, imageUrls: imageSlotsPayload(imageSlots.value) }
 }
 function updateDescription(value: ActivityRichValue) {
   if (busy.value || !editable.value || started.value) return
@@ -851,6 +866,24 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
             >
           </view><view class="field-note">用于参与者咨询活动相关问题，仅对报名用户可见</view>
         </view>
+        <view class="form-card">
+          <view class="card-heading"><text>海报署名</text><text class="helper">选填</text></view>
+          <view
+            v-for="field in organizationFields"
+            :key="field.key"
+            class="field icon-field organization-field"
+          >
+            <text>{{ field.label }}</text><input
+              v-model="form[field.key]"
+              :aria-label="field.label"
+              placeholder="填写单位名称"
+              :maxlength="120"
+              :disabled="busy || !editable || started"
+              :cursor-spacing="130"
+            >
+          </view>
+          <view class="field-note">已填写的单位将显示在活动海报上，每项最多 60 字。</view>
+        </view>
       </view>
       <view
         v-show="step === 1"
@@ -1148,6 +1181,13 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
                 color="#638375"
               />
             </view><text>发起人</text><text>{{ session.member?.displayName || '当前会员' }}</text>
+          </view>
+          <view
+            v-for="field in previewOrganizations"
+            :key="field.key"
+            class="preview-meta"
+          >
+            <text>{{ field.label }}：{{ form[field.key].trim() }}</text>
           </view>
         </view>
         <view class="review-card">
@@ -1551,4 +1591,5 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
 .question-presets{display:flex;flex-wrap:wrap;gap:12rpx;margin:12rpx 0 24rpx}.preset-button,.phone-included{font-size:24rpx;line-height:36rpx;padding:12rpx 18rpx;border-radius:10rpx;background:#edf7f1;color:#1d654e}.phone-included{background:#f1f3f4;color:#738379}.question-history{border:1rpx solid #dbe8e0;border-radius:12rpx;margin:12rpx 0 20rpx;background:#f8fcfa}.history-heading{display:flex;align-items:center;justify-content:space-between;padding:8rpx 16rpx;font-size:24rpx;color:#657a70}.history-scroll{max-height:280rpx;height:280rpx}.history-item{display:flex;flex-wrap:wrap;align-items:center;gap:12rpx;width:100%;padding:16rpx;text-align:left;background:transparent;border-radius:0;border-top:1rpx solid #e4ede7;font-size:26rpx;line-height:1.5}.history-item>text:first-child{flex:1;min-width:0;overflow-wrap:anywhere}.history-type{font-size:22rpx;color:#738379}.history-options{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:22rpx;color:#738379}.history-action{background:transparent;color:#1d654e;font-size:24rpx;padding:10rpx 16rpx;line-height:36rpx}.history-state{display:block;padding:18rpx;font-size:24rpx;line-height:1.5;color:#738379}
 .activity-image-slots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12rpx}.activity-image-preview{position:relative;height:170rpx;background:#eaf0ec;border-radius:10rpx;overflow:hidden}.activity-image-preview image{height:100%;width:100%}.activity-image-preview>text{position:absolute;top:6rpx;left:6rpx;background:#18583ede;color:white;font-size:20rpx;padding:3rpx 7rpx;border-radius:5rpx}.activity-image-add{height:170rpx;width:100%;border:1rpx dashed #bfd2c6;background:#f4f9f6;color:#286448;border-radius:10rpx;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:24rpx}.activity-image-add>text:first-child{font-size:40rpx}.activity-image-actions{display:flex;flex-wrap:wrap;justify-content:space-between;margin-top:8rpx;gap:2rpx}.activity-image-actions button{padding:10rpx 2rpx;background:transparent;font-size:22rpx;color:#286448;line-height:1.5}.image-rules{display:block;margin-top:18rpx;line-height:1.7}.image-warning{display:block;color:#b14e32;font-size:24rpx;margin-top:12rpx}
 .review-question{display:flex;gap:12rpx;align-items:center;font-size:26rpx;margin-top:12rpx;overflow-wrap:anywhere}.question-required button{font-size:28rpx;min-width:112rpx;border:2rpx solid #c9d7d0;background:white;color:#52675b;padding:10rpx 18rpx;line-height:1.5}.question-required button.selected{color:#12643f;border-color:#16865c;background:#e8f5ee;font-weight:600}
+.organization-field + .organization-field{margin-top:12rpx}
 </style>

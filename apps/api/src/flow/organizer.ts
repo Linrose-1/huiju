@@ -56,6 +56,9 @@ export function activityValues(input: ActivityWriteInput) {
     }
   }
   return {
+    hostOrganization: input.hostOrganization?.trim() || null,
+    organizingOrganization: input.organizingOrganization?.trim() || null,
+    sponsorOrganization: input.sponsorOrganization?.trim() || null,
     title: input.title.trim(), ...description, registrationNotice: activityRegistrationNotice(input.registrationNotice), ...activityImageValues(input),
     location: input.location.trim(), locationLatitude: latitude, locationLongitude: longitude, consultationContact: input.consultationContact.trim(),
     startsAt, endsAt, registrationDeadline, capacity: input.capacity ?? null,
@@ -73,6 +76,9 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
   const preserveCoordinates = input.locationLatitude === undefined && input.locationLongitude === undefined && input.location.trim() === activity.location
   const nextCover = input.imageUrls !== undefined ? input.imageUrls[0] ?? null : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl
   const values = activityValues({ ...input,
+    hostOrganization: input.hostOrganization === undefined ? activity.hostOrganization : input.hostOrganization,
+    organizingOrganization: input.organizingOrganization === undefined ? activity.organizingOrganization : input.organizingOrganization,
+    sponsorOrganization: input.sponsorOrganization === undefined ? activity.sponsorOrganization : input.sponsorOrganization,
     coverSourceUrl: input.coverSourceUrl === undefined && nextCover === activity.coverUrl ? activityCoverSource(activity) : input.coverSourceUrl,
     coverUrl: input.imageUrls !== undefined ? input.coverUrl : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl,
     imageUrls: input.imageUrls !== undefined ? input.imageUrls : input.coverUrl !== undefined && input.coverUrl !== activity.coverUrl
@@ -191,6 +197,8 @@ export class OrganizerService {
     const [organizer] = await db.select({ memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     return {
       id: activity.id, title: activity.title, description: activity.description, coverUrl: activity.coverUrl,
+      hostOrganization: activity.hostOrganization ?? null, organizingOrganization: activity.organizingOrganization ?? null,
+      sponsorOrganization: activity.sponsorOrganization ?? null,
       imageUrls: activityImages(activity),
       coverSourceUrl: activityCoverSource(activity),
       descriptionDelta: activity.descriptionDelta ?? null, registrationNotice: activity.registrationNotice ?? null,

@@ -141,6 +141,13 @@
       "when": 1793889010672,
       "tag": "0019_activity_posters",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1794060216711,
+      "tag": "0020_activity_poster_organizations",
+      "breakpoints": true
     }
   ]
 }

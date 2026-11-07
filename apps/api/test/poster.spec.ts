@@ -100,7 +100,17 @@ describe('poster copy and sharing boundaries', () => {
     const f = setup(), result = await f.service.read(activityId, otherId)
     expect(result).toMatchObject({ copyStatus: 'none', subtitle: '', highlights: [], canEdit: false, version: 0 })
     expect(result).not.toHaveProperty('consultationContact')
+    expect(result).toMatchObject({ hostOrganization: null, organizingOrganization: null, sponsorOrganization: null })
     await expect(f.service.read(activityId)).rejects.toMatchObject(code('UNAUTHORIZED'))
+  })
+  it('reads the organizer’s current public name and credits when another member shares', async () => {
+    const f = setup()
+    await f.service.save(activityId, f.input(), ownerId)
+    f.store.rows.members[0]!.displayName = '发起人昵称'
+    f.store.rows.members[1]!.displayName = '转发人昵称'
+    const units = { hostOrganization: '主办', organizingOrganization: '承办', sponsorOrganization: '赞助' }
+    Object.assign(f.store.rows.activities[0]!, units)
+    expect(await f.service.read(activityId, otherId)).toMatchObject({ organizerName: '发起人昵称', ...units, canEdit: false, copyStatus: 'confirmed' })
   })
   it('allows only a complete organizer to confirm, protects version, and shares confirmed copy', async () => {
     const f = setup()

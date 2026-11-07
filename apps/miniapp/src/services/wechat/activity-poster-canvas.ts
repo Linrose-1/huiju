@@ -5,6 +5,10 @@ export const POSTER_HEIGHT = 1450
 
 export interface ActivityPosterData {
   title: string
+  organizerName?: string | null
+  hostOrganization?: string | null
+  organizingOrganization?: string | null
+  sponsorOrganization?: string | null
   subtitle: string
   highlights: string[]
   startsAt: string
@@ -25,7 +29,7 @@ type PosterOptions = {
   brandVisible?: boolean
 }
 type Context = ReturnType<typeof uni.createCanvasContext>
-const green = '#155B45', ink = '#14211D', muted = '#6F7772', margin = 38
+const green = '#155B45', ink = '#20372D', muted = '#52665B', margin = 63
 const contentWidth = POSTER_WIDTH - margin * 2
 
 function font(context: Context, size: number, bold = false) {
@@ -60,13 +64,71 @@ function text(context: Context, value: string, x: number, y: number, size: numbe
   context.fillText(value, x, y)
 }
 
-function rule(context: Context, y: number) {
-  context.setStrokeStyle(green)
-  context.setLineWidth(1.5)
+function stroke(context: Context, color: string, points: [number, number][]) {
+  context.setStrokeStyle(color)
+  context.setLineWidth(1)
   context.beginPath()
-  context.moveTo(margin, y)
-  context.lineTo(POSTER_WIDTH - margin, y)
+  context.moveTo(...points[0])
+  for (const point of points.slice(1)) context.lineTo(...point)
   context.stroke()
+}
+
+function rule(context: Context, y: number) {
+  stroke(context, '#B1BCB0', [[margin, y], [POSTER_WIDTH - margin, y]])
+}
+
+function posterDetails(context: Context, data: ActivityPosterData, compact: boolean) {
+  const size = compact ? 21 : 24
+  const leading = compact ? 25 : 31
+  const rowGap = compact ? 5 : 10
+  const sectionGap = compact ? 11 : 24
+  font(context, size)
+  const highlights = data.highlights.map(value => value.trim()).filter(Boolean).slice(0, 2)
+  const highlightLabel = highlights.length ? '本次看点' : '欢迎一起交流'
+  const highlightX = highlights.length ? margin + 140 : margin + 184
+  const highlightLines = lines(context, highlights.join('　·　') || '查看活动详情，了解更多信息', POSTER_WIDTH - margin - highlightX)
+  const highlightHeight = sectionGap * 2 + highlightLines.length * leading
+  const amount = data.feeAmount
+  const price = data.feeType === 'free' ? '免费参与'
+    : typeof amount === 'number' && Number.isFinite(amount) && amount >= 0 ? `¥${(amount / 100).toFixed(2)} / 人` : '费用请查看活动详情'
+  const valueWidth = contentWidth - 140
+  const facts = [
+    { label: '时间', rows: limitedLines(context, activityTimeRange(data.startsAt, data.endsAt), valueWidth, 2) },
+    { label: '地点', rows: limitedLines(context, data.location || '地点请查看活动详情', valueWidth, 2) },
+    { label: '费用', rows: [price] },
+  ]
+  const creditFields: [string, string | null | undefined][] = [
+    ['聚会发起人', data.organizerName], ['主办单位', data.hostOrganization],
+    ['承办单位', data.organizingOrganization], ['赞助单位', data.sponsorOrganization],
+  ]
+  const credits = creditFields.flatMap(([label, value]) => {
+    if (!value?.trim()) return []
+    font(context, size, label === '聚会发起人')
+    return [{ label, rows: lines(context, value, valueWidth) }]
+  })
+  const rowHeight = (item: { rows: string[] }) => item.rows.length * leading + rowGap
+  const factHeight = sectionGap * 2 + facts.reduce((sum, item) => sum + rowHeight(item), 0) - rowGap
+  const creditHeight = credits.length ? sectionGap * 2 + credits.reduce((sum, item) => sum + rowHeight(item), 0) - rowGap : 0
+  const height = highlightHeight + factHeight + creditHeight
+  function draw(y: number) {
+    text(context, highlightLabel, margin, y + sectionGap, compact ? 23 : 26, green, true)
+    highlightLines.forEach((line, index) => text(context, line, highlightX, y + sectionGap + index * leading, size))
+    y += highlightHeight
+    rule(context, y)
+    for (const group of [facts, credits]) {
+      if (!group.length) continue
+      y += sectionGap
+      for (const item of group) {
+        const organizer = item.label === '聚会发起人'
+        text(context, item.label, margin, y, compact ? 20 : 22, muted)
+        item.rows.forEach((line, index) => text(context, line, margin + 140, y + index * leading, size, organizer ? green : ink, organizer))
+        y += rowHeight(item)
+      }
+      y += sectionGap - rowGap
+      if (group === facts && credits.length) rule(context, y)
+    }
+  }
+  return { height, draw }
 }
 
 async function imageInfo(path: string, label: string) {
@@ -86,26 +148,30 @@ export async function renderActivityPoster(options: PosterOptions): Promise<stri
   const { canvasId, component, data } = options
   const [cover, code] = await Promise.all([imageInfo(options.coverPath, '活动封面'), imageInfo(options.codePath, '活动小程序码')])
   const context = uni.createCanvasContext(canvasId, component)
-  context.setFillStyle('#F8F7F2')
+  context.setFillStyle('#F8F7F1')
   context.fillRect(0, 0, POSTER_WIDTH, POSTER_HEIGHT)
   context.setTextBaseline('top')
   context.setTextAlign('left')
 
+  stroke(context, '#80998A', [[18, 18], [732, 18], [732, 1432], [18, 1432], [18, 18]])
+  stroke(context, '#977C49', [[24, 56], [24, 24], [56, 24]])
+  stroke(context, '#977C49', [[694, 1426], [726, 1426], [726, 1394]])
+
   if (options.brandVisible !== false) {
     const brand = options.brandName?.trim() || '有聚点'
-    let size = 34
+    let size = 26
     font(context, size, true)
     while (size > 18 && context.measureText(brand).width > 470) font(context, --size, true)
-    limitedLines(context, brand, 470, 2).forEach((line, index) => text(context, line, margin, 28 + index * 25, size, green, true))
+    limitedLines(context, brand, 470, 2).forEach((line, index) => text(context, line, margin, 44 + index * 22, size, green, true))
   }
-  text(context, '活动邀请', 596, 38, 28)
-  rule(context, 88)
+  text(context, '活动邀请', 594, 48, 22)
+  rule(context, 94)
 
   // Preserve the entire allowed title, shrinking it instead of silently truncating it.
-  let titleSize = 80
+  let titleSize = 49
   font(context, titleSize, true)
   let titleLines = lines(context, data.title, contentWidth)
-  while ((titleLines.length > 3 || titleLines.length * titleSize * 1.15 > 150) && titleSize > 24) {
+  while ((titleLines.length > 3 || titleLines.length * titleSize * 1.22 > 132) && titleSize > 24) {
     font(context, --titleSize, true)
     titleLines = lines(context, data.title, contentWidth)
   }
@@ -116,59 +182,33 @@ export async function renderActivityPoster(options: PosterOptions): Promise<stri
   const charactersPerLine = Math.ceil(titleCharacters.length / titleLines.length)
   const balancedTitle = titleLines.map((_, index) => titleCharacters.slice(index * charactersPerLine, (index + 1) * charactersPerLine).join(''))
   if (balancedTitle.every(line => context.measureText(line).width <= contentWidth)) titleLines = balancedTitle
-  titleLines.forEach((line, index) => text(context, line, margin, 112 + index * titleSize * 1.15, titleSize, ink, true))
-  const subtitleTop = 112 + titleLines.length * titleSize * 1.15 + 15
-  font(context, 26)
-  limitedLines(context, data.subtitle, contentWidth, 2).forEach((line, index) => text(context, line, margin, subtitleTop + index * 32, 26))
+  titleLines.forEach((line, index) => text(context, line, margin, 116 + index * titleSize * 1.22, titleSize, ink, true))
+  const subtitleTop = 116 + titleLines.length * titleSize * 1.22 + 8
+  font(context, 24)
+  const subtitleRows = limitedLines(context, data.subtitle, contentWidth, 2)
+  subtitleRows.forEach((line, index) => text(context, line, margin, subtitleTop + index * 32, 24, muted))
+  const coverTop = subtitleTop + subtitleRows.length * 32 + 24
+  const footerTop = 1203
+  let details = posterDetails(context, data, false)
+  // Make room for long titles and full organization names without touching the code's quiet zone.
+  if (footerTop - coverTop - details.height < 350) details = posterDetails(context, data, true)
+  const coverHeight = Math.min(448, footerTop - coverTop - details.height)
+  const coverWidth = coverHeight * 5 / 4
+  const scale = Math.max(coverWidth / cover.width, coverHeight / cover.height)
+  const sourceWidth = coverWidth / scale, sourceHeight = coverHeight / scale
+  context.drawImage(cover.path, (cover.width - sourceWidth) / 2, (cover.height - sourceHeight) / 2, sourceWidth, sourceHeight,
+    (POSTER_WIDTH - coverWidth) / 2, coverTop, coverWidth, coverHeight)
+  details.draw(coverTop + coverHeight)
 
-  // The accepted template uses the original cover cropped centrally to 5:4.
-  const coverHeight = contentWidth * 4 / 5
-  const scale = Math.max(contentWidth / cover.width, coverHeight / cover.height)
-  const sourceWidth = contentWidth / scale, sourceHeight = coverHeight / scale
-  context.drawImage(cover.path, (cover.width - sourceWidth) / 2, (cover.height - sourceHeight) / 2, sourceWidth, sourceHeight, margin, 346, contentWidth, coverHeight)
-  rule(context, 909)
-
-  const highlights = data.highlights.filter(value => value.trim()).slice(0, 2)
-  if (highlights.length) {
-    text(context, '本次看点', margin, 938, 34, green, true)
-    font(context, 24)
-    let y = 932
-    for (const highlight of highlights) {
-      const rows = limitedLines(context, highlight, 478, 2)
-      rows.forEach(line => { text(context, line, 234, y, 24); y += 28 })
-      y += 5
-    }
-  } else {
-    text(context, '欢迎一起交流', margin, 948, 34, green, true)
-    text(context, '查看活动详情，了解更多信息', margin, 999, 26, muted)
-  }
-
-  let informationY = 1070
-  const amount = data.feeAmount
-  const price = data.feeType === 'free' ? '免费参与'
-    : typeof amount === 'number' && Number.isFinite(amount) && amount >= 0 ? `¥${(amount / 100).toFixed(2)} / 人` : '费用请查看活动详情'
-  for (const [label, value, maximum] of [
-    ['时间', activityTimeRange(data.startsAt, data.endsAt), 2],
-    ['地点', data.location || '地点请查看活动详情', 2],
-    ['费用', price, 1],
-  ] as const) {
-    font(context, 24)
-    const rows = limitedLines(context, value, 552, maximum)
-    context.setFillStyle('#E5EBE5')
-    context.fillRect(margin, informationY - 2, 80, 30)
-    text(context, label, margin + 15, informationY + 1, 21, green)
-    rows.forEach((line, index) => text(context, line, 150, informationY + index * 29, 24))
-    informationY += rows.length * 29 + 12
-  }
-
-  rule(context, 1240)
-  text(context, '一起参加这场活动', margin, 1280, 34, green, true)
-  text(context, '扫码查看详情并报名', margin, 1336, 25)
-  text(context, '由分享者邀请', margin, 1383, 21, muted)
-  // No crop or overlay on the actual code; leave its own quiet zone intact.
+  rule(context, footerTop)
+  text(context, '一起参加这场活动', margin, 1256, 31, green, true)
+  text(context, '扫码查看详情并报名', margin, 1308, 22)
+  text(context, '由分享者邀请', margin, 1350, 19, muted)
   context.setFillStyle('#FFFFFF')
-  context.fillRect(540, 1258, 178, 178)
-  context.drawImage(code.path, 549, 1267, 160, 160)
+  context.fillRect(509, 1223, 178, 178)
+  const codeScale = 160 / Math.max(code.width, code.height)
+  const codeWidth = code.width * codeScale, codeHeight = code.height * codeScale
+  context.drawImage(code.path, 518 + (160 - codeWidth) / 2, 1232 + (160 - codeHeight) / 2, codeWidth, codeHeight)
 
   await new Promise<void>((resolve, reject) => {
     const timeout = globalThis.setTimeout(() => reject(new Error('海报绘制超时，请重试')), 15000)

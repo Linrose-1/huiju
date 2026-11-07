@@ -18,6 +18,26 @@ const base = { ...activityValues(input), organizerMemberId: 'owner', lifecycle: 
 const now = new Date('2030-01-01T00:00:00Z')
 
 describe('organizer write boundaries', () => {
+  it('supports optional poster credits before start, preserving fields omitted by older clients', () => {
+    const fields = { hostOrganization: '主办社', organizingOrganization: '承办社', sponsorOrganization: '赞助社' }
+    expect(activityValues(input)).toMatchObject({ hostOrganization: null, organizingOrganization: null, sponsorOrganization: null })
+    expect(activityValues({ ...input, ...fields, hostOrganization: '  主办社  ' })).toMatchObject(fields)
+    const registered = { ...base, ...fields, hasRegistrationEver: true }
+    expect(validateActivityEdit(registered, [], input, now).values).toMatchObject(fields)
+    expect(validateActivityEdit(registered, [], { ...input, hostOrganization: null, organizingOrganization: ' ', sponsorOrganization: '新赞助社' }, now).values)
+      .toMatchObject({ hostOrganization: null, organizingOrganization: null, sponsorOrganization: '新赞助社' })
+    expect(() => validateActivityEdit(registered, [], { ...input, hostOrganization: null }, base.startsAt)).toThrow('已开始')
+  })
+
+  it('limits organization fields to 60 Unicode characters and rejects other input types', async () => {
+    for (const key of ['hostOrganization', 'organizingOrganization', 'sponsorOrganization']) {
+      const errors = (value: unknown) => validate(plainToInstance(ActivityWriteInput, { ...input, [key]: value }))
+      expect(await errors('🌷'.repeat(60))).toHaveLength(0)
+      expect((await errors('🌷'.repeat(61))).map(error => error.property)).toContain(key)
+      expect((await errors(123)).map(error => error.property)).toContain(key)
+    }
+  })
+
   it('accepts paired map coordinates including zero and rejects invalid pairs', async () => {
     expect(activityValues(input).locationLatitude).toBeNull()
     expect(activityValues({ ...input, locationLatitude: 0, locationLongitude: 0 })).toMatchObject({ locationLatitude: 0, locationLongitude: 0 })

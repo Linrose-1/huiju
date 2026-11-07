@@ -121,7 +121,9 @@ async function exportImage(share: boolean) {
   try {
     const latest = await api.activityPoster(id.value)
     if (!current()) return
-    if (latest.sourceHash !== original.sourceHash || latest.version !== original.version) {
+    const creditsChanged = (['organizerName', 'hostOrganization', 'organizingOrganization', 'sponsorOrganization'] as const)
+      .some(key => (latest[key] || '') !== (original[key] || ''))
+    if (latest.sourceHash !== original.sourceHash || latest.version !== original.version || creditsChanged) {
       imagePath.value = ''; data.value = latest; setForm(latest)
       throw new Error('活动或海报文案已更新，请重新生成海报')
     }

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { URL } from 'node:url'
 import ts from 'typescript'
 
-function harness({ failImage, failExport = false, latinWidth = .55, packagePaths = false } = {}) {
+function harness({ failImage, failExport = false, latinWidth = .55, packagePaths = false, codeHeight = 430 } = {}) {
   const draws = [], images = [], exports = []
   let size = 24
   const context = {
@@ -17,7 +17,7 @@ function harness({ failImage, failExport = false, latinWidth = .55, packagePaths
   }
   const uni = {
     createCanvasContext(id, component) { assert.equal(id, 'poster'); assert.equal(component, 'instance'); return context },
-    getImageInfo({ src, success, fail }) { if (src === failImage) fail(); else success({ path: packagePaths ? src.replace(/^\//, '') : src, width: src === '/cover' ? 1400 : 430, height: src === '/cover' ? 933 : 430 }) },
+    getImageInfo({ src, success, fail }) { if (src === failImage) fail(); else success({ path: packagePaths ? src.replace(/^\//, '') : src, width: src === '/cover' ? 1400 : 430, height: src === '/cover' ? 933 : codeHeight }) },
     canvasToTempFilePath(options, component) { assert.equal(component, 'instance'); exports.push(options); if (failExport) options.fail(); else options.success({ tempFilePath: '/poster.png' }) },
   }
   function compile(path, dependencies = {}) {
@@ -38,14 +38,17 @@ test('renders actual cover and intact code with deterministic 2x PNG export and 
   assert.equal(await h.run(), '/poster.png')
   assert.equal(h.images[0][0], '/cover')
   assert.ok(Math.abs(h.images[0][7] / h.images[0][8] - 1.25) < .001)
-  assert.deepEqual(h.images[1], ['/code', 549, 1267, 160, 160])
+  assert.deepEqual(h.images[1], ['/code', 518, 1232, 160, 160])
   assert.equal(h.exports[0].destWidth, h.POSTER_WIDTH * 2)
   assert.equal(h.exports[0].destHeight, h.POSTER_HEIGHT * 2)
   assert.equal(h.exports[0].fileType, 'png')
   assert.ok(h.draws.some(draw => draw.value.includes('2026.12.20 09:00 – 12:00')))
   assert.ok(h.draws.some(draw => draw.value === '免费参与'))
   const title = h.draws.filter(draw => draw.y >= 112 && draw.y < 262 && draw.size > 26)
-  assert.deepEqual(title.map(draw => draw.value), ['地产行业AI', '应用实战分享'])
+  assert.deepEqual(title.map(draw => draw.value), [h.data.title])
+  assert.ok(title[0].size < 50)
+  assert.equal(h.images[0][7], 560)
+  assert.ok(h.images[0][6] < 300)
 })
 
 test('package-root paths remain absolute when WeChat image info drops their leading slash', async () => {
@@ -53,6 +56,12 @@ test('package-root paths remain absolute when WeChat image info drops their lead
   await h.run()
   assert.equal(h.images[0][0], '/cover')
   assert.equal(h.images[1][0], '/code')
+})
+
+test('a nonsquare code image fits the quiet zone without stretching or cropping', async () => {
+  const h = harness({ codeHeight: 215 })
+  await h.run()
+  assert.deepEqual(h.images[1], ['/code', 518, 1272, 160, 80])
 })
 
 test('50-character title survives intact and long location cannot overlap code or leave canvas', async () => {
@@ -88,36 +97,51 @@ test('mixed Unicode title and 30-character brand remain inside their own areas',
   await h.run({ brandName })
   const title = h.draws.filter(draw => draw.y >= 112 && draw.y < 262 && draw.size > 26)
   assert.equal(title.map(draw => draw.value).join(''), h.data.title)
-  const brand = h.draws.filter(draw => draw.x === 38 && draw.y < 88)
+  const brand = h.draws.filter(draw => draw.x === 63 && draw.y < 94)
   assert.equal(brand.map(draw => draw.value).join(''), brandName)
   assert.ok(brand.every(draw => draw.x + draw.width < 596 && draw.y + draw.size < 88))
   assert.ok(h.draws.every(draw => !/[\uD800-\uDBFF]$/.test(draw.value)))
 })
 
-test('all maximum fields plus a two-line cross-day date retain separation from cover, facts and footer', async () => {
-  // Wider ASCII measurement forces the supported two-line date branch as a conservative font bound.
+test('full credit rows and long cross-day details fit between the cover and the scan area', async () => {
   const h = harness({ latinWidth: .8 })
-  h.data.title = '活动标题'.repeat(13).slice(0, 50)
-  h.data.subtitle = '活动介绍'.repeat(10)
-  h.data.highlights = ['第一项亮点内容'.repeat(4).slice(0, 24), '第二项亮点内容'.repeat(4).slice(0, 24)]
-  h.data.endsAt = '2027-01-01T04:00:00Z'
-  h.data.location = '活动地点详细地址'.repeat(63).slice(0, 500)
-  h.data.feeType = 'paid'; h.data.feeAmount = 99999999
+  Object.assign(h.data, {
+    title: '活动标题'.repeat(13).slice(0, 50), subtitle: '活动介绍'.repeat(10),
+    highlights: ['第一项亮点内容'.repeat(4).slice(0, 24), '第二项亮点内容'.repeat(4).slice(0, 24)],
+    endsAt: '2027-01-01T04:00:00Z', location: '活动地点详细地址'.repeat(63).slice(0, 500),
+    organizerName: '金'.repeat(100), hostOrganization: '甲'.repeat(60),
+    organizingOrganization: '乙'.repeat(60), sponsorOrganization: '丙'.repeat(60),
+    feeType: 'paid', feeAmount: 99999999,
+  })
   await h.run({ brandName: '品牌名称'.repeat(8).slice(0, 30) })
-  const title = h.draws.filter(draw => draw.y >= 112 && draw.y < 262 && draw.size > 26)
-  const subtitle = h.draws.filter(draw => draw.size === 26 && draw.y < 346)
-  const highlights = h.draws.filter(draw => draw.x === 234)
-  const facts = h.draws.filter(draw => draw.x === 150)
+  const title = h.draws.filter(draw => draw.y >= 116 && draw.y < 262 && draw.size > 26)
   assert.equal(title.map(draw => draw.value).join(''), h.data.title)
-  assert.ok(Math.max(...title.map(draw => draw.y + draw.size)) < Math.min(...subtitle.map(draw => draw.y)))
-  assert.ok(Math.max(...subtitle.map(draw => draw.y + draw.size)) < 346)
-  assert.equal(highlights.length, 4)
-  assert.equal(Math.max(...highlights.map(draw => draw.y + draw.size)), 1045)
-  assert.ok(highlights.every(draw => draw.y + draw.size < 1070))
-  assert.equal(facts.length, 5)
-  assert.equal(Math.max(...facts.map(draw => draw.y + draw.size)), 1234)
-  assert.ok(facts.every(draw => draw.y + draw.size < 1240))
-  assert.ok(facts.every((draw, index) => index === facts.length - 1 || draw.y + draw.size < facts[index + 1].y))
+  const cover = h.images[0]
+  const subtitle = h.draws.filter(draw => draw.x === 63 && draw.size === 24 && draw.y < cover[6])
+  assert.equal(subtitle.map(draw => draw.value).join(''), h.data.subtitle)
+  assert.ok(Math.max(...title.map(draw => draw.y + draw.size)) < subtitle[0].y)
+  assert.ok(Math.max(...subtitle.map(draw => draw.y + draw.size)) < cover[6])
+  assert.ok(cover[8] > 200 && Math.abs(cover[7] / cover[8] - 1.25) < .001, JSON.stringify(cover))
+  const values = h.draws.filter(draw => draw.x === 203)
+  assert.ok(values[0].y > cover[6] + cover[8])
+  assert.ok(values.every((draw, index) => index === values.length - 1 || draw.y + draw.size < values[index + 1].y))
+  assert.ok(values.every(draw => draw.x + draw.width <= 687 && draw.y + draw.size < 1203))
+  const joined = values.map(draw => draw.value).join('')
+  for (const field of ['organizerName', 'hostOrganization', 'organizingOrganization', 'sponsorOrganization']) {
+    assert.ok(joined.includes(h.data[field]), 'the organization or organizer name must be complete')
+  }
+})
+
+test('missing organizations have no label or reserved rows; an existing sponsor follows the organizer immediately', async () => {
+  const h = harness()
+  h.data.organizerName = '林老师'
+  h.data.hostOrganization = ' '
+  h.data.sponsorOrganization = '同行书房'
+  await h.run()
+  assert.ok(!h.draws.some(draw => ['主办单位', '承办单位'].includes(draw.value)))
+  const organizer = h.draws.find(draw => draw.value === '林老师')
+  const sponsor = h.draws.find(draw => draw.value === '同行书房')
+  assert.ok(sponsor.y - organizer.y <= 45 && sponsor.y > organizer.y)
 })
 
 test('missing or failed QR image never yields a shareable poster; export errors propagate', async () => {

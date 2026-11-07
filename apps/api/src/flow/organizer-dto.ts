@@ -30,6 +30,9 @@ export class QuestionWriteInput {
   @ApiPropertyOptional({ type: [String], nullable: true }) @IsOptional() @IsArray() @ArrayMaxSize(100) @IsString({ each: true }) @Length(1, 200, { each: true }) options?: string[] | null
 }
 export class ActivityWriteInput {
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 60, description: '主办单位' }) @IsOptional() @IsString() @Length(0, 60) hostOrganization?: string | null
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 60, description: '承办单位' }) @IsOptional() @IsString() @Length(0, 60) organizingOrganization?: string | null
+  @ApiPropertyOptional({ type: String, nullable: true, maxLength: 60, description: '赞助单位' }) @IsOptional() @IsString() @Length(0, 60) sponsorOrganization?: string | null
   @ApiProperty() @IsString() @Length(1, 200) @Matches(/\S/) title!: string
   @ApiProperty() @IsString() @Length(1, 10000) @Matches(/\S/) description!: string
   @ApiPropertyOptional({ type: DescriptionDeltaDto, nullable: true }) @IsOptional() @IsObject() descriptionDelta?: DescriptionDelta | null

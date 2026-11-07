@@ -1871,6 +1871,9 @@ export interface components {
             options: string[] | null;
         };
         ActivityDto: {
+            hostOrganization: string | null;
+            organizingOrganization: string | null;
+            sponsorOrganization: string | null;
             organizer: components["schemas"]["PublicMemberDto"] | null;
             registeredMembers?: components["schemas"]["PublicMemberDto"][];
             id: string;
@@ -1997,6 +2000,12 @@ export interface components {
             options?: string[] | null;
         };
         ActivityWriteInput: {
+            /** @description 主办单位 */
+            hostOrganization?: string | null;
+            /** @description 承办单位 */
+            organizingOrganization?: string | null;
+            /** @description 赞助单位 */
+            sponsorOrganization?: string | null;
             title: string;
             description: string;
             descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
@@ -2022,6 +2031,9 @@ export interface components {
             questions: components["schemas"]["QuestionWriteInput"][];
         };
         ManagedActivityDto: {
+            hostOrganization: string | null;
+            organizingOrganization: string | null;
+            sponsorOrganization: string | null;
             organizer: components["schemas"]["PublicMemberDto"] | null;
             registeredMembers?: components["schemas"]["PublicMemberDto"][];
             id: string;
@@ -2159,6 +2171,11 @@ export interface components {
             expiresAt: string;
         };
         ActivityPosterDto: {
+            /** @description 活动发起人的公开昵称 */
+            organizerName: string | null;
+            hostOrganization: string | null;
+            organizingOrganization: string | null;
+            sponsorOrganization: string | null;
             activityId: string;
             title: string;
             coverUrl: string | null;

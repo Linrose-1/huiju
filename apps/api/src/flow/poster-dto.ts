@@ -9,6 +9,10 @@ export class PosterCopyInput {
 }
 
 export class ActivityPosterDto {
+  @ApiProperty({ type: String, nullable: true, description: '活动发起人的公开昵称' }) organizerName!: string | null
+  @ApiProperty({ type: String, nullable: true }) hostOrganization!: string | null
+  @ApiProperty({ type: String, nullable: true }) organizingOrganization!: string | null
+  @ApiProperty({ type: String, nullable: true }) sponsorOrganization!: string | null
   @ApiProperty() activityId!: string
   @ApiProperty() title!: string
   @ApiProperty({ type: String, nullable: true }) coverUrl!: string | null
