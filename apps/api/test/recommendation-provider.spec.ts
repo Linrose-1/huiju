@@ -41,7 +41,7 @@ describe('recommendation parsing and public matching', () => {
     expect(validateParsedSearch({ ...empty, clarify: '你希望北京还是深圳？' }, ['只在北京同时只在深圳']).clarify).toBe('你希望北京还是深圳？')
   })
   it('does not silently drop explicit fees, dates, budgets or capacity requirements', () => {
-    for (const message of ['必须免费', '不要收费', '只看收费', '下周深圳，最好免费', '不超过100元', '人数不超过20人']) {
+    for (const message of ['必须免费', '不要收费', '只看收费', '下周深圳，最好免费', '帮我找2026年十月份的活动', '上个月广州有哪些活动', '不超过100元', '人数不超过20人']) {
       expect(validateParsedSearch(empty, [message]).clarify).not.toBeNull()
     }
     expect(validateParsedSearch({ ...empty, hard: { feeType: { value: 'free', evidence: '不要免费' } } }, ['不要免费']).clarify).not.toBeNull()

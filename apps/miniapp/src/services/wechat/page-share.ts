@@ -3,7 +3,7 @@ import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { bootstrapIdentity } from '@/services/wechat'
 
-type ShareTarget = { path: string; title: string; id?: string }
+type ShareTarget = { path: string; title: string; id?: string; imageUrl?: string }
 
 // Only public targets and the current sharer's source are allowed in the payload.
 export function usePageShare(target: () => ShareTarget | null, timeline = false) {
@@ -49,10 +49,10 @@ export function usePageShare(target: () => ShareTarget | null, timeline = false)
     const destination = target()
     if (!shareReady.value || !destination) throw new Error('分享身份尚未就绪')
     const query = (destination.id ? 'id=' + encodeURIComponent(destination.id) + '&' : '') + 'inviteCode=' + encodeURIComponent(verifiedCode.value)
-    return { title: destination.title, path: destination.path + '?' + query, query }
+    return { title: destination.title, path: destination.path + '?' + query, query, imageUrl: destination.imageUrl || '/static/huiju/campus.jpg' }
   }
   // Do not let WeChat capture a private page (answers, contacts or organizer tools).
-  const shareMessage = () => { const { title, path } = payload(); return { title, path, imageUrl: '/static/huiju/campus.jpg' } }
+  const shareMessage = () => { const { title, path, imageUrl } = payload(); return { title, path, imageUrl } }
   // Timeline always opens the current page; private pages must never register it.
   const shareTimeline = () => { const { title, query } = payload(); return { title, query, imageUrl: '/static/huiju/campus.jpg' } }
   return { shareReady, shareError, shareBusy, retryShare, shareMessage, shareTimeline }

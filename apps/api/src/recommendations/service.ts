@@ -55,12 +55,13 @@ export class ActivitySearchService {
       reservation = await this.records.reserve(member.id, input.requestId.toLowerCase(), input.messages)
       if (!reservation.reservationId) return this.pageFor(reservation.search.id, undefined, member.id)
       const parsed = await this.provider.parse(input.messages)
+      const historical = !!parsed.hard.time && Date.parse(parsed.hard.time.to) <= Date.now()
       const conditions = [parsed.summary]
       let question = parsed.clarify
       let ranked: RankedCandidate[] = []
       const fingerprints = new Map<string, string>()
       if (!question) {
-        const candidates = await this.candidates.find(member.id, parsed, MAX_RECOMMENDATION_CANDIDATES + 1)
+        const candidates = await this.candidates.find(member.id, parsed, MAX_RECOMMENDATION_CANDIDATES + 1, historical)
         try { publicCandidatePayload(candidates) } catch (error) {
           if (!(error && typeof error === 'object' && 'getResponse' in error && typeof error.getResponse === 'function'
             && (error.getResponse() as { code?: string }).code === 'RECOMMENDATION_TOO_BROAD')) throw error
@@ -74,14 +75,14 @@ export class ActivitySearchService {
           ])
           // Only messages, explicit parsed conditions and public activities cross this boundary.
           const providerResults = eligible.length ? await this.provider.rank(input.messages, parsed, eligible) : []
-          const refreshed = await this.candidates.available(member.id, providerResults.map(item => item.id))
+          const refreshed = await this.candidates.available(member.id, providerResults.map(item => item.id), historical)
           const refreshedIds = new Set(refreshed.filter(item => matchesHardConditions(item, parsed) && candidateFingerprint(item) === fingerprints.get(item.id)).map(item => item.id))
           ranked = orderWithLocalHints(providerResults.filter(item => refreshedIds.has(item.id)), eligible,
             [...Object.values(profile), ...reads.flatMap(item => [item.title, item.location]), ...registrations.flatMap(item => [item.title, item.location])])
         }
       }
       await this.records.finish(reservation.search, reservation.reservationId, question ? 'clarify' : 'results', {
-        conditions, question, results: ranked.map(item => ({ id: item.id, reason: item.reason, differences: item.preferenceDifferences, fingerprint: fingerprints.get(item.id)! })), deliveredIds: [],
+        historical, conditions, question, results: ranked.map(item => ({ id: item.id, reason: item.reason, differences: item.preferenceDifferences, fingerprint: fingerprints.get(item.id)! })), deliveredIds: [],
       })
       return await this.pageFor(reservation.search.id, undefined, member.id)
     } catch (error) {
@@ -106,7 +107,7 @@ export class ActivitySearchService {
     const offset = searchOffset(row, cursor)
     const ordered = row.payload.results
     const fingerprints = new Map(ordered.map(item => [item.id, item.fingerprint]))
-    const available = new Map((await this.candidates.available(memberId, ordered.slice(offset).map(item => item.id)))
+    const available = new Map((await this.candidates.available(memberId, ordered.slice(offset).map(item => item.id), row.payload.historical ?? false))
       .filter(item => candidateFingerprint(item) === fingerprints.get(item.id)).map(item => [item.id, item]))
     const items: ActivitySearchResultDto['items'] = []
     let scanned = offset
@@ -127,7 +128,8 @@ export class ActivitySearchService {
   async view(id: string, activityId: string, header?: string) {
     const member = await this.requireMember(header)
     const normalized = activityId.toLowerCase()
-    await this.records.read(id.toLowerCase(), member.id)
+    const row = await this.records.read(id.toLowerCase(), member.id)
+    if (row.payload.historical) return { sourceToken: null }
     if (!(await this.candidates.available(member.id, [normalized])).length) return { sourceToken: null }
     return this.records.view(id.toLowerCase(), member.id, normalized)
   }

@@ -20,19 +20,19 @@ function deferred() { let resolve, reject; const promise = new Promise((yes, no)
 function harness(t, pageName, names) {
   const member = { displayName: '甲', memberNumber: '001', avatarUrl: '/a.png', boundPhone: '13800000001', profileComplete: true }
   const session = reactive({ token: 'a', epoch: 0, member })
-  const refreshes = [], cards = [], details = [], settings = [], saves = [], namesSaved = [], toasts = [], hooks = {}
+  const navigations = [], refreshes = [], cards = [], details = [], settings = [], saves = [], namesSaved = [], toasts = [], hooks = {}
   const queue = list => () => { const call = deferred(); list.push(call); return call.promise }
   const deps = {
     '@dcloudio/uni-app': Object.fromEntries(['onShow', 'onHide', 'onLoad', 'onUnload'].map(name => [name, fn => { hooks[name] = fn }])),
     '@/stores/session': { useSessionStore: () => session },
     '@/services/api': { api: { memberCard: queue(cards), profileDetails: queue(details), cardSettings: queue(settings), saveCardSettings: queue(saves), saveProfileDetails: queue(saves), profile: queue(namesSaved) }, refreshMember: queue(refreshes), errorMessage: e => e.message, ApiError: class extends Error {} },
-    '@/services/member-card': cardHelpers, '@/services/wechat': {}, '@/services/wechat/member-qr': { chooseWechatQr: async () => null }, '@/services/navigation': {}, '@/services/api/environment': {}
+    '@/services/member-card': cardHelpers, '@/services/wechat': {}, '@/services/wechat/member-qr': { chooseWechatQr: async () => null }, '@/services/navigation': { routes: { profile: '/pages/member/profile' }, navigate: path => navigations.push(path) }, '@/services/api/environment': {}
   }
   const scope = effectScope()
   let page
   scope.run(() => { page = compile('../src/pages/member/' + pageName + '.vue', names, deps, { showToast: v => toasts.push(v) }) })
   t.after(() => scope.stop())
-  return { page, session, hooks, refreshes, cards, details, settings, saves, namesSaved, toasts, member }
+  return { page, session, hooks, navigations, refreshes, cards, details, settings, saves, namesSaved, toasts, member }
 }
 const privateDetails = { wechatId: 'private_wechat', wechatQrUrl: '/api/v1/members/00112233-4455-6677-8899-aabbccddeeff/wechat-qr', personalTag: '产业链接者', realName: '真实姓名', email: 'private@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求' }
 test('preview defaults to avatar/name only and whitelists independently selected fields', () => {
@@ -78,6 +78,22 @@ test('settings save is locked and account changes erase private draft and previe
   h.session.token = ''; h.session.member = null
   assert.equal(h.page.details.value, null); assert.equal(h.page.preview.value, false); assert.equal(h.page.settings.showEmail, false)
   h.saves[0].resolve({}); await save; assert.equal(h.toasts.length, 0)
+})
+test('editing from preview refreshes card content and preserves unsaved visibility choices', async t => {
+  const h = harness(t, 'card-settings', 'load,editCard,preview,card,settings')
+  const initial = h.page.load()
+  h.refreshes[0].resolve(h.member); h.details[0].resolve(privateDetails); h.settings[0].resolve(cardHelpers.emptySettings())
+  await initial
+  h.page.settings.showEmail = true; h.page.preview.value = true
+  h.page.editCard()
+  assert.deepEqual(h.navigations, ['/pages/member/profile?from=card'])
+  h.hooks.onShow()
+  h.refreshes[1].resolve(h.member); h.details[1].resolve({ ...privateDetails, email: 'updated@example.com' })
+  await setImmediate()
+  assert.equal(h.page.preview.value, true)
+  assert.equal(h.page.card.value.email, 'updated@example.com')
+  assert.equal(h.settings.length, 1)
+  assert.equal(h.saves.length, 0)
 })
 test('profile explains partial save and does not continue saving under a changed account', async t => {
   const h = harness(t, 'profile', 'load,save,name,form,actionError')

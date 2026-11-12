@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PageReturn from '@/components/base/PageReturn.vue'
 import { reactive, ref, watch } from 'vue'
-import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, refreshMember, errorMessage } from '@/services/api'
 import type { ProfileDetailsInput } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
@@ -24,8 +24,14 @@ function keyboardChanged(event: unknown) {
   const height = (event as { detail?: { height?: unknown } })?.detail?.height
   keyboardHeight.value = typeof height === 'number' && Number.isFinite(height) ? Math.max(0, height) : 0
 }
+function openCardSettings() {
+  if (fromCard.value) uni.navigateBack()
+  else navigate(routes.cardSettings)
+}
 function resetKeyboard() { keyboardPageVisible = false; keyboardHeight.value = 0 }
 let generation = 0
+const fromCard = ref(false)
+onLoad(options => { fromCard.value = options?.from === 'card' })
 async function load() {
   const current = ++generation
   loaded.value = false; error.value = ''; actionError.value = ''
@@ -52,7 +58,10 @@ async function save() {
     await api.saveProfileDetails({ ...form }); detailsSaved = true
     if (!valid()) return
     if (name.value.trim() !== session.member?.displayName || !session.member?.profileComplete) await api.profile(name.value.trim())
-    if (valid()) uni.showToast({ title: '资料已保存', icon: 'success' })
+    if (valid()) {
+      uni.showToast({ title: '资料已保存', icon: 'success' })
+      if (fromCard.value) uni.navigateBack()
+    }
   } catch (e) { if (valid()) actionError.value = (detailsSaved ? '补充资料已保存，用户名称未保存：' : '') + errorMessage(e) }
   finally { if (valid()) busy.value = false }
 }
@@ -247,7 +256,7 @@ onUnload(() => { resetKeyboard(); generation++; stop() })
         <button
           class="visibility-link"
           :disabled="busy"
-          @click="navigate(routes.cardSettings)"
+          @click="openCardSettings"
         >
           <uni-icons
             type="locked"

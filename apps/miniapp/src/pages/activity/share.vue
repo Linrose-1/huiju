@@ -5,7 +5,9 @@ import PageReturn from '@/components/base/PageReturn.vue'
 import RequestState from '@/components/base/RequestState.vue'
 import { api, errorMessage } from '@/services/api'
 import type { ActivityPoster } from '@/services/api/types'
-import { routes } from '@/services/navigation'
+import { mediaUrl } from '@/services/api/environment'
+import { activityTimeRangeWeekday } from '@/services/presentation'
+import { navigate, routes } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { bootstrapIdentity } from '@/services/wechat'
 import { usePageShare } from '@/services/wechat/page-share'
@@ -18,11 +20,22 @@ const loading = ref(false), generating = ref(false), saving = ref(false), render
 const error = ref(''), actionError = ref(''), imagePath = ref(''), remaining = ref<number | null>(null)
 const subtitle = ref(''), highlight1 = ref(''), highlight2 = ref(''), draftHash = ref(''), baseline = ref('')
 const editing = ref(false), generated = ref(false)
+const mode = ref<'card' | 'poster'>('card')
+const cardCover = computed(() => mediaUrl(data.value?.coverUrl) || '/static/huiju/campus.jpg')
+const previewCredits = computed(() => [
+  ['聚会发起人', data.value?.organizerName], ['主办单位', data.value?.hostOrganization],
+  ['承办单位', data.value?.organizingOrganization], ['赞助单位', data.value?.sponsorOrganization],
+].filter(row => row[1]))
+function editCredits() {
+  if (!busy.value && !dirty.value && data.value?.canEdit) navigate(routes.editor + '?id=' + encodeURIComponent(id.value) + '&from=share')
+}
 let generation = 0, visible = false, disposed = false
 const formValue = () => ({ subtitle: subtitle.value.trim(), highlights: [highlight1.value.trim(), highlight2.value.trim()].filter(Boolean) })
+const previewHighlights = computed(() => formValue().highlights)
+function toggleEditing() { editing.value = !editing.value; if (editing.value) imagePath.value = '' }
 const dirty = computed(() => generated.value || JSON.stringify(formValue()) !== baseline.value)
 const busy = computed(() => loading.value || generating.value || saving.value || rendering.value || exporting.value)
-const { shareReady, shareBusy, shareError, retryShare, shareMessage } = usePageShare(() => data.value ? { path: routes.detail, id: id.value, title: data.value.title } : null)
+const { shareReady, shareBusy, shareError, retryShare, shareMessage } = usePageShare(() => data.value ? { path: routes.detail, id: id.value, title: data.value.title, imageUrl: cardCover.value } : null)
 onShareAppMessage(shareMessage)
 function currentRequest() {
   const current = generation, epoch = session.epoch, token = session.token
@@ -157,7 +170,23 @@ watch(() => [session.token, session.epoch, session.member?.inviteCode], (value, 
       v-if="data"
       class="share-body"
     >
-      <text class="activity-name">{{ data.title }}</text>
+      <view class="mode-bar">
+        <button
+          :class="{ selected: mode === 'card' }"
+          :disabled="busy"
+          @click="mode = 'card'"
+        >
+          小程序卡片
+        </button>
+        <button
+          :class="{ selected: mode === 'poster' }"
+          :disabled="busy"
+          @click="mode = 'poster'"
+        >
+          活动海报
+        </button>
+      </view>
+      <text class="hint">两种分享方式均会带上您的商友邀请码。</text>
       <view
         v-if="shareError"
         class="error"
@@ -170,144 +199,198 @@ watch(() => [session.token, session.epoch, session.member?.inviteCode], (value, 
           重试识别
         </button>
       </view>
-      <view class="share-options">
+      <view
+        v-if="mode === 'card'"
+        class="share-preview"
+      >
+        <text class="eyebrow">好友收到的卡片</text>
+        <view class="message-card">
+          <text class="card-title">{{ data.title }}</text>
+          <image
+            :src="cardCover"
+            mode="aspectFill"
+            class="card-cover"
+          />
+          <text class="card-foot">小程序 · 活动详情</text>
+        </view>
         <button
-          class="primary"
+          class="primary main-action"
           :open-type="shareReady && !busy ? 'share' : undefined"
           :disabled="!shareReady || busy"
         >
-          小程序直接分享
+          分享小程序卡片
         </button>
+      </view>
+      <view v-else>
+        <view
+          v-if="!imagePath"
+          class="share-preview"
+        >
+          <text class="eyebrow">海报内容预览</text>
+          <text class="activity-name">{{ data.title }}</text>
+          <image
+            v-if="data.coverUrl"
+            :src="cardCover"
+            mode="aspectFill"
+            class="poster-cover"
+          />
+          <text
+            v-if="subtitle"
+            class="preview-line"
+          >
+            {{ subtitle }}
+          </text>
+          <text
+            v-for="(line, i) in previewHighlights"
+            :key="i"
+            class="preview-line"
+          >
+            {{ line }}
+          </text>
+          <text class="preview-line">{{ activityTimeRangeWeekday(data.startsAt, data.endsAt) }}</text>
+          <text class="preview-line">{{ data.location }}</text>
+          <text class="preview-line">{{ data.feeType === 'free' ? '免费参与' : data.feeAmount != null ? '¥' + (data.feeAmount / 100).toFixed(2) : '收费活动' }}</text>
+          <view
+            v-for="row in previewCredits"
+            :key="String(row[0])"
+            class="credit-line"
+          >
+            <text>{{ row[0] }}</text><text>{{ row[1] }}</text>
+          </view>
+        </view>
+        <view
+          v-if="data.canEdit"
+          class="copy-panel"
+        >
+          <view class="copy-header"><text>海报文案</text><text class="copy-status">{{ data.copyStatus === 'confirmed' ? '已确认' : data.copyStatus === 'stale' ? '活动已更新' : '尚未设置' }}</text></view>
+          <view class="copy-actions">
+            <button
+              class="copy-button copy-tinted"
+              :disabled="busy"
+              @click="toggleEditing"
+            >
+              {{ editing ? '收起编辑' : '编辑海报文案' }}
+            </button>
+            <button
+              class="copy-button copy-outline"
+              :disabled="busy || dirty"
+              @click="editCredits"
+            >
+              补充活动署名
+            </button>
+          </view>
+          <text class="hint">主办、承办和赞助单位随活动保存，返回后更新预览。</text>
+          <view
+            v-if="editing"
+            class="copy-form"
+          >
+            <button
+              class="copy-button copy-tool"
+              :loading="generating"
+              :disabled="busy"
+              @click="generateCopy"
+            >
+              AI 提炼文案
+            </button>
+            <text class="hint">{{ remaining === null ? '每天最多成功提炼 5 次，也可直接手动填写。' : '今天还可成功提炼 ' + remaining + ' 次' }}</text>
+            <text class="field-label">简短介绍（选填，40字内）</text><textarea
+              v-model="subtitle"
+              maxlength="40"
+              :disabled="busy"
+              placeholder="用一句话介绍活动"
+            />
+            <text class="field-label">活动亮点（选填，每条24字内）</text><input
+              v-model="highlight1"
+              maxlength="24"
+              :disabled="busy"
+              placeholder="亮点一"
+            ><input
+              v-model="highlight2"
+              maxlength="24"
+              :disabled="busy"
+              placeholder="亮点二"
+            >
+            <button
+              class="copy-button copy-reload"
+              :disabled="busy"
+              @click="reloadCopy"
+            >
+              读取已确认文案
+            </button>
+            <text class="hint">请核对文案，不添加活动中未说明的承诺。确认不修改活动原文。</text>
+            <view class="copy-actions">
+              <button
+                class="copy-button copy-confirm"
+                :disabled="busy"
+                :loading="saving"
+                @click="confirmCopy"
+              >
+                确认并使用
+              </button><button
+                class="copy-button copy-outline"
+                :disabled="busy"
+                @click="discardCopy"
+              >
+                放弃修改
+              </button>
+            </view>
+          </view>
+          <text
+            v-if="dirty"
+            class="hint"
+          >
+            文案尚未确认，请确认或放弃修改后生成海报。
+          </text>
+          <text
+            v-else-if="data.copyStatus !== 'confirmed'"
+            class="hint"
+          >
+            现在也可直接分享使用标题、封面和基本信息的海报。
+          </text>
+        </view>
         <button
-          class="secondary"
+          v-if="!imagePath"
+          class="primary main-action"
           :disabled="!shareReady || busy || dirty"
           :loading="rendering"
           @click="createPoster"
         >
-          {{ imagePath ? '重新生成海报' : '活动海报分享' }}
-        </button>
-      </view>
-      <text class="hint">两种分享均带上你的邀请来源。</text>
-      <view
-        v-if="data.canEdit"
-        class="copy-panel"
-      >
-        <view class="copy-header"><text>海报文案</text><text class="copy-status">{{ data.copyStatus === 'confirmed' ? '已确认' : data.copyStatus === 'stale' ? '活动已更新' : '尚未设置' }}</text></view>
-        <text class="hint">AI 根据活动介绍提炼文案，检查确认后供大家分享。每天最多成功生成 5 次。</text>
-        <text
-          v-if="remaining !== null"
-          class="hint"
-        >
-          今天还可成功生成 {{ remaining }} 次
-        </text>
-        <view class="copy-actions">
-          <button
-            class="secondary"
-            :loading="generating"
-            :disabled="busy"
-            @click="generateCopy"
-          >
-            AI 提炼文案
-          </button><button
-            class="text-button"
-            :disabled="busy"
-            @click="editing = !editing"
-          >
-            {{ editing ? '收起编辑' : '编辑文案' }}
-          </button>
-        </view>
-        <button
-          class="text-button"
-          :disabled="busy"
-          @click="reloadCopy"
-        >
-          重新读取已确认文案
+          生成分享海报
         </button>
         <view
-          v-if="editing"
-          class="copy-form"
+          v-if="actionError"
+          class="error"
+          role="alert"
         >
-          <text class="field-label">简短介绍（选填，40字内）</text><textarea
-            v-model="subtitle"
-            maxlength="40"
-            :disabled="busy"
-            placeholder="用一句话介绍活动"
+          {{ actionError }}
+        </view>
+        <view
+          v-if="imagePath"
+          class="poster-preview"
+        >
+          <image
+            :src="imagePath"
+            mode="widthFix"
+            class="poster-image"
+            @click="previewPoster"
           />
-          <text class="field-label">活动亮点（选填，每条24字内）</text><input
-            v-model="highlight1"
-            maxlength="24"
-            :disabled="busy"
-            placeholder="亮点一"
-          ><input
-            v-model="highlight2"
-            maxlength="24"
-            :disabled="busy"
-            placeholder="亮点二"
-          >
-          <text class="hint">请核对文案，不添加活动中未说明的承诺。确认不修改活动原文。</text>
-          <view class="copy-actions">
+          <view class="share-options">
             <button
-              class="primary"
-              :disabled="busy"
-              :loading="saving"
-              @click="confirmCopy"
+              class="secondary"
+              :disabled="busy || dirty || !shareReady"
+              @click="exportImage(false)"
             >
-              确认并使用
+              保存到相册
             </button><button
-              class="text-button"
-              :disabled="busy"
-              @click="discardCopy"
+              class="primary"
+              :disabled="busy || dirty || !shareReady"
+              @click="exportImage(true)"
             >
-              放弃修改
+              分享海报
             </button>
           </view>
+          <text class="hint">海报中的小程序码属于你；请使用自己生成的海报分享。</text>
         </view>
-        <text
-          v-if="dirty"
-          class="hint"
-        >
-          文案尚未确认，请确认或放弃修改后生成海报。
-        </text>
-        <text
-          v-else-if="data.copyStatus !== 'confirmed'"
-          class="hint"
-        >
-          现在也可直接分享使用标题、封面和基本信息的海报。
-        </text>
-      </view>
-      <view
-        v-if="actionError"
-        class="error"
-        role="alert"
-      >
-        {{ actionError }}
-      </view>
-      <view
-        v-if="imagePath"
-        class="poster-preview"
-      >
-        <image
-          :src="imagePath"
-          mode="widthFix"
-          class="poster-image"
-          @click="previewPoster"
-        />
-        <view class="share-options">
-          <button
-            class="secondary"
-            :disabled="busy || dirty || !shareReady"
-            @click="exportImage(false)"
-          >
-            保存到相册
-          </button><button
-            class="primary"
-            :disabled="busy || dirty || !shareReady"
-            @click="exportImage(true)"
-          >
-            分享海报
-          </button>
-        </view>
-        <text class="hint">海报中的小程序码属于你；请使用自己生成的海报分享。</text>
       </view>
     </view>
     <canvas
@@ -328,11 +411,45 @@ watch(() => [session.token, session.epoch, session.member?.inviteCode], (value, 
 .copy-panel { margin: 32rpx 0; padding: 28rpx; border-radius: 20rpx; background: #fff; }
 .copy-header { display: flex; justify-content: space-between; font-size: 32rpx; font-weight: 600; }
 .copy-status { font-weight: 400; font-size: 25rpx; color: #68776f; }
-.copy-actions button { margin: 0; font-size: 28rpx; }
-.copy-form { padding-top: 20rpx; }
+.copy-actions { gap: 16rpx; margin-top: 20rpx; }
+.copy-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 84rpx;
+  min-width: 0;
+  margin: 0;
+  padding: 14rpx 20rpx;
+  border: 1rpx solid transparent;
+  border-radius: 14rpx;
+  font-size: 28rpx;
+  line-height: 1.4;
+}
+.copy-button::after { border: 0; }
+.copy-actions .copy-button { flex: 1; }
+.copy-tinted { background: #e6f2ec; color: #155840; font-weight: 600; }
+.copy-outline { background: #fff; border-color: #cadbd1; color: #315c49; }
+.copy-tool { align-self: flex-start; background: #edf5f0; color: #195d43; }
+.copy-reload { align-self: flex-start; padding: 8rpx 4rpx; color: #28684e; background: transparent; text-decoration: underline; }
+.copy-confirm { background: #155b43; color: #fff; font-weight: 600; }
+.copy-panel .copy-button[disabled] { background: #edf0ee; color: #78867e; border-color: transparent; }
+.copy-form { display: flex; flex-direction: column; padding-top: 24rpx; border-top: 1rpx solid #e1e9e4; }
 .field-label { display: block; margin: 20rpx 0 12rpx; font-size: 27rpx; }
 .copy-form input, .copy-form textarea { box-sizing: border-box; width: 100%; margin-bottom: 16rpx; padding: 18rpx; border: 1rpx solid #dce5df; border-radius: 10rpx; background: #f8faf9; font-size: 28rpx; }
 .copy-form input { height: 80rpx; }.copy-form textarea { height: 140rpx; }
 .poster-image { display: block; width: 100%; margin: 28rpx 0; box-shadow: 0 6rpx 24rpx #16332915; }
 .poster-canvas { position: fixed; left: -2000px; top: 0; pointer-events: none; }
+.mode-bar { display:flex; padding:6rpx; background:#e7efea; border-radius:18rpx; }
+.mode-bar button { flex:1; margin:0; min-height:84rpx; display:flex; align-items:center; justify-content:center; background:transparent; border-radius:14rpx; color:#37594b; font-size:29rpx; }
+.mode-bar button.selected { background:#fff; color:#145740; font-weight:600; box-shadow:0 2rpx 8rpx #143d2417; }
+.share-preview { padding:28rpx; background:#fff; border-radius:20rpx; }
+.eyebrow,.card-foot { display:block; color:#65776d; font-size:24rpx; }
+.message-card { max-width:520rpx; margin:24rpx auto; overflow:hidden; border:1rpx solid #dae3dc; border-radius:18rpx; }
+.card-title,.card-foot { display:block; padding:16rpx 20rpx; }
+.card-cover,.poster-cover { display:block; width:100%; aspect-ratio:5 / 4; height:auto; }
+.card-cover {height:410rpx;} .poster-cover {height:320rpx;}
+.card-title {font-size:31rpx;font-weight:600;} .preview-line {display:block;margin-top:12rpx;}
+.credit-line {display:flex; gap:24rpx; margin-top:12rpx;font-size:26rpx;} .credit-line text:first-child{color:#677970;flex-shrink:0;}
+.main-action { margin:24rpx 0; min-height:88rpx; display:flex; align-items:center; justify-content:center; }
 </style>

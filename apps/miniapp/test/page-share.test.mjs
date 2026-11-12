@@ -33,6 +33,8 @@ test('identified incomplete-profile visitors can share with only their own invit
   assert.deepEqual(Object.keys(friend), ['title', 'path', 'imageUrl'])
   assert.equal(friend.imageUrl, '/static/huiju/campus.jpg')
   assert.equal(timeline.imageUrl, '/static/huiju/campus.jpg')
+  h.target.value.imageUrl = 'https://example.test/activity-cover.jpg'
+  assert.deepEqual(h.page.shareMessage(), { ...friend, imageUrl: h.target.value.imageUrl })
   assert.deepEqual(h.menus.at(-1), ['show', { menus: ['shareAppMessage', 'shareTimeline'] }])
 })
 

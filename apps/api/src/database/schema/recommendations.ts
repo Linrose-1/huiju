@@ -5,6 +5,7 @@ import { activities } from './activities.js'
 import { registrationOperations } from './registrations.js'
 
 export interface SearchPayload {
+  historical?: boolean
   conditions: string[]
   question: string | null
   results: { id: string; reason: string; differences: string[]; fingerprint: string }[]

@@ -23,6 +23,8 @@ function harness(t, options = {}) {
     vue: { ...vue, getCurrentInstance: () => ({ proxy: {} }) },
     '@dcloudio/uni-app': Object.fromEntries(['onLoad', 'onShow', 'onHide', 'onUnload', 'onShareAppMessage'].map(name => [name, fn => { hooks[name] = fn }])),
     '@/services/api': { errorMessage: error => error.message, api: Object.fromEntries(Object.keys(calls).map(name => [name, (...args) => new Promise((resolve, reject) => calls[name].push({ args, resolve, reject }))])) },
+    '@/services/api/environment': { mediaUrl: path => path || '' },
+    '@/services/presentation': { activityTimeRangeWeekday: () => '' },
     '@/services/navigation': { routes: { detail: '/pages/activity/detail' } },
     '@/stores/session': { useSessionStore: () => session },
     '@/services/wechat': { bootstrapIdentity: async () => { bootCalls++; if (options.bootstrap) await options.bootstrap(session, bootCalls) } },

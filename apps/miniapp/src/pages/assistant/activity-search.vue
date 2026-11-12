@@ -114,6 +114,7 @@ async function open(item: ActivityRecommendation) {
   try { await impression(item.id) } catch { /* Statistics must not block browsing. */ }
   if (valid()) { opening.value = ''; navigate(routes.detail + '?id=' + encodeURIComponent(item.id) + '&searchId=' + encodeURIComponent(searchId)) }
 }
+function hasEnded(endsAt: string) { return Date.parse(endsAt) <= Date.now() }
 function browse() { uni.switchTab({ url: routes.activity }) }
 function profile() { navigate(routes.profile) }
 watch(() => [session.token, session.epoch], () => { clear(); if (visible) ready.value = !!session.member?.profileComplete }, { flush: 'sync' })
@@ -127,8 +128,8 @@ onUnload(() => { disposed = true; visible = false; clear() })
 <template>
   <view class="search-page">
     <PageReturn />
-    <view class="intro">说说你想参加什么活动</view>
-    <view class="muted">例如：下周在深圳，最好免费，想交流园区运营经验。</view>
+    <view class="intro">你想找什么活动？</view>
+    <view class="muted">默认推荐还能报名的活动。也可以查往期活动，例如“上个月广州有哪些活动？”</view>
     <view
       v-if="preparing"
       class="card"
@@ -234,6 +235,12 @@ onUnload(() => { disposed = true; visible = false; clear() })
           mode="aspectFill"
         />
         <view class="section-title">{{ item.title }}</view>
+        <view
+          v-if="hasEnded(item.endsAt)"
+          class="muted"
+        >
+          已结束
+        </view>
         <view class="muted">{{ activityTimeRangeWeekday(item.startsAt,item.endsAt) }}</view><view>{{ item.location }}</view><view>{{ item.feeType==='free'?'免费':'¥'+((item.feeAmountCents || 0)/100).toFixed(2) }}</view>
         <view class="reason">{{ item.reason }}</view><view
           v-for="difference in item.differences"

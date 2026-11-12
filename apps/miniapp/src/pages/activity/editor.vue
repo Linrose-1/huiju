@@ -26,7 +26,7 @@ const questionLabels = ['简答', '长文本', '单选', '多选']
 const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref('')
 const aiDraftApplied = ref(false)
 const aiDraftMissing = ref(false)
-let fromAi = false
+let fromAi = false, fromShare = false
 const source = ref<ManagedActivity | null>(null)
 const coverUrl = ref(''), coverSourceUrl = ref(''), coverError = ref('')
 const extraImages = ref<string[]>(Array(8).fill('')), uploadingIndex = ref(-1)
@@ -203,7 +203,13 @@ async function load() {
       if (draft) applyAiDraft(draft)
       else aiDraftMissing.value = true
     }
+    const focusCredits = fromShare && !initialized
     initialized = true
+    if (focusCredits) {
+      loading.value = false
+      await nextTick()
+      if (!disposed && request === generation) uni.pageScrollTo({ selector: '#poster-credits', duration: 0 })
+    }
   } catch (e) { if (request === generation && !disposed) error.value = errorMessage(e) }
   finally { if (request === generation && !disposed) loading.value = false }
 }
@@ -515,6 +521,7 @@ async function submit(publish = false) {
     questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
     if (publish) await api.publishActivity(activity.id)
     if (!current()) return
+    if (fromShare) { uni.navigateBack(); return }
     navigate(routes.manage + '?id=' + encodeURIComponent(activity.id), true)
   } catch (e) {
     if (!current()) return
@@ -531,7 +538,7 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
   loading.value = false
   error.value = '登录身份已变更，请重新加载后填写活动'
 }, { flush: 'sync' })
-onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1' })
+onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1'; fromShare = !!id.value && options?.from === 'share' })
 onShow(load)
 onHide(clearQuestionHistory)
 onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
@@ -867,7 +874,12 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
           </view><view class="field-note">用于参与者咨询活动相关问题，仅对报名用户可见</view>
         </view>
         <view class="form-card">
-          <view class="card-heading"><text>海报署名</text><text class="helper">选填</text></view>
+          <view
+            id="poster-credits"
+            class="card-heading"
+          >
+            <text>海报署名</text><text class="helper">选填</text>
+          </view>
           <view
             v-for="field in organizationFields"
             :key="field.key"

@@ -1,6 +1,9 @@
 import 'reflect-metadata'
 import { randomUUID } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { SQL } from 'drizzle-orm'
+import { MySqlDialect } from 'drizzle-orm/mysql-core'
+import type { FlowDatabase } from '../src/flow/common.js'
 import { fail } from '../src/common/errors.js'
 import { recommendationSearches } from '../src/database/schema/recommendations.js'
 import { IdentityService } from '../src/flow/identity.js'
@@ -38,6 +41,56 @@ const input = () => ({ requestId: randomUUID(), messages: ['找个产业园活�
 afterEach(() => { vi.useRealTimers() })
 
 describe('recommendation orchestration without database or real provider', () => {
+  it('keeps public visibility in both SQL scopes but does not hide a historical event based on registration eligibility', async () => {
+    const filters: SQL[] = []
+    const query = {
+      from: () => query, where: (sql: SQL) => { filters.push(sql); return query }, orderBy: () => query,
+      limit: async () => [], then: (resolve: (value: unknown[]) => void) => resolve([]),
+    }
+    const service = new RecommendationCandidatesService({ db: { select: () => query } } as unknown as FlowDatabase)
+    const member = randomUUID(), id = randomUUID()
+    await service.find(member, parsed, 61, false)
+    await service.find(member, parsed, 61, true)
+    await service.available(member, [id], true)
+    const [upcoming, ...historical] = filters.map(filter => new MySqlDialect().sqlToQuery(filter))
+    expect(upcoming!.sql).toMatch(/registration_deadline/)
+    expect(upcoming!.sql).toContain('registrations')
+    expect(upcoming!.params).toContain(member)
+    expect(historical).toHaveLength(2)
+    for (const { sql, params } of historical) {
+      expect(params).toEqual(expect.arrayContaining(['published', 'normal']))
+      expect(sql).toMatch(/ends_at` <= \?/)
+      expect(sql).not.toMatch(/registrations|registration_deadline|active_registration_count/)
+      expect(params).not.toContain(member)
+    }
+    expect(historical[1]!.params).toContain(id)
+  })
+  it('finds October events in November, retains historical scope on the next page and issues no registration source', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-12T02:20:00Z'))
+    const f = fixture(4), request = { requestId: randomUUID(), messages: ['帮我找2026年十月份的活动'] }
+    const october = { from: '2026-10-01T00:00:00+08:00', to: '2026-11-01T00:00:00+08:00', evidence: '2026年十月份' }
+    f.provider.parse.mockResolvedValue(validateParsedSearch({ ...parsed, hard: { time: october } }, request.messages))
+    for (const item of f.inventory) Object.assign(item, { startsAt: '2026-10-26T01:00:00Z', endsAt: '2026-10-27T12:00:00Z' })
+    const first = await f.service.create(request)
+    expect(first.items).toHaveLength(3)
+    expect(f.candidates.find).toHaveBeenCalledWith('member', expect.anything(), expect.any(Number), true)
+    const last = await f.service.page(first.searchId!, first.cursor!)
+    expect(last.items.map(item => item.id)).toEqual([f.inventory[3].id])
+    expect(f.candidates.available).toHaveBeenLastCalledWith('member', [f.inventory[3].id], true)
+    await f.service.impressions(first.searchId!, [f.inventory[0].id])
+    expect(await f.service.view(first.searchId!, f.inventory[0].id)).toEqual({ sourceToken: null })
+  })
+  it.each([
+    ['找个活动', undefined],
+    ['这个月', { from: '2026-11-01T00:00:00+08:00', to: '2026-12-01T00:00:00+08:00', evidence: '这个月' }],
+    ['下个月', { from: '2026-12-01T00:00:00+08:00', to: '2027-01-01T00:00:00+08:00', evidence: '下个月' }],
+  ] as const)('keeps the bookable default for %s', async (message, time) => {
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-11-12T02:20:00Z'))
+    const f = fixture(0)
+    f.provider.parse.mockResolvedValue(validateParsedSearch({ ...parsed, hard: { ...(time && { time }) } }, [message]))
+    await f.service.create({ requestId: randomUUID(), messages: [message] })
+    expect(f.candidates.find).toHaveBeenCalledWith('member', expect.anything(), expect.any(Number), false)
+  })
   it('clarifies alternative themes without querying candidates, ranking or consuming a success', async () => {
     const f = fixture()
     const request = { requestId: randomUUID(), messages: ['商业或地产'] }

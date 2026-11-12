@@ -5,7 +5,7 @@ import { onShow, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage, refreshMember } from '@/services/api'
 import type { ProfileDetails, CardSettings } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
-import { routes, loginPage } from '@/services/navigation'
+import { routes, loginPage, navigate } from '@/services/navigation'
 import { cardFields, emptySettings, previewCard } from '@/services/member-card'
 import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
@@ -13,16 +13,23 @@ import MemberCard from '@/components/business/MemberCard.vue'
 const session = useSessionStore(), settings = reactive(emptySettings())
 const details = ref<ProfileDetails | null>(null), loading = ref(false), loaded = ref(false), busy = ref(false), error = ref(''), actionError = ref(''), preview = ref(false)
 const card = computed(() => session.member && details.value ? previewCard(session.member, details.value, settings) : null)
-let generation = 0
+let generation = 0, returningFromEdit = false
+function editCard() {
+  if (busy.value || !loaded.value) return
+  returningFromEdit = true
+  navigate(routes.profile + '?from=card')
+}
 async function load() {
   const current = ++generation
-  error.value = ''; actionError.value = ''; loaded.value = false; preview.value = false
+  error.value = ''; actionError.value = ''; loaded.value = false; if (!returningFromEdit) preview.value = false
   if (!session.token) { loading.value = false; return }
   loading.value = true
   try {
-    const [, profile, values] = await Promise.all([refreshMember(), api.profileDetails(), api.cardSettings()])
+    const [, profile, values] = await Promise.all([refreshMember(), api.profileDetails(), returningFromEdit ? null : api.cardSettings()])
     if (current !== generation) return
-    details.value = profile; Object.assign(settings, values); loaded.value = true
+    details.value = profile
+    if (values) Object.assign(settings, values)
+    returningFromEdit = false; loaded.value = true
   } catch (e) { if (current === generation) error.value = errorMessage(e) }
   finally { if (current === generation) loading.value = false }
 }
@@ -38,9 +45,9 @@ async function save() {
   finally { if (current === generation) busy.value = false }
 }
 const stop = watch(() => [session.token, session.epoch], () => {
-  generation++; details.value = null; Object.assign(settings, emptySettings()); busy.value = false; preview.value = false; void load()
+  generation++; returningFromEdit = false; details.value = null; Object.assign(settings, emptySettings()); busy.value = false; preview.value = false; void load()
 }, { flush: 'sync' })
-onShow(() => { if (!loaded.value) void load() })
+onShow(() => { if (!loaded.value || returningFromEdit) void load() })
 onUnload(() => { generation++; stop() })
 </script>
 <template>
@@ -72,7 +79,17 @@ onUnload(() => { generation++; stop() })
           /><text>只向已完善资料的会员展示你开启的字段。</text>
         </view>
         <view class="panel">
-          <view class="heading">固定展示</view><view class="identity">
+          <view class="panel-heading">
+            <view class="heading">固定展示</view>
+            <button
+              class="edit-card"
+              :disabled="busy"
+              @click="editCard"
+            >
+              编辑名片信息
+            </button>
+          </view>
+          <view class="identity">
             <view class="avatar">
               <image
                 v-if="session.member?.avatarUrl"
@@ -125,6 +142,11 @@ onUnload(() => { generation++; stop() })
             :disabled="busy"
             @click="preview = true"
           >
+            <uni-icons
+              type="eye"
+              size="34rpx"
+              color="#176649"
+            />
             预览名片
           </button><button
             class="primary save-button"
@@ -140,7 +162,14 @@ onUnload(() => { generation++; stop() })
           class="preview-overlay"
         >
           <view class="preview-header">
-            <text>名片预览</text><button
+            <text>名片预览</text>
+            <button
+              class="edit-card preview-edit"
+              @click="editCard"
+            >
+              编辑名片信息
+            </button>
+            <button
               class="close-button"
               @click="preview = false"
             >
@@ -158,5 +187,8 @@ onUnload(() => { generation++; stop() })
   </view>
 </template>
 <style scoped>
-.settings-page{padding:24rpx 26rpx calc(150rpx + env(safe-area-inset-bottom));min-height:100vh;background:#eff9f4}.notice{display:flex;gap:18rpx;align-items:center;color:#1b5744;background:#e3f4ec;border-radius:16rpx;padding:24rpx;font-size:25rpx;line-height:1.6;margin-bottom:20rpx}.notice text{flex:1}.panel{background:#fff;border-radius:22rpx;padding:28rpx;margin-bottom:20rpx}.heading{font-size:34rpx;font-weight:650}.identity{display:flex;align-items:center;gap:20rpx;margin-top:26rpx}.avatar{width:90rpx;height:90rpx;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#e5f2ea}.avatar image{width:100%;height:100%}.identity-copy{flex:1;min-width:0}.member-name{font-size:30rpx;font-weight:600;overflow-wrap:anywhere;margin-bottom:6rpx}.hint{font-size:25rpx;color:#808b8b}.intro{margin:16rpx 0}.setting-row{display:flex;align-items:center;gap:25rpx;min-height:86rpx;border-bottom:1rpx solid #e8eeeb}.setting-row:last-child{border:0}.setting-row text{flex:1;font-size:29rpx}.setting-row switch{flex-shrink:0}.footer-notice{font-size:24rpx}.footer{position:fixed;bottom:0;left:0;right:0;padding:18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));background:#fff;display:flex;gap:18rpx;z-index:5}.footer button{flex:1;min-height:82rpx;font-size:30rpx;border-radius:18rpx}.preview-button{background:#e3f5eb;color:#116b4c}.save-button{background:linear-gradient(110deg,#15895c,#27a771)}.preview-overlay{position:fixed;inset:0;z-index:20;background:#eff9f4;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}.preview-header{display:flex;align-items:center;justify-content:space-between;padding:20rpx 28rpx;background:#fff;font-size:30rpx;font-weight:600;flex-shrink:0}.close-button{font-size:27rpx;color:#117753;background:#e8f5ee;padding:14rpx 24rpx}.preview-scroll{flex:1;height:0;min-height:0}.preview-content{padding:0}.preview-hint{font-size:24rpx;color:#638576;line-height:1.6;padding:20rpx 26rpx}
+.settings-page{padding:24rpx 26rpx calc(150rpx + env(safe-area-inset-bottom));min-height:100vh;background:#eff9f4}.notice{display:flex;gap:18rpx;align-items:center;color:#1b5744;background:#e3f4ec;border-radius:16rpx;padding:24rpx;font-size:25rpx;line-height:1.6;margin-bottom:20rpx}.notice text{flex:1}.panel{background:#fff;border-radius:22rpx;padding:28rpx;margin-bottom:20rpx}.heading{font-size:34rpx;font-weight:650}.identity{display:flex;align-items:center;gap:20rpx;margin-top:26rpx}.avatar{width:90rpx;height:90rpx;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#e5f2ea}.avatar image{width:100%;height:100%}.identity-copy{flex:1;min-width:0}.member-name{font-size:30rpx;font-weight:600;overflow-wrap:anywhere;margin-bottom:6rpx}.hint{font-size:25rpx;color:#808b8b}.intro{margin:16rpx 0}.setting-row{display:flex;align-items:center;gap:25rpx;min-height:86rpx;border-bottom:1rpx solid #e8eeeb}.setting-row:last-child{border:0}.setting-row text{flex:1;font-size:29rpx}.setting-row switch{flex-shrink:0}.footer-notice{font-size:24rpx}.footer{position:fixed;bottom:0;left:0;right:0;padding:18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));background:#fff;display:flex;gap:18rpx;z-index:5}.footer button{display:flex;align-items:center;justify-content:center;box-sizing:border-box;flex:1;min-width:0;min-height:88rpx;margin:0;padding:16rpx;font-size:30rpx;line-height:1.4;border-radius:16rpx}.preview-button{gap:10rpx;background:#f2f8f4;border:1rpx solid #a9c8b9;color:#176649}.preview-button::after,.edit-card::after{border:0}.save-button{background:linear-gradient(110deg,#15895c,#27a771)}.preview-overlay{position:fixed;inset:0;z-index:20;background:#eff9f4;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)}.preview-header{display:flex;align-items:center;justify-content:space-between;padding:20rpx 28rpx;background:#fff;font-size:30rpx;font-weight:600;flex-shrink:0}.close-button{font-size:27rpx;color:#117753;background:#e8f5ee;padding:14rpx 24rpx}.preview-scroll{flex:1;height:0;min-height:0}.preview-content{padding:0}.preview-hint{font-size:24rpx;color:#638576;line-height:1.6;padding:20rpx 26rpx}
+.panel-heading { display:flex; align-items:center; justify-content:space-between; gap:16rpx; }
+.edit-card { display:flex; align-items:center; justify-content:center; margin:0; padding:12rpx 20rpx; min-height:76rpx; box-sizing:border-box; border-radius:14rpx; background:#e8f3ed; color:#176649; font-size:26rpx; line-height:1.4; }
+.preview-edit { margin-left:auto; margin-right:16rpx; }
 </style>

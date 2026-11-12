@@ -1,3 +1,4 @@
+import { aiModel } from './model.js'
 import { Injectable } from '@nestjs/common'
 import { fail } from '../flow/common.js'
 
@@ -18,7 +19,7 @@ export class AgentIsHereDraftProvider {
         method: 'POST',
         headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-5.5',
+          model: aiModel(),
           temperature: 0,
           messages: [
             { role: 'system', content: `你是活动信息草拟器。今天是 ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' })}（北京时间）。只使用用户明确提供的事实，不能编造时间、地点、人数、费用、联系方式。相对日期和缺少年份的日期一律置 null，不根据今天推算。只输出 JSON 对象，键必须为 title, description, startsAt, endsAt, location, capacity, feeType, feeAmountCents, registrationDeadline, questions。日期须带时区的 ISO8601 字符串；无从确定则 null。免费 feeType=free 且金额 null；收费但金额未知时 feeType=paid 且金额 null。questions 为数组，每项为 prompt, type, required, options；不明确的 type、required、options 为 null。标题和介绍可基于活动内容润色，但不得添加事实。不要生成封面、咨询联系方式或其他键。` },
