@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TabHeader from '@/components/base/TabHeader.vue'
 import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref } from 'vue'
@@ -25,6 +26,7 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view>
+    <TabHeader title="i 助手" subtitle="智能助手 AI 提效" />
     <view
       v-if="shareError"
       class="error"

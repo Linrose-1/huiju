@@ -4,7 +4,7 @@ import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { ActivityWriteInput, ManagedActivity, ActivityQuestionHistoryItem } from '@/services/api/types'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
-import { mediaUrl } from '@/services/api/environment'
+import { API_BASE_URL, mediaUrl } from '@/services/api/environment'
 import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
 import { chooseActivityImagePath, chooseActivityImagePaths, readActivityImage, chooseActivityLocation } from '@/services/wechat'
@@ -109,11 +109,87 @@ const dateField = ref<'start' | 'end' | 'deadline' | null>(null)
 const pickerDate = ref(''), pickerTime = ref('')
 const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : fromAi ? '?aiDraft=1' : ''))
 
+// Only a new, manually created activity uses the device draft.
+function manualDraftKey() {
+  return !fromAi && !id.value && formOwner && formOwner === session.member?.id
+    ? 'manual-activity:v1:' + API_BASE_URL + ':' + formOwner : ''
+}
+function draftSnapshot() {
+  return { form: { ...form }, step: step.value, questions: questions.value, editingQuestion: editingQuestion.value,
+    descriptionDelta: descriptionDelta.value, richValid: richValid.value, registrationNotice: registrationNotice.value,
+    coverUrl: coverUrl.value, coverSourceUrl: coverSourceUrl.value, extraImages: extraImages.value,
+    locationCoordinates: locationCoordinates.value, customDeadline: customDeadline.value, capacityLimited: capacityLimited.value }
+}
+let initialDraft = '', savedDraft = ''
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+const restoredDraft = ref(false)
+function flushManualDraft() {
+  clearTimeout(saveTimer)
+  const key = manualDraftKey()
+  if (!initialized || !key || disposed) return
+  const serialized = JSON.stringify(draftSnapshot())
+  if (serialized === savedDraft) return
+  try {
+    if (serialized === initialDraft) uni.removeStorageSync(key)
+    else uni.setStorageSync(key, serialized)
+    savedDraft = serialized
+  } catch {
+    uni.showToast({ title: '本机草稿保存失败', icon: 'none' })
+  }
+}
+watch(draftSnapshot, () => {
+  clearTimeout(saveTimer)
+  if (initialized && manualDraftKey()) saveTimer = setTimeout(flushManualDraft, 350)
+}, { deep: true })
+let restorePrompt: { key: string; choice: Promise<boolean> } | undefined
+async function restoreManualDraft(key: string, request: number) {
+  initialDraft = savedDraft = JSON.stringify(draftSnapshot())
+  try {
+    const raw = uni.getStorageSync(key)
+    if (!raw) return
+    const draft: ReturnType<typeof draftSnapshot> = JSON.parse(raw)
+    if (!draft.form || !Array.isArray(draft.questions) || !Array.isArray(draft.extraImages)) return
+    if (restorePrompt?.key !== key) {
+      const choice = new Promise<boolean>(resolve => uni.showModal({
+        title: '恢复上次的草稿？',
+        content: '恢复后可继续编辑。选择重新填写后，新输入的内容将替换旧草稿。',
+        confirmText: '恢复草稿', cancelText: '重新填写',
+        success: result => resolve(!!result.confirm), fail: () => resolve(false)
+      }))
+      restorePrompt = { key, choice }
+    }
+    const confirmed = await restorePrompt.choice
+    if (disposed || request !== generation || manualDraftKey() !== key) return
+    restorePrompt = undefined
+    if (!confirmed) return
+    Object.assign(form, draft.form)
+    questions.value = draft.questions
+    editingQuestion.value = draft.editingQuestion
+    sequence = Math.max(sequence, editingQuestion.value?.key || 0, ...questions.value.map(q => q.key))
+    coverUrl.value = draft.coverUrl
+    coverSourceUrl.value = draft.coverSourceUrl
+    extraImages.value = draft.extraImages
+    descriptionDelta.value = draft.descriptionDelta
+    richValid.value = draft.richValid
+    registrationNotice.value = draft.registrationNotice
+    locationCoordinates.value = draft.locationCoordinates
+    customDeadline.value = draft.customDeadline
+    capacityLimited.value = draft.capacityLimited
+    step.value = draft.step
+    savedDraft = JSON.stringify(draftSnapshot())
+    restoredDraft.value = true
+  } catch {
+    uni.showToast({ title: '本机草稿读取失败', icon: 'none' })
+  }
+}
 function dateParts(value: string) {
   const date = new Date(Date.parse(value) + 8 * 60 * 60 * 1000), pad = (n: number) => String(n).padStart(2, '0')
   return { date: `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`, time: `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}` }
 }
 function reset() {
+  restorePrompt = undefined
+  clearTimeout(saveTimer)
+  restoredDraft.value = false
   locationCoordinates.value = null
   descriptionDelta.value = null
   registrationNotice.value = ''
@@ -202,6 +278,11 @@ async function load() {
       const draft = takeActivityDraft(owner, epoch)
       if (draft) applyAiDraft(draft)
       else aiDraftMissing.value = true
+    }
+    const key = manualDraftKey()
+    if (!initialized && key) {
+      await restoreManualDraft(key, request)
+      if (disposed || request !== generation) return
     }
     const focusCredits = fromShare && !initialized
     initialized = true
@@ -514,9 +595,13 @@ async function submit(publish = false) {
     }
     if (!await requireProfile(target.value) || !current()) return
     if (formOwner !== (useSessionStore().member?.id || '')) { reset(); error.value = '登录身份已变更，请重新填写活动'; return }
+    const key = manualDraftKey()
     const activity = id.value ? await api.updateActivity(id.value, input) : await api.createActivity(input)
     if (!current()) return
     id.value = activity.id
+    if (key) {
+      try { uni.removeStorageSync(key) } catch { uni.showToast({ title: '已保存，本机草稿清理失败', icon: 'none' }) }
+    }
     source.value = activity
     questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
     if (publish) await api.publishActivity(activity.id)
@@ -540,8 +625,8 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
 }, { flush: 'sync' })
 onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1'; fromShare = !!id.value && options?.from === 'share' })
 onShow(load)
-onHide(clearQuestionHistory)
-onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
+onHide(() => { flushManualDraft(); clearQuestionHistory() })
+onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
 </script>
 
 <template>
@@ -590,6 +675,7 @@ onUnload(() => { cropper.value?.cancel(); clearQuestionHistory(); disposed = tru
       @retry="load"
     />
     <template v-if="!loading && !error">
+      <view v-if="restoredDraft" class="notice">已恢复上次填写的本机草稿，可继续编辑。</view>
       <view
         v-if="aiDraftMissing"
         class="notice"

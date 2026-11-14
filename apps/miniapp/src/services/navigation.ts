@@ -21,7 +21,7 @@ let navigating: { page: unknown } | null = null
 export function hasPreviousPage() { return getCurrentPages().length > 1 }
 export function backOrHome() {
   if (hasPreviousPage()) uni.navigateBack({ delta: 1 })
-  else uni.switchTab({ url: routes.activity })
+  else uni.switchTab({ url: routes.circle })
 }
 export function navigate(url: string, replace = false) {
   const page = getCurrentPages().slice(-1)[0]
@@ -79,5 +79,5 @@ export function finishProfile(returnTo: string) {
     if (sameContext) { uni.navigateBack(); return }
     if ([routes.activity, routes.circle, routes.assistant, routes.mine].includes(path)) uni.switchTab({ url: path })
     else navigate(returnTo, true)
-  } else uni.switchTab({ url: routes.activity })
+  } else uni.switchTab({ url: routes.circle })
 }

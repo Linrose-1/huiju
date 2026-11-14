@@ -120,7 +120,7 @@ test('navigation restores original circle detail, respects post id and circle ta
   previous={route:'pages/circle/editor',options:{id:'a'}};nav.finishProfile('/pages/circle/editor?id=a');assert.equal(calls.pop()[0],'navigateBack')
 })
 test('all five routes and four tabs have real page and image files',()=>{
-  const config=JSON.parse(source('pages.json'));assert.deepEqual(config.tabBar.list.map(x=>x.text),['活动','学友圈','助手','我的'])
+  const config=JSON.parse(source('pages.json'));assert.deepEqual(config.tabBar.list.map(x=>x.text),['商友圈','友聚会','i 助手','我世界'])
   for(const path of Object.values(routes)){assert.ok(config.pages.some(x=>'/'+x.path===path));assert.ok(existsSync(new URL('../src'+path+'.vue',import.meta.url)))}
   for(const tab of config.tabBar.list){for(const path of [tab.iconPath,tab.selectedIconPath])assert.ok(existsSync(new URL('../src/'+path,import.meta.url)))}
 })
@@ -252,7 +252,7 @@ test('login cancellation returns to original post without calling login or savin
     await onLoad({returnTo});page.cancel();assert.deepEqual(calls.pop(),[method,target])
   }
   for(const returnTo of ['', '/pages/login/index', 'https://example.test', '/pages/circle/detail-unknown?id=post-a']){
-    await onLoad({returnTo});assert.equal(page.cancelText.value,'暂不完善，先看看活动');page.cancel();assert.deepEqual(calls.pop(),['switchTab','/pages/activity/index'])
+    await onLoad({returnTo});assert.equal(page.cancelText.value,'暂不完善，先看看商友圈');page.cancel();assert.deepEqual(calls.pop(),['switchTab','/pages/circle/index'])
   }
 })
 

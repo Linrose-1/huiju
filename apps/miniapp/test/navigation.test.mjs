@@ -32,7 +32,7 @@ test('back returns one level when possible and direct entry returns to the activ
   const direct = harness()
   direct.nav.backOrHome()
   assert.equal(direct.calls[0].method, 'switchTab')
-  assert.equal(direct.calls[0].url, '/pages/activity/index')
+  assert.equal(direct.calls[0].url, '/pages/circle/index')
   const nested = harness()
   nested.previous({ route: 'pages/activity/detail' })
   nested.nav.backOrHome()

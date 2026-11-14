@@ -24,7 +24,7 @@ const activity = overrides => ({
   lifecycle: 'draft', moderation: 'normal', hasRegistrationEver: false, questions: [], ...overrides,
 })
 const script = readFileSync(new URL('../src/pages/activity/editor.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-function harness({ record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseImages = async () => [], chooseActivityLocation = async () => null, DateClass = Date, windowInfo = { windowWidth: 375 } } = {}) {
+function harness({ storage = new Map(), showModal = options => options.success({ confirm: true }), record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseImages = async () => [], chooseActivityLocation = async () => null, DateClass = Date, windowInfo = { windowWidth: 375 } } = {}) {
   const session = reactive({ token: 'token-a', epoch: 1, member: { id: 'member-a' } })
   const navigations = [], creates = [], updates = [], publishes = []
   let onUnload
@@ -58,7 +58,7 @@ function harness({ record = activity(), apiOverrides = {}, chooseCover = async (
   const page = {}
   new Function('require', 'exports', 'uni', 'Date', code)(
     name => name in dependencies ? dependencies[name] : require(name), page,
-    { getWindowInfo: () => windowInfo, getSystemInfoSync: () => windowInfo, pageScrollTo() {}, showModal: options => options.success({ confirm: true }) }, DateClass,
+    { getStorageSync: key => storage.get(key), setStorageSync: (key,value) => storage.set(key,value), removeStorageSync: key => storage.delete(key), getWindowInfo: () => windowInfo, getSystemInfoSync: () => windowInfo, pageScrollTo() {}, showModal }, DateClass,
   )
   page.cropper.value = { open: async path => path, cancel() {} }
   function fill() {
@@ -745,4 +745,46 @@ test('batch failure retains successful uploads and does not discard the form', a
   assert.equal(h.page.busy.value, false)
   assert.equal(h.page.form.title, '交流活动')
   h.unload()
+})
+
+
+test('manual create survives immediate back and restores only for its owner; server save consumes the draft', async () => {
+  const storage = new Map()
+  const first = harness({storage})
+  await first.page.load()
+  first.page.form.title = '手填到一半'
+  first.page.registrationNotice.value = '带笔记本'
+  first.page.step.value = 1
+  first.page.beginQuestion()
+  first.page.editingQuestion.value.prompt = '第几期'
+  first.unload()
+  assert.equal(first.creates.length, 0)
+  const other = harness({storage})
+  other.session.member.id = 'member-b'
+  await other.page.load()
+  assert.equal(other.page.form.title, '')
+  other.unload()
+  const fresh = harness({storage, showModal: options => options.success({cancel:true})})
+  await fresh.page.load()
+  assert.equal(fresh.page.form.title, '')
+  fresh.unload()
+  assert.equal(storage.size, 1)
+  const decision = deferred()
+  const resumed = harness({storage, showModal: options => decision.resolve(options)})
+  const loading = resumed.page.load()
+  const prompt = await decision.promise
+  assert.equal(prompt.confirmText, '恢复草稿')
+  assert.equal(resumed.page.form.title, '')
+  prompt.success({confirm:true})
+  await loading
+  assert.equal(resumed.page.form.title, '手填到一半')
+  assert.equal(resumed.page.step.value, 1)
+  assert.equal(resumed.page.registrationNotice.value, '带笔记本')
+  assert.equal(resumed.page.editingQuestion.value.prompt, '第几期')
+  resumed.page.closeQuestion()
+  resumed.fill()
+  await resumed.page.submit()
+  resumed.unload()
+  assert.equal(resumed.creates.length, 1)
+  assert.equal(storage.size, 0)
 })

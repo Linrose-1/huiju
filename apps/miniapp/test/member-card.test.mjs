@@ -121,7 +121,7 @@ test('avatar file read cannot upload under a replacement account', async () => {
 
 test('new member routes keep activity as the cold-start page', () => {
   const config = JSON.parse(readFileSync(new URL('../src/pages.json', import.meta.url), 'utf8'))
-  assert.equal(config.pages[0].path, 'pages/activity/index')
+  assert.equal(config.pages[0].path, 'pages/circle/index')
   for (const path of ['pages/member/profile', 'pages/member/card-settings', 'pages/member/card']) {
     assert.equal(config.pages.filter(page => page.path === path).length, 1)
   }

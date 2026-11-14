@@ -43,7 +43,7 @@ async function call() {
   } catch { if (current === generation && visible) uni.showToast({ title: '未能拨打，请复制号码后重试', icon: 'none' }) }
   finally { if (current === generation) acting.value = false }
 }
-function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: routes.activity }) }) }
+function back() { uni.navigateBack({ fail: () => uni.switchTab({ url: routes.circle }) }) }
 function hide() { visible = false; generation++; acting.value = false; content.value = null }
 onLoad(options => { id.value = typeof options?.id === 'string' ? options.id : ''; useSessionStore().captureInvite(options?.inviteCode) })
 onShow(() => { visible = true; void load() }); onHide(hide); onUnload(hide); onPullDownRefresh(load)

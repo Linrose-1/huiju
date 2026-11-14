@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TabHeader from '@/components/base/TabHeader.vue'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
@@ -95,6 +96,7 @@ onUnload(() => { active = false; generation++ })
 </script>
 <template>
   <view>
+    <TabHeader title="我世界" subtitle="商友资源 价值运营" />
     <view class="mine-hero">
       <image
         class="hero-image"

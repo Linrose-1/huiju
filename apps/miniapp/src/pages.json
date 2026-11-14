@@ -1,9 +1,20 @@
 {
   "pages": [
     {
+      "path": "pages/circle/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "商友圈",
+        "navigationBarBackgroundColor": "#f4f9f7",
+        "backgroundColor": "#f4f9f7",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
       "path": "pages/activity/index",
       "style": {
-        "navigationBarTitleText": "活动",
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "友聚会",
         "enablePullDownRefresh": true
       }
     },
@@ -22,7 +33,8 @@
     {
       "path": "pages/assistant/index",
       "style": {
-        "navigationBarTitleText": "助手"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "i 助手"
       }
     },
     {
@@ -36,7 +48,8 @@
     {
       "path": "pages/mine/index",
       "style": {
-        "navigationBarTitleText": "我的"
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我世界"
       }
     },
     {
@@ -156,15 +169,6 @@
       "style": { "navigationBarTitleText": "人脉链路", "enablePullDownRefresh": true }
     },
     {
-      "path": "pages/circle/index",
-      "style": {
-        "navigationBarTitleText": "学友圈",
-        "navigationBarBackgroundColor": "#f4f9f7",
-        "backgroundColor": "#f4f9f7",
-        "enablePullDownRefresh": true
-      }
-    },
-    {
       "path": "pages/circle/detail",
       "style": {
         "navigationBarTitleText": "帖子详情",
@@ -208,26 +212,26 @@
     "borderStyle": "white",
     "list": [
       {
-        "pagePath": "pages/activity/index",
-        "text": "活动",
-        "iconPath": "static/huiju/tab-activity-normal.png",
-        "selectedIconPath": "static/huiju/tab-activity-selected.png"
-      },
-      {
         "pagePath": "pages/circle/index",
-        "text": "学友圈",
+        "text": "商友圈",
         "iconPath": "static/huiju/tab-circle-normal.png",
         "selectedIconPath": "static/huiju/tab-circle-selected.png"
       },
       {
+        "pagePath": "pages/activity/index",
+        "text": "友聚会",
+        "iconPath": "static/huiju/tab-activity-normal.png",
+        "selectedIconPath": "static/huiju/tab-activity-selected.png"
+      },
+      {
         "pagePath": "pages/assistant/index",
-        "text": "助手",
+        "text": "i 助手",
         "iconPath": "static/huiju/tab-assistant-normal.png",
         "selectedIconPath": "static/huiju/tab-assistant-selected.png"
       },
       {
         "pagePath": "pages/mine/index",
-        "text": "我的",
+        "text": "我世界",
         "iconPath": "static/huiju/tab-mine-normal.png",
         "selectedIconPath": "static/huiju/tab-mine-selected.png"
       }

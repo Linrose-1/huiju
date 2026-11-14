@@ -120,5 +120,5 @@ test('tab return context uses switchTab with a path and external paths are rejec
   const h = navigationHarness({ route: 'pages/activity/detail', options: { id: 'a' } })
   h.navigation.finishProfile('/pages/activity/index?inviteCode=abc')
   h.navigation.finishProfile('https://invalid.example/path')
-  assert.deepEqual(h.calls, [['switchTab', '/pages/activity/index'], ['switchTab', '/pages/activity/index']])
+  assert.deepEqual(h.calls, [['switchTab', '/pages/activity/index'], ['switchTab', '/pages/circle/index']])
 })

@@ -41,7 +41,7 @@ const cancelTarget = computed(() => {
   if (path === routes.form) return target.replace(routes.form, routes.detail)
   return target
 })
-const cancelText = computed(() => !cancelTarget.value ? '暂不完善，先看看活动' : cancelTarget.value === routes.circle ? '暂不继续，返回学友圈' : cancelTarget.value === routes.activity ? '暂不继续，返回活动' : cancelTarget.value === routes.assistant ? '暂不继续，返回助手' : cancelTarget.value.startsWith(routes.circleDetail + '?') ? '暂不继续，返回帖子' : '暂不继续，返回原页面')
+const cancelText = computed(() => !cancelTarget.value ? '暂不完善，先看看商友圈' : cancelTarget.value === routes.circle ? '暂不继续，返回商友圈' : cancelTarget.value === routes.activity ? '暂不继续，返回友聚会' : cancelTarget.value === routes.assistant ? '暂不继续，返回i 助手' : cancelTarget.value.startsWith(routes.circleDetail + '?') ? '暂不继续，返回帖子' : '暂不继续，返回原页面')
 function cancel() { if (!busy.value) finishProfile(cancelTarget.value) }
 onLoad(async (options) => {
     void loadLegal()
