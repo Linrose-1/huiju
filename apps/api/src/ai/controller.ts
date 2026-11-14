@@ -11,6 +11,6 @@ export class ActivityDraftController {
 
   @Post('activity-drafts') @HttpCode(200) @ApiOkResponse({ type: ActivityDraftResultDto })
   create(@Body() input: ActivityDraftInput, @Headers('authorization') header?: string) {
-    return this.drafts.create(input.idea, header)
+    return this.drafts.create(input.idea, header, input.reply, input.conversation)
   }
 }

@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common'
-import { and, count, eq, gte, lt } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
-import { aiActivityDraftReservations, aiActivityDraftUsages } from '../database/schema/ai.js'
+import { aiActivityDraftReservations } from '../database/schema/ai.js'
 import { members } from '../database/schema/members.js'
 import { fail, FlowDatabase } from '../flow/common.js'
 import { complete, IdentityService } from '../flow/identity.js'
+import type { DraftConversation, DraftReplyContext } from './dto.js'
+import { normalizeDraftDates, parseNextQuestion, prepareConversation, safeConversationText } from './idea.js'
 import { missingFields, parseActivityDraft } from './parse.js'
 import { AgentIsHereDraftProvider, AI_DRAFT_TIMEOUT_MS } from './provider.js'
 
@@ -34,15 +36,6 @@ export class ActivityDraftService {
     if (!member || !complete(member)) fail('PROFILE_INCOMPLETE', '请先绑定手机号并设置头像、名称', 403)
   }
 
-  private async usageToday(tx: Tx, memberId: string, now: Date) {
-    const [start, end] = beijingDayBounds(now)
-    const [usage] = await tx.select({ total: count() }).from(aiActivityDraftUsages)
-      .where(and(eq(aiActivityDraftUsages.memberId, memberId), gte(aiActivityDraftUsages.createdAt, start), lt(aiActivityDraftUsages.createdAt, end)))
-    const total = Number(usage?.total ?? 0)
-    if (total >= 5) fail('AI_DAILY_LIMIT', '今天的 5 次草拟机会已用完，请明天再试', 429)
-    return total
-  }
-
   private async reserve(memberId: string, reservationId: string) {
     await this.database.db.transaction(async tx => {
       await this.lockMember(tx, memberId)
@@ -50,7 +43,6 @@ export class ActivityDraftService {
       const [current] = await tx.select().from(aiActivityDraftReservations)
         .where(eq(aiActivityDraftReservations.memberId, memberId)).for('update')
       if (current && current.expiresAt > now) fail('AI_GENERATION_IN_PROGRESS', '正在生成草稿，请等待本次生成完成', 409)
-      await this.usageToday(tx, memberId, now)
       const values = { reservationId, createdAt: now, expiresAt: new Date(now.getTime() + reservationTtl) }
       await tx.insert(aiActivityDraftReservations).values({ memberId, ...values }).onDuplicateKeyUpdate({ set: values })
     })
@@ -65,15 +57,11 @@ export class ActivityDraftService {
       if (!current || current.reservationId !== reservationId || current.expiresAt <= now) {
         fail('AI_GENERATION_EXPIRED', '本次生成已超时，请手动重试', 409)
       }
-      // Count success on the completion day, rechecking its quota after a midnight crossing.
-      const total = await this.usageToday(tx, memberId, now)
-      await tx.insert(aiActivityDraftUsages).values({ id: randomUUID(), memberId, createdAt: now })
       await tx.delete(aiActivityDraftReservations).where(and(eq(aiActivityDraftReservations.memberId, memberId), eq(aiActivityDraftReservations.reservationId, reservationId)))
-      return 4 - total
     })
   }
 
-  async create(idea: string, header?: string) {
+  async create(idea: string, header?: string, reply?: DraftReplyContext, conversation?: DraftConversation) {
     const member = (await this.identity.require(header))!
     if (!complete(member)) fail('PROFILE_INCOMPLETE', '请先绑定手机号并设置头像、名称', 403)
     if (this.activeGenerations >= maximumConcurrentGenerations) fail('AI_BUSY', '生成请求较多，请稍后手动重试', 429)
@@ -84,13 +72,17 @@ export class ActivityDraftService {
       await this.reserve(member.id, reservationId)
       reserved = true
       // No transaction or member lock is held while waiting for the external model.
-      const raw = await this.provider.generate(idea)
-      const draft = parseActivityDraft(raw, idea)
-      if (!draft.title && !draft.description && !draft.location && draft.questions.length === 0) {
+      const prepared = normalizeDraftDates(safeConversationText(idea), new Date(), reply)
+      const context = conversation && prepareConversation(conversation)
+      const raw = await this.provider.generate(prepared, reply, context)
+      const draft = parseActivityDraft(raw, prepared, reply)
+      const nextQuestion = context ? parseNextQuestion(raw, context, draft, prepared) : null
+      const hasReply = reply && Object.entries(draft).some(([key, item]) => key !== 'questions' && item != null)
+      if (!(reply && nextQuestion) && !hasReply && !draft.title && !draft.description && !draft.location && draft.questions.length === 0) {
         fail('AI_GENERATION_FAILED', '未能生成有效草稿，请补充活动信息后重试', 502)
       }
-      const remainingToday = await this.finish(member.id, reservationId)
-      return { draft, missingFields: missingFields(draft), remainingToday }
+      await this.finish(member.id, reservationId)
+      return { draft, missingFields: missingFields(draft), nextQuestion }
     } catch (error) {
       if (reserved) {
         // A failed cleanup leaves an expiring reservation; never delete a replacement's token.

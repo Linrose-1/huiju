@@ -1,5 +1,5 @@
 import { fail } from '../flow/common.js'
-import type { ActivityDraftDto, DraftQuestionDto } from './dto.js'
+import type { ActivityDraftDto, DraftQuestionDto, DraftReplyContext } from './dto.js'
 
 type JsonObject = Record<string, unknown>
 const object = (value: unknown): value is JsonObject => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -57,8 +57,19 @@ function explicitChineseTimes(idea: string) {
   return { startsAt: eventTimes[0] ?? null, endsAt: eventTimes[1] ?? null, registrationDeadline }
 }
 
-export function parseActivityDraft(value: unknown, idea: string): ActivityDraftDto {
+export function parseActivityDraft(value: unknown, idea: string, reply?: DraftReplyContext): ActivityDraftDto {
   if (!object(value)) fail('AI_GENERATION_FAILED', '生成失败，请手动重试', 502)
+  if (reply) {
+    const evidence = object(value.evidence) ? value.evidence : {}
+    const facts: JsonObject = {}
+    for (const [field, item] of Object.entries(value)) {
+      if (field === 'title' && reply.field !== 'title' && !/标题|主题|改名/.test(idea)) continue
+      if (field === 'description' && reply.field !== 'description' && !/简介|介绍|内容/.test(idea)) continue
+      const quote = evidence[field]
+      if (typeof quote === 'string' && quote.trim() && idea.includes(quote.trim())) facts[field] = item
+    }
+    return parseActivityDraft(facts, idea)
+  }
   const questionRows = Array.isArray(value.questions) ? value.questions.slice(0, 20) : []
   const questions: DraftQuestionDto[] = questionRows.flatMap((row): DraftQuestionDto[] => {
     if (!object(row)) return []
@@ -72,13 +83,23 @@ export function parseActivityDraft(value: unknown, idea: string): ActivityDraftD
       options: type === 'single' || type === 'multiple' ? options : null }]
   })
   // A year alone cannot authorize model-invented month/day values.
-  const dated = /(?:19|20)\d{2}(?:年\d{1,2}月\d{1,2}日|([-/.])\d{1,2}\1\d{1,2}(?!\d))/.test(idea)
+  const days = Array.from(idea.matchAll(/((?:19|20)\d{2})(?:年(\d{1,2})月(\d{1,2})日|([-/.])(\d{1,2})\4(\d{1,2})(?!\d))/g),
+    m => [m[1], (m[2] ?? m[5]).padStart(2, '0'), (m[3] ?? m[6]).padStart(2, '0')].join('-'))
+  const statedDate = (value: unknown) => {
+    const iso = date(value)
+    if (!iso) return null
+    const localDay = new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(0, 10)
+    return days.includes(localDay) ? iso : null
+  }
+  const dated = days.length > 0
   const pending = pendingFacts(idea)
   const explicit = dated ? explicitChineseTimes(idea) : null
-  const startsAt = dated && !pending.time && !pending.start ? date(value.startsAt) ?? explicit?.startsAt ?? null : null
-  let endsAt = dated && !pending.time && !pending.end ? date(value.endsAt) ?? explicit?.endsAt ?? null : null
-  let registrationDeadline = dated && !pending.deadline && (!pending.time || explicit?.registrationDeadline)
-    ? date(value.registrationDeadline) ?? explicit?.registrationDeadline ?? null : null
+  const clocks = idea.match(/(?:[0-9零一二两三四五六七八九十]+\s*[点时](?!间|长)|\d{1,2}[:：]\d{2})/g) ?? []
+  const duration = /(?:持续|时长|历时|共)\s*[\d一二两三四五六七八九十半]+\s*(?:个?小时|分钟)/.test(idea)
+  const startsAt = clocks.length > 0 && dated && !pending.time && !pending.start ? statedDate(value.startsAt) ?? explicit?.startsAt ?? null : null
+  let endsAt = (clocks.length >= 2 || clocks.length > 0 && duration) && dated && !pending.time && !pending.end ? (duration ? date(value.endsAt) : statedDate(value.endsAt)) ?? explicit?.endsAt ?? null : null
+  let registrationDeadline = /报名截止|截止报名/.test(idea) && dated && !pending.deadline && (!pending.time || explicit?.registrationDeadline)
+    ? statedDate(value.registrationDeadline) ?? explicit?.registrationDeadline ?? null : null
   if (startsAt && endsAt && endsAt <= startsAt) endsAt = null
   if (startsAt && registrationDeadline && registrationDeadline > startsAt) registrationDeadline = null
   const explicitlyPaid = /(?:^|[，,。；;])\s*(?:确定|需要|活动)?收费(?:活动)?\s*(?=[，,。；;]|$)/.test(idea)

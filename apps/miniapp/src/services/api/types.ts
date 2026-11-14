@@ -38,6 +38,8 @@ export type ReviewList = components['schemas']['ReviewListDto']
 export type FeedbackContext = components['schemas']['FeedbackContextDto']
 export type ReviewStats = components['schemas']['ReviewStatsDto']
 export type AiActivityDraft = components['schemas']['ActivityDraftDto']
+export type DraftReplyContext = components['schemas']['DraftReplyContext']
+export type DraftConversation = NonNullable<components['schemas']['ActivityDraftInput']['conversation']>
 export type AiActivityDraftResult = components['schemas']['ActivityDraftResultDto']
 
 export type ActivityCounts = components['schemas']['ActivityCountsDto']

@@ -15604,6 +15604,140 @@
           "hasMore"
         ]
       },
+      "DraftReplyContext": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "time",
+              "location",
+              "title",
+              "description",
+              "fee",
+              "capacity"
+            ]
+          },
+          "date": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "morning",
+              "afternoon",
+              "evening"
+            ]
+          }
+        },
+        "required": [
+          "field"
+        ]
+      },
+      "DraftKnownValue": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "title",
+              "description",
+              "date",
+              "time",
+              "location",
+              "joining",
+              "fee",
+              "amount",
+              "capacity",
+              "contact"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "field",
+          "value"
+        ]
+      },
+      "DraftExchange": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "title",
+              "description",
+              "date",
+              "time",
+              "location",
+              "joining",
+              "fee",
+              "amount",
+              "capacity",
+              "contact"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "answer": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "field",
+          "prompt",
+          "answer"
+        ]
+      },
+      "DraftConversation": {
+        "type": "object",
+        "properties": {
+          "known": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftKnownValue"
+            }
+          },
+          "recent": {
+            "maxItems": 6,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DraftExchange"
+            }
+          },
+          "pending": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "enum": [
+                "title",
+                "description",
+                "date",
+                "time",
+                "location",
+                "joining",
+                "fee",
+                "amount",
+                "capacity",
+                "contact"
+              ]
+            }
+          }
+        },
+        "required": [
+          "known",
+          "recent",
+          "pending"
+        ]
+      },
       "ActivityDraftInput": {
         "type": "object",
         "properties": {
@@ -15611,6 +15745,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 5000
+          },
+          "reply": {
+            "$ref": "#/components/schemas/DraftReplyContext"
+          },
+          "conversation": {
+            "$ref": "#/components/schemas/DraftConversation"
           }
         },
         "required": [
@@ -15715,6 +15855,41 @@
           "questions"
         ]
       },
+      "GatherQuestionDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "title",
+              "description",
+              "date",
+              "time",
+              "location",
+              "joining",
+              "fee",
+              "amount",
+              "capacity",
+              "contact"
+            ]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "options": {
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "field",
+          "prompt",
+          "options"
+        ]
+      },
       "ActivityDraftResultDto": {
         "type": "object",
         "properties": {
@@ -15727,14 +15902,20 @@
               "type": "string"
             }
           },
-          "remainingToday": {
-            "type": "number"
+          "nextQuestion": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/GatherQuestionDto"
+              }
+            ]
           }
         },
         "required": [
           "draft",
           "missingFields",
-          "remainingToday"
+          "nextQuestion"
         ]
       },
       "ActivitySearchInput": {

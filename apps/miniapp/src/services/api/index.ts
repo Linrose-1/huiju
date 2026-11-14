@@ -4,7 +4,7 @@ import type { SpecialInviteCode, SpecialInviteList, SpecialInviteVerified } from
 import type { FellowList, ConnectionPath } from './types'
 import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
 import type { ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
-import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult } from './types'
+import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult, DraftConversation, DraftReplyContext } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
 export class ApiError extends Error {
   constructor(public code: string, message: string, public status = 0) { super(message) }
@@ -99,7 +99,9 @@ export const api = {
   circleIntents: (id: string, offset = 0) => request<CircleIntentList>(`/circle/posts/${encodeURIComponent(id)}/intents?offset=${offset}&limit=20`, 'GET', undefined, true),
   submitCircleIntent: (id: string, phone: string, requestId: string) => request<{ ok: boolean }>(`/circle/posts/${encodeURIComponent(id)}/intents`, 'POST', { phone, requestId }, true),
   uploadCircleImage: (base64: string, mimeType: 'image/png' | 'image/jpeg') => request<CircleImage>('/circle/images', 'POST', { base64, mimeType }, true),
-  generateActivityDraft: (idea: string) => request<AiActivityDraftResult>('/ai/activity-drafts', 'POST', { idea }, true, 100000),
+  interpretActivityReply: (answer: string, field: DraftReplyContext['field'], date?: string, period?: DraftReplyContext['period'], conversation?: DraftConversation) =>
+    request<AiActivityDraftResult>('/ai/activity-drafts', 'POST', { idea: answer, reply: { field, date, period }, conversation }, true, 100000),
+  generateActivityDraft: (idea: string, conversation?: DraftConversation) => request<AiActivityDraftResult>('/ai/activity-drafts', 'POST', { idea, conversation }, true, 100000),
   markAttendance: (id: string, registrationId: string) => request<Attendance>(`/activities/${encodeURIComponent(id)}/registrations/${encodeURIComponent(registrationId)}/attendance`, 'POST', {}, true),
   feedbackComments: (id: string, offset = 0, mine = false) => request<CommentList>(`/activities/${encodeURIComponent(id)}/comments${mine ? '/mine' : ''}?offset=${offset}`, 'GET', undefined, mine ? true : 'none'),
   feedbackReviews: (id: string, offset = 0) => request<ReviewList>(`/activities/${encodeURIComponent(id)}/reviews?offset=${offset}`, 'GET', undefined, 'none'),

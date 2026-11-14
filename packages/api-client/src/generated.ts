@@ -2693,8 +2693,33 @@ export interface components {
             items: components["schemas"]["CircleIntentDto"][];
             hasMore: boolean;
         };
+        DraftReplyContext: {
+            /** @enum {string} */
+            field: "time" | "location" | "title" | "description" | "fee" | "capacity";
+            date?: string;
+            /** @enum {string} */
+            period?: "morning" | "afternoon" | "evening";
+        };
+        DraftKnownValue: {
+            /** @enum {string} */
+            field: "title" | "description" | "date" | "time" | "location" | "joining" | "fee" | "amount" | "capacity" | "contact";
+            value: string;
+        };
+        DraftExchange: {
+            /** @enum {string} */
+            field: "title" | "description" | "date" | "time" | "location" | "joining" | "fee" | "amount" | "capacity" | "contact";
+            prompt: string;
+            answer: string;
+        };
+        DraftConversation: {
+            known: components["schemas"]["DraftKnownValue"][];
+            recent: components["schemas"]["DraftExchange"][];
+            pending: ("title" | "description" | "date" | "time" | "location" | "joining" | "fee" | "amount" | "capacity" | "contact")[];
+        };
         ActivityDraftInput: {
             idea: string;
+            reply?: components["schemas"]["DraftReplyContext"];
+            conversation?: components["schemas"]["DraftConversation"];
         };
         DraftQuestionDto: {
             prompt: string;
@@ -2716,10 +2741,16 @@ export interface components {
             registrationDeadline: string | null;
             questions: components["schemas"]["DraftQuestionDto"][];
         };
+        GatherQuestionDto: {
+            /** @enum {string} */
+            field: "title" | "description" | "date" | "time" | "location" | "joining" | "fee" | "amount" | "capacity" | "contact";
+            prompt: string;
+            options: string[];
+        };
         ActivityDraftResultDto: {
             draft: components["schemas"]["ActivityDraftDto"];
             missingFields: string[];
-            remainingToday: number;
+            nextQuestion: components["schemas"]["GatherQuestionDto"] | null;
         };
         ActivitySearchInput: {
             requestId: string;

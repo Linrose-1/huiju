@@ -79,14 +79,14 @@ onShareTimeline(shareTimeline)
         />
         <view class="task-fade" />
         <view class="task-content">
-          <view class="task-title serif">帮我发活动</view>
-          <view class="task-desc">把想法告诉 AI，生成可编辑的活动草稿，修改确认后由你发布</view>
+          <view class="task-title serif">i 助手发聚会</view>
+          <view class="task-desc">说出想法，点选待定的细节，核对邀请卡后发布</view>
           <view class="task-example">例如：下周六下午在园区办一场 AI 分享会，30 人，免费报名</view>
           <button
             class="primary task-button"
             @click="draftActivity"
           >
-            开始描述想法
+            聊聊聚会想法
             <uni-icons
               type="arrow-right"
               size="20"

@@ -27,6 +27,7 @@ const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), sub
 const aiDraftApplied = ref(false)
 const aiDraftMissing = ref(false)
 let fromAi = false, fromShare = false
+let onAiDraftSaved: ((activityId: string) => void) | undefined
 const source = ref<ManagedActivity | null>(null)
 const coverUrl = ref(''), coverSourceUrl = ref(''), coverError = ref('')
 const extraImages = ref<string[]>(Array(8).fill('')), uploadingIndex = ref(-1)
@@ -190,6 +191,7 @@ function reset() {
   restorePrompt = undefined
   clearTimeout(saveTimer)
   restoredDraft.value = false
+  onAiDraftSaved = undefined
   locationCoordinates.value = null
   descriptionDelta.value = null
   registrationNotice.value = ''
@@ -276,8 +278,11 @@ async function load() {
     }
     if (!id.value && !initialized && fromAi) {
       const draft = takeActivityDraft(owner, epoch)
-      if (draft) applyAiDraft(draft)
-      else aiDraftMissing.value = true
+      if (draft) {
+        applyAiDraft(draft.draft)
+        form.consultationContact = draft.consultationContact
+        onAiDraftSaved = draft.onSaved
+      } else aiDraftMissing.value = true
     }
     const key = manualDraftKey()
     if (!initialized && key) {
@@ -599,6 +604,8 @@ async function submit(publish = false) {
     const activity = id.value ? await api.updateActivity(id.value, input) : await api.createActivity(input)
     if (!current()) return
     id.value = activity.id
+    onAiDraftSaved?.(activity.id)
+    onAiDraftSaved = undefined
     if (key) {
       try { uni.removeStorageSync(key) } catch { uni.showToast({ title: '已保存，本机草稿清理失败', icon: 'none' }) }
     }
@@ -686,7 +693,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
         v-if="aiDraftApplied"
         class="notice"
       >
-        AI 草稿已填入，请核对全部内容。封面可手动设置，咨询联系方式需补齐；报名填写项的题型、必填和选项也请逐一确认。
+        已带入对话中确认的信息。你可以补充封面、单位署名和报名填写项。
       </view>
       <view
         v-if="!editable"

@@ -40,7 +40,7 @@
     {
       "path": "pages/assistant/activity-draft",
       "style": {
-        "navigationBarTitleText": "帮我发活动",
+        "navigationBarTitleText": "i 助手发聚会",
         "navigationBarBackgroundColor": "#f4f9f7",
         "backgroundColor": "#f4f9f7"
       }

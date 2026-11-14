@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { AppModule } from '../src/app.module.js'
 import { beijingDayBounds, ActivityDraftService } from '../src/ai/service.js'
+import { normalizeDraftDates, withoutContactDetails } from '../src/ai/idea.js'
 import { missingFields, parseActivityDraft } from '../src/ai/parse.js'
 
 const idea = '2026年10月12日在北京举办读书会，限20人，免费，下午2点开始，4点结束。'
@@ -76,6 +77,33 @@ describe('AI activity draft validation', () => {
     expect(parseActivityDraft({ startsAt: null }, '2026年2月30日上午9点集合').startsAt).toBeNull()
   })
 
+  it('resolves next week across a Beijing month boundary and only assigns stated clock times', () => {
+    const now = new Date('2026-10-31T18:00:00Z')
+    const input = normalizeDraftDates('下周一下午两点见，免费', now)
+    expect(input).toBe('2026年11月02日下午两点见，免费')
+    const hours = { startsAt: '2026-11-02T14:00:00+08:00', endsAt: '2026-11-02T16:00:00+08:00' }
+    expect(parseActivityDraft(hours, input)).toMatchObject({ startsAt: '2026-11-02T06:00:00.000Z', endsAt: null })
+    expect(parseActivityDraft(hours, normalizeDraftDates('下周一下午见', now))).toMatchObject({ startsAt: null, endsAt: null })
+    expect(parseActivityDraft(hours, normalizeDraftDates('明天下午两点见', new Date('2026-11-08T00:00:00Z'))).startsAt).toBeNull()
+    expect(normalizeDraftDates('限20人', now, { field: 'capacity', date: '2026-11-02' })).toBe('限20人')
+  })
+
+  it('accepts several evidenced reply fields and leaves the existing title and other unrelated fields alone', () => {
+    const answer = '地点在创客厅，限20人，免费'
+    const raw = { title: '创客厅聚会', description: '聚会说明', location: '创客厅', capacity: 20, feeType: 'free', questions: [{prompt: '凭空添加'}],
+      evidence: { title: '创客厅', description: '创客厅', location: '创客厅', capacity: '限20人', feeType: '免费', questions: '其他内容' } }
+    expect(parseActivityDraft(raw, answer, { field: 'location' })).toMatchObject({
+      title: null, description: null, location: '创客厅', capacity: 20, feeType: 'free', questions: [],
+    })
+  })
+
+  it('removes explicit private contact values while preserving event topics', () => {
+    const input = '微信小程序分享，手机摄影，微信号:demo_test，电话：13800000000，demo@example.com'
+    const safe = withoutContactDetails(input)
+    expect(safe).toContain('微信小程序分享，手机摄影')
+    expect(safe).not.toMatch(/demo|13800000000/)
+  })
+
   it('uses Beijing calendar day across UTC midnight', () => {
     expect(beijingDayBounds(new Date('2026-09-29T15:59:59Z')).map(v => v.toISOString()))
       .toEqual(['2026-09-28T16:00:00.000Z', '2026-09-29T16:00:00.000Z'])
@@ -86,7 +114,7 @@ describe('AI activity draft validation', () => {
 describe('AI draft HTTP validation', () => {
   let app: INestApplication
   let endpoint: string
-  const create = vi.fn().mockResolvedValue({ draft: { title: '测试' }, missingFields: [], remainingToday: 4 })
+  const create = vi.fn().mockResolvedValue({ draft: { title: '测试' }, missingFields: [], nextQuestion: null })
   beforeAll(async () => {
     const module = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(ActivityDraftService).useValue({ create })
@@ -99,13 +127,21 @@ describe('AI draft HTTP validation', () => {
   afterAll(async () => { await app?.close() })
 
   it('accepts only a nonblank bounded idea and passes the bearer header to the service', async () => {
-    for (const input of [{}, { idea: 10 }, { idea: ' ' }, { idea: 'a'.repeat(5001) }, { idea: '读书会', extra: true }]) {
+    for (const input of [{}, { idea: 10 }, { idea: ' ' }, { idea: 'a'.repeat(5001) }, { idea: '读书会', extra: true }, { idea, reply: { field: 'contact' } }, { idea, reply: { field: 'time', date: '2026-02-31' } }]) {
       const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input) })
       expect(response.status).toBe(400)
     }
     expect(create).not.toHaveBeenCalled()
     const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer fake' }, body: JSON.stringify({ idea }) })
     expect(response.status).toBe(200)
-    expect(create).toHaveBeenCalledWith(idea, 'Bearer fake')
+    expect(create).toHaveBeenCalledWith(idea, 'Bearer fake', undefined, undefined)
+    const context = { known: [{ field: 'title', value: '读书会' }], recent: [], pending: ['date', 'location'] }
+    for (const [conversation, status] of [
+      [context, 200], [{ ...context, pending: ['telephone'] }, 400], [{ ...context, known: [null] }, 400],
+      [{ ...context, recent: Array(7).fill({ field: 'title', prompt: '主题？', answer: '读书会' }) }, 400],
+    ] as const) {
+      const result = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ idea, conversation }) })
+      expect(result.status).toBe(status)
+    }
   })
 })

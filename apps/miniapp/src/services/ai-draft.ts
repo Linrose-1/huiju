@@ -1,13 +1,20 @@
 import type { AiActivityDraft } from './api/types'
 
-let pending: { owner: string; epoch: number; draft: AiActivityDraft } | null = null
+interface EditorDraft {
+  owner: string
+  epoch: number
+  draft: AiActivityDraft
+  consultationContact: string
+  onSaved?: (activityId: string) => void
+}
+let pending: EditorDraft | null = null
 
-export function stageActivityDraft(owner: string, epoch: number, draft: AiActivityDraft) {
-  pending = { owner, epoch, draft }
+export function stageActivityDraft(owner: string, epoch: number, draft: AiActivityDraft, consultationContact = '', onSaved?: EditorDraft['onSaved']) {
+  pending = { owner, epoch, draft, consultationContact, onSaved }
 }
 
-export function takeActivityDraft(owner: string, epoch: number): AiActivityDraft | null {
-  const draft = pending?.owner === owner && pending.epoch === epoch ? pending.draft : null
+export function takeActivityDraft(owner: string, epoch: number) {
+  const entry = pending?.owner === owner && pending.epoch === epoch ? pending : null
   pending = null
-  return draft
+  return entry
 }

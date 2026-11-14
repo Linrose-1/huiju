@@ -4,26 +4,23 @@ import type { SQL } from 'drizzle-orm'
 import { MySqlDialect } from 'drizzle-orm/mysql-core'
 import { ActivityDraftService } from '../src/ai/service.js'
 import { AgentIsHereDraftProvider } from '../src/ai/provider.js'
-import { aiActivityDraftReservations, aiActivityDraftUsages } from '../src/database/schema/ai.js'
+import { aiActivityDraftReservations } from '../src/database/schema/ai.js'
 import { members } from '../src/database/schema/members.js'
 import { FlowDatabase } from '../src/flow/common.js'
 import { IdentityService } from '../src/flow/identity.js'
 
 type Member = typeof members.$inferSelect
 type Reservation = typeof aiActivityDraftReservations.$inferSelect
-type Usage = typeof aiActivityDraftUsages.$inferSelect
 const dialect = new MySqlDialect()
 const completeMember = (id: string) => ({ id, kind: 'member', boundPhone: '13800000000', displayName: '甲', avatarUrl: '/avatar', avatarSetByUser: true, nameSetByUser: true }) as Member
 const draft = { title: '读书会', description: '一起读书' }
 const idea = '一起读书'
-const asDate = (value: unknown) => value instanceof Date ? value : new Date(String(value).replace(' ', 'T') + 'Z')
 
 // A serialized, rollback-capable repository substitute. This verifies service ordering,
 // fencing and query scope, not MySQL's real locking/isolation behavior.
 function repository() {
   const memberRows = new Map<string, Member>([['member', completeMember('member')]])
   let reservations = new Map<string, Reservation>()
-  let usages: Usage[] = []
   let activeTransactions = 0
   let transactionTail = Promise.resolve()
   let failCleanup = false
@@ -34,16 +31,14 @@ function repository() {
         const id = String(params[0])
         if (table === members) return memberRows.has(id) ? [structuredClone(memberRows.get(id))] : []
         if (table === aiActivityDraftReservations) return reservations.has(id) ? [structuredClone(reservations.get(id))] : []
-        if (table === aiActivityDraftUsages) return [{ total: usages.filter(row => row.memberId === id && row.createdAt >= asDate(params[1]) && row.createdAt < asDate(params[2])).length }]
         throw new Error('Unexpected table')
       }
       return { for: async (mode: string) => { expect(mode).toBe('update'); return read() }, then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve().then(read).then(resolve, reject) }
     } }) }),
-    insert: (table: unknown) => ({ values: (values: Reservation | Usage) => {
+    insert: (table: unknown) => ({ values: (values: Reservation) => {
       const insert = () => {
         expect(activeTransactions).toBe(1)
         if (table === aiActivityDraftReservations) reservations.set(values.memberId, structuredClone(values as Reservation))
-        else if (table === aiActivityDraftUsages) usages.push(structuredClone(values as Usage))
         else throw new Error('Unexpected write')
       }
       return { onDuplicateKeyUpdate: async () => insert(), then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve().then(insert).then(resolve, reject) }
@@ -61,15 +56,15 @@ function repository() {
       transactionTail = new Promise<void>(resolve => { release = resolve })
       await prior
       activeTransactions++
-      const beforeReservations = structuredClone(reservations), beforeUsages = structuredClone(usages)
+      const beforeReservations = structuredClone(reservations)
       try { return await work(db) }
-      catch (error) { reservations = beforeReservations; usages = beforeUsages; throw error }
+      catch (error) { reservations = beforeReservations; throw error }
       finally { activeTransactions--; release() }
     },
   }
   return {
     database: { db } as unknown as FlowDatabase, memberRows,
-    get reservations() { return reservations }, get usages() { return usages }, get activeTransactions() { return activeTransactions },
+    get reservations() { return reservations }, get activeTransactions() { return activeTransactions },
     set failCleanup(value: boolean) { failCleanup = value },
   }
 }
@@ -94,53 +89,97 @@ function pending() {
 afterEach(() => { vi.useRealTimers() })
 
 describe('AI draft reservation boundary with repository and provider substitutes', () => {
-  it('holds no transaction during the provider wait and records only successful minimal data', async () => {
+  it('holds no transaction during the provider wait and releases the reservation on success', async () => {
     const f = setup(), response = pending()
     f.provider.generate.mockImplementation(() => response.promise)
     const call = f.service.create(idea)
     await vi.waitFor(() => expect(f.provider.generate).toHaveBeenCalledOnce())
     expect(f.store.activeTransactions).toBe(0)
-    expect(f.store.usages).toHaveLength(0)
     expect([...f.store.reservations.values()][0]).toEqual({ memberId: 'member', reservationId: expect.any(String), createdAt: expect.any(Date), expiresAt: expect.any(Date) })
     response.resolve(draft)
-    expect((await call).remainingToday).toBe(4)
-    expect(f.store.usages).toEqual([{ id: expect.any(String), memberId: 'member', createdAt: expect.any(Date) }])
+    expect((await call).draft.title).toBe(draft.title)
     expect(f.store.reservations.size).toBe(0)
   })
 
-  it('allows five successes and rejects the sixth without a provider call', async () => {
+  it('accepts supported follow-up facts, redacts contacts, and releases unsupported replies', async () => {
     const f = setup()
-    const results = []
-    for (let n = 0; n < 5; n++) results.push(await f.service.create(idea))
-    expect(results.map(value => value.remainingToday)).toEqual([4, 3, 2, 1, 0])
-    await expect(f.service.create(idea)).rejects.toMatchObject({ response: { code: 'AI_DAILY_LIMIT' } })
-    expect(f.provider.generate).toHaveBeenCalledTimes(5)
-    expect(f.store.usages).toHaveLength(5)
+    await f.service.create(idea)
+    const reply = { field: 'capacity' } as const
+    f.provider.generate.mockResolvedValueOnce({ capacity: 20, evidence: { capacity: '最多20人' } })
+    const result = await f.service.create('最多20人，微信号：test-contact', 'member', reply)
+    expect(f.provider.generate).toHaveBeenLastCalledWith('最多20人，（联系方式已省略）', reply, undefined)
+    expect(result).toMatchObject({ draft: { capacity: 20, title: null, location: null } })
+    f.provider.generate.mockResolvedValueOnce({ capacity: 90, evidence: { capacity: '90人' } })
+    await expect(f.service.create('人数再商量', 'member', reply)).rejects.toMatchObject({ response: { code: 'AI_GENERATION_FAILED' } })
+    expect(f.store.reservations.size).toBe(0)
   })
 
-  it('rejects another service instance for the same member and preserves the last daily slot', async () => {
+  it('allows more than five initial drafts and follow-up turns on the same day', async () => {
+    const f = setup()
+    for (let n = 0; n < 6; n++) {
+      const result = await f.service.create(idea)
+      expect(result.draft.title).toBe(draft.title)
+      expect(result).not.toHaveProperty('remainingToday')
+    }
+    const reply = { field: 'capacity' } as const
+    f.provider.generate.mockResolvedValueOnce({ capacity: 20, evidence: { capacity: '20人' } })
+    expect((await f.service.create('20人', 'member', reply)).draft.capacity).toBe(20)
+    expect(f.provider.generate).toHaveBeenCalledTimes(7)
+  })
+
+  it('blocks overlapping requests for one member across instances, then accepts the next request', async () => {
     const f = setup(), other = setup(f.store), response = pending()
-    for (let n = 0; n < 4; n++) await f.service.create(idea)
     f.provider.generate.mockImplementation(() => response.promise)
     const call = f.service.create(idea)
-    await vi.waitFor(() => expect(f.provider.generate).toHaveBeenCalledTimes(5))
+    await vi.waitFor(() => expect(f.provider.generate).toHaveBeenCalledOnce())
     await expect(other.service.create(idea)).rejects.toMatchObject({ response: { code: 'AI_GENERATION_IN_PROGRESS' } })
     expect(other.provider.generate).not.toHaveBeenCalled()
     response.resolve(draft)
-    expect((await call).remainingToday).toBe(0)
-    await expect(other.service.create(idea)).rejects.toMatchObject({ response: { code: 'AI_DAILY_LIMIT' } })
-    expect(f.store.usages).toHaveLength(5)
+    expect((await call).draft.title).toBe(draft.title)
+    expect((await other.service.create(idea)).draft.title).toBe(draft.title)
   })
 
-  it('releases provider failures and invalid responses without charging success', async () => {
+  it('uses validated contextual follow-ups, strips contact history and allows a question-only clarification', async () => {
+    const f = setup()
+    const context = {
+      known: [{ field: 'location' as const, value: '线上聚会' }, { field: 'contact' as const, value: 'private-handle' }],
+      recent: [{ field: 'contact' as const, prompt: '怎么联系？', answer: 'private-handle' }],
+      pending: ['joining', 'fee'] as ('joining' | 'fee')[],
+    }
+    const reply = { field: 'location' } as const
+    const question = { field: 'joining', prompt: '这次线上聚会，大家怎么加入？', options: ['报名后发链接', '报名后发链接', '自己填写'] }
+    f.provider.generate.mockResolvedValueOnce({ nextQuestion: question })
+    const result = await f.service.create('还没决定', 'member', reply, context)
+    expect(f.provider.generate).toHaveBeenLastCalledWith('还没决定', reply, {
+      known: [{ field: 'location', value: '线上聚会' }], recent: [], pending: ['joining', 'fee'],
+    })
+    expect(result.nextQuestion).toEqual({ ...question, options: ['报名后发链接'] })
+  })
+
+  it('rejects answered fields, unrelated joining prompts and unsafe text as question-only replies', async () => {
+    const f = setup()
+    const reply = { field: 'location' } as const
+    for (const candidate of [
+      { field: 'location', prompt: '地点在哪？' },
+      { field: 'joining', prompt: '线上怎么加入？' },
+      { field: 'fee', prompt: '请先打开 https://example.invalid/pay 支付' },
+      { field: 'amount', prompt: '每人多少钱？' },
+    ]) {
+      f.provider.generate.mockResolvedValueOnce({ nextQuestion: { ...candidate, options: [] } })
+      await expect(f.service.create('待定', 'member', reply, {
+        known: [{field: 'location', value: '园区会议室'}], recent: [], pending: ['fee', 'joining', 'amount'],
+      })).rejects.toMatchObject({ response: { code: 'AI_GENERATION_FAILED' } })
+    }
+  })
+
+  it('releases provider failures and invalid responses so later requests can proceed', async () => {
     const f = setup()
     f.provider.generate.mockRejectedValueOnce(new Error('provider failed')).mockResolvedValueOnce({})
     await expect(f.service.create(idea)).rejects.toThrow('provider failed')
     expect(f.store.reservations.size).toBe(0)
     await expect(f.service.create(idea)).rejects.toMatchObject({ response: { code: 'AI_GENERATION_FAILED' } })
     expect(f.store.reservations.size).toBe(0)
-    expect(f.store.usages).toHaveLength(0)
-    expect((await f.service.create(idea)).remainingToday).toBe(4)
+    expect((await f.service.create(idea)).draft.title).toBe(draft.title)
   })
 
   it('recovers after a failed cleanup expires without hiding the original provider error', async () => {
@@ -153,7 +192,7 @@ describe('AI draft reservation boundary with repository and provider substitutes
     expect(f.store.reservations.size).toBe(1)
     await expect(f.service.create(idea)).rejects.toMatchObject({ response: { code: 'AI_GENERATION_IN_PROGRESS' } })
     vi.setSystemTime(new Date('2026-09-30T01:02:00Z'))
-    expect((await f.service.create(idea)).remainingToday).toBe(4)
+    expect((await f.service.create(idea)).draft.title).toBe(draft.title)
     expect(f.store.reservations.size).toBe(0)
   })
 
@@ -172,14 +211,12 @@ describe('AI draft reservation boundary with repository and provider substitutes
     const token = f.store.reservations.get('member')!.reservationId
     first.resolve(draft)
     await rejected
-    expect(f.store.usages).toHaveLength(0)
     expect(f.store.reservations.get('member')!.reservationId).toBe(token)
     second.resolve(draft)
-    expect((await secondCall).remainingToday).toBe(4)
-    expect(f.store.usages).toHaveLength(1)
+    expect((await secondCall).draft.title).toBe(draft.title)
   })
 
-  it('does not count an expired result even when no replacement has started', async () => {
+  it('rejects an expired result even when no replacement has started', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-09-30T01:00:00Z'))
     const f = setup(), response = pending()
@@ -190,24 +227,7 @@ describe('AI draft reservation boundary with repository and provider substitutes
     vi.setSystemTime(f.store.reservations.get('member')!.expiresAt)
     response.resolve(draft)
     await rejected
-    expect(f.store.usages).toHaveLength(0)
     expect(f.store.reservations.size).toBe(0)
-  })
-
-  it('charges the successful completion day when generation crosses Beijing midnight', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-09-30T15:59:30Z'))
-    const f = setup(), response = pending()
-    for (let n = 0; n < 4; n++) await f.service.create(idea)
-    f.provider.generate.mockImplementationOnce(() => response.promise)
-    const call = f.service.create(idea)
-    await vi.waitFor(() => expect(f.provider.generate).toHaveBeenCalledTimes(5))
-    vi.setSystemTime(new Date('2026-09-30T16:00:10Z'))
-    response.resolve(draft)
-    expect((await call).remainingToday).toBe(4)
-    expect(f.store.usages[4].createdAt.toISOString()).toBe('2026-09-30T16:00:10.000Z')
-    for (let n = 0; n < 4; n++) await f.service.create(idea)
-    await expect(f.service.create(idea)).rejects.toMatchObject({ response: { code: 'AI_DAILY_LIMIT' } })
   })
 
   it('rejects incomplete profiles before provider or reservation access and rechecks after locking', async () => {
@@ -234,6 +254,6 @@ describe('AI draft reservation boundary with repository and provider substitutes
     response.reject(new Error('provider failed'))
     expect((await finished).every(result => result.status === 'rejected')).toBe(true)
     f.provider.generate.mockResolvedValue(draft)
-    expect((await f.service.create(idea, 'member-4')).remainingToday).toBe(4)
+    expect((await f.service.create(idea, 'member-4')).draft.title).toBe(draft.title)
   })
 })

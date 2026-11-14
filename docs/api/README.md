@@ -41,7 +41,7 @@
 
 ## 智能活动推荐
 
-有效会话且手机号、主动头像与主动名称均完整的会员才可使用；推荐成功每天10次与草拟分账，按完成时北京时间计次。规则见[专项需求](../product/智能活动推荐.md)，事务、隐私、过期及归因见[技术方案](../architecture/activity-recommendation.md)。实现与环境启用分开记录；本轮不执行迁移或真实付费模型调用。
+有效会话且手机号、主动头像与主动名称均完整的会员才可使用；推荐成功每天10次，按完成时北京时间计次。规则见[专项需求](../product/智能活动推荐.md)，事务、隐私、过期及归因见[技术方案](../architecture/activity-recommendation.md)。实现与环境启用分开记录；本轮不执行迁移或真实付费模型调用。
 
 | 方法与路径（均带 `/api/v1`） | 输入与用途 |
 | --- | --- |
@@ -55,9 +55,11 @@
 
 ## AI 活动草拟
 
-`POST /api/v1/ai/activity-drafts` 使用会员 Bearer 会话，提交 `{ "idea": "活动想法" }`。服务端为调用安全限制输入为 1–5000 字，这不是产品定义的输入体验上限。服务端要求手机号、用户主动设置的头像与名称均齐备。成功返回 `draft`、`missingFields` 和 `remainingToday`；`draft` 包含 `title`、`description`、`startsAt`、`endsAt`、`location`、`capacity`、`feeType`、`feeAmountCents`、`registrationDeadline` 和 `questions`。不确定的候选字段为 `null`，问题的 `type`、`required`、`options` 也可为 `null`；`coverUrl` 与 `consultationContact` 必须由用户填写。日期候选是带时区解析后的 UTC ISO 字符串。
+`POST /api/v1/ai/activity-drafts` 使用会员 Bearer 会话，提交 `{ "idea": "活动想法" }`。服务端为调用安全限制输入为 1–5000 字，这不是产品定义的输入体验上限。服务端要求手机号、用户主动设置的头像与名称均齐备。成功返回 `draft`、`missingFields` 和 `nextQuestion`；`draft` 包含 `title`、`description`、`startsAt`、`endsAt`、`location`、`capacity`、`feeType`、`feeAmountCents`、`registrationDeadline` 和 `questions`。不确定的候选字段为 `null`，问题的 `type`、`required`、`options` 也可为 `null`；`coverUrl` 与 `consultationContact` 必须由用户填写。日期候选是带时区解析后的 UTC ISO 字符串。
 
-按会员北京时间自然日最多返回 5 份有效草稿；失败不计次。`AI_DAILY_LIMIT` 为 HTTP 429，`AI_NOT_CONFIGURED` 为 503，`AI_GENERATION_FAILED` 为 502，`AI_TIMEOUT` 为 504；资料不完整为 `PROFILE_INCOMPLETE`。草拟接口不创建活动，也不保存原文或模型原始回复。部署前需配置 `AI_PROVIDER=agentishere`、`AI_BASE_URL` 与仅后端可见的 `AI_API_KEY`，并在目标环境应用 `0006` 与 `0007` 迁移；未应用所需迁移时新接口实现不可用。`0007` 已在本机开发库获授权执行，其他环境须分别确认。新增 `AI_GENERATION_IN_PROGRESS`（409，已有生成）、`AI_GENERATION_EXPIRED`（409，预留过期）、`AI_BUSY`（429，当前生成并发已满）。次数按成功确认日统计，外部调用位于事务外，详见技术设计。
+对话中自由补充多个字段时可在同一请求中附加 `reply`，例如 `{"idea":"在创客厅，免费，限20人","reply":{"field":"location"}}`。字段 `field` 可取 time、location、title、description、fee、capacity。可选的 `date`（YYYY-MM-DD）和 `period`（morning、afternoon、evening）提供已确认的时段上下文。服务端返回本轮有依据的字段，其余为空；客户端仅合并有效补充。咨询联系方式在客户端单独填写。对话版可提交 conversation，包含已知聚会信息 known、最近问答 recent、待澄清字段 pending。响应的 nextQuestion 提供模型选择的字段、问法及建议选项，发布前仍校验草稿。首次生成与后续追问均不限每日次数。
+
+`AI_NOT_CONFIGURED` 为 503，`AI_GENERATION_FAILED` 为 502，`AI_TIMEOUT` 为 504；资料不完整为 `PROFILE_INCOMPLETE`。草拟接口不创建活动，也不保存原文或模型原始回复。部署前需配置 `AI_PROVIDER=agentishere`、`AI_BASE_URL` 与仅后端可见的 `AI_API_KEY`，并在目标环境应用 `0006` 与 `0007` 迁移；未应用所需迁移时新接口实现不可用。`0007` 已在本机开发库获授权执行，其他环境须分别确认。新增 `AI_GENERATION_IN_PROGRESS`（409，已有生成）、`AI_GENERATION_EXPIRED`（409，预留过期）、`AI_BUSY`（429，当前生成并发已满）。外部调用位于事务外，详见技术设计。
 
 本地验证更新（2026-09-30）：`0006` 已于 2026-09-29 获授权应用于本机开发库，真实模型及微信工具模拟身份的生成→编辑页回填链路已通过；未保存或发布测试活动。真实微信、真机与真实库并发限额未验收，详见[技术设计](../architecture/ai-activity-draft.md)及[实现日志](../implementation-log/2026-09.md)。此状态不代表其他环境已配置或迁移。
 
