@@ -29,19 +29,24 @@ const blankDraft = {
 }
 function makePage(t, storage = new Map()) {
   const session = reactive({ token:'token', epoch:1, member:{id:'a'} })
-  const requests = [], navigation = [], lifecycle = {}, decisions = []
+  const requests = [], navigation = [], lifecycle = {}, decisions = [], modals = []
   const api = { interpretActivityReply: async () => ({ draft:{...blankDraft,title:null,description:null}, nextQuestion:null }), generateActivityDraft: idea => new Promise((resolve, reject) => requests.push({idea, resolve, reject})) }
   const uni = {
     setStorageSync:(k,v) => storage.set(k,v), getStorageSync:k => storage.get(k), removeStorageSync:k => storage.delete(k),
     hideKeyboard() {}, pageScrollTo() {}, showModal(options) {
+      modals.push(options.title)
       const choice = decisions.shift()
       if (choice === undefined) throw new Error('unexpected modal: ' + options.title)
       if (choice === null) options.fail()
       else options.success({confirm:choice,cancel:!choice})
     }
   }
+  const historySource = readFileSync(new URL('../src/services/gather-history.ts', import.meta.url), 'utf8')
+  const historyModule = {}
+  new Function('exports','uni',ts.transpileModule(historySource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(historyModule,uni)
   const deps = {
     '@dcloudio/uni-app': {onShow:fn=>lifecycle.show=fn,onUnload:fn=>lifecycle.unload=fn,onHide:fn=>lifecycle.hide=fn},
+    '@/services/gather-history':historyModule,
     '@/services/gather-dialog':loadDialog(), '@/services/presentation':{}, '@/services/api/environment':{API_BASE_URL:'local'},
     '@/services/api':{api, errorMessage:e=>e.message, ApiError:class extends Error {}}, '@/services/ai-draft':{},
     '@/services/navigation':{ routes:{manage:'/manage'}, requireProfile: async()=>true, navigate:url=>navigation.push(url) },
@@ -49,9 +54,9 @@ function makePage(t, storage = new Map()) {
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual'))(name=>deps[name]||require(name),page,uni))
+    'generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
-  return {page,session,api,requests,navigation,lifecycle,decisions,storage}
+  return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
 }
 
 test('gather dialog preserves failed input, suppresses duplicate generation and late responses for another session', async t=>{
@@ -83,7 +88,7 @@ test('complete conversation produces preview, publishes only after confirmation 
   assert.equal(page.question.value.field,'time')
   await page.answer('14:00–16:00',true)
   assert.equal(page.question.value.field,'location')
-  await page.answer('线上聚会',true)
+  await page.answer('线上聚会')
   await page.answer('报名后发会议链接',true)
   await page.answer('免费',true)
   await page.answer('群内联系发起人')
@@ -101,6 +106,13 @@ test('complete conversation produces preview, publishes only after confirmation 
   assert.equal(creates,1)
   assert.equal(publishes,2)
   assert.deepEqual(navigation,['/manage?id=existing'])
+  page.openHistory()
+  const published=page.history.value.find(item=>item.idea==='明天下午讨论社群运营')
+  assert.ok(published)
+  assert.equal(published.snapshot,undefined)
+  page.resumeHistory(published.id)
+  assert.equal(page.draft.value,null)
+  assert.equal(page.idea.value,'')
 })
 
 test('compound text can supply place, fee and capacity in one turn, contact stays local',async t=>{
@@ -129,24 +141,30 @@ test('compound text can supply place, fee and capacity in one turn, contact stay
   assert.equal(page.question.value,null)
 })
 
-test('restore is opt-in and modal failure keeps the saved draft until the choice is made',async t=>{
+function resumeChat(page, idea) {
+  page.openHistory()
+  const item = page.history.value.find(item => item.idea === idea)
+  assert.ok(item, 'Expected a history entry for ' + idea)
+  page.resumeHistory(item.id)
+  return item
+}
+
+test('re-entering opens a blank conversation and unsent ideas can be resumed from history', async t => {
   const first=makePage(t)
   await first.lifecycle.show()
   first.page.idea.value='上次未提交的想法'
   first.lifecycle.unload()
-  const second=makePage(t,first.storage)
-  second.decisions.push(null,true)
-  await second.lifecycle.show()
-  assert.equal(second.page.idea.value,'')
-  assert.equal(second.storage.size,1)
-  await second.lifecycle.show()
-  assert.equal(second.page.idea.value,'上次未提交的想法')
-  second.lifecycle.unload()
-  const third=makePage(t,first.storage)
-  third.decisions.push(false)
-  await third.lifecycle.show()
-  assert.equal(third.page.idea.value,'')
-  assert.equal(third.storage.size,0)
+  const next=makePage(t,first.storage)
+  await next.lifecycle.show()
+  assert.deepEqual(next.modals,[])
+  assert.equal(next.page.idea.value,'')
+  next.page.idea.value='另一场读书会'
+  resumeChat(next.page,'上次未提交的想法')
+  assert.equal(next.page.idea.value,'上次未提交的想法')
+  resumeChat(next.page,'另一场读书会')
+  assert.equal(next.page.idea.value,'另一场读书会')
+  assert.equal(next.requests.length,0)
+  assert.deepEqual(next.modals,[])
 })
 
 test('editor applies explicit AI fields but requires a fee choice when unknown', t => {
@@ -193,7 +211,7 @@ test('chat starter can be edited before sending and the same composer answers th
   assert.equal(requests.length, 1)
 })
 
-test('model can ask about venue before time, then tailor its next card to an online meeting', async t => {
+test('online venue completes location and unsolicited joining details are kept without another card', async t => {
   const { page, requests, lifecycle, api } = makePage(t)
   await lifecycle.show()
   page.idea.value = '明天聊 AI'
@@ -201,7 +219,11 @@ test('model can ask about venue before time, then tailor its next card to an onl
   requests[0].resolve({ draft:blankDraft,
     nextQuestion:{field:'location',prompt:'同行们准备在哪里交流 AI？',options:['线上聚会','行业园区']} })
   await pending
-  assert.equal(page.question.value.prompt, '同行们准备在哪里交流 AI？')
+  assert.equal(page.question.value.field, 'location')
+  assert.deepEqual(page.options.value,['线下聚会'])
+  await page.answer('线下聚会',true)
+  assert.equal(page.custom.value,'offline')
+  assert.equal(page.draft.value.location,null)
   const calls = []
   api.interpretActivityReply = async (...args) => {
     calls.push(args)
@@ -209,13 +231,11 @@ test('model can ask about venue before time, then tailor its next card to an onl
       nextQuestion:calls.length === 1 ? {field:'joining',prompt:'大家怎样进入这次线上交流？',options:['填写会议链接','报名后发会议链接','自己填写']}
         : {field:'fee',prompt:'明天的 AI 沙龙如何收费？',options:['免费参与','收费']} }
   }
-  await page.answer('线上聚会',true)
+  await page.answer('线上聚会')
   assert.equal(calls[0][4].known.find(item=>item.field==='location').value,'线上聚会')
-  assert.equal(calls[0][4].recent.at(-1).prompt,'同行们准备在哪里交流 AI？')
-  assert.deepEqual(page.options.value,['填写会议链接','报名后发会议链接'])
-  await page.answer('填写会议链接',true)
-  assert.equal(page.custom.value,true)
-  assert.equal(calls.length,1)
+  assert.equal(calls[0][4].recent.at(-1).prompt,'聚会在哪里举办？')
+  assert.equal(page.question.value.field,'time')
+  assert.ok(!calls[0][4].pending.includes('joining'))
   await page.answer('报名后发腾讯会议链接，免费，最多十人')
   assert.equal(page.draft.value.location,'线上聚会 · 报名后发腾讯会议链接')
   assert.equal(page.draft.value.feeType,'free')
@@ -261,19 +281,13 @@ test('a clarification without a patch remains in history and survives opt-in res
   assert.equal(page.question.value.prompt,'大家下班时间不同，傍晚哪段更合适？')
   lifecycle.unload()
   const second=makePage(t,first.storage)
-  second.decisions.push(true)
   await second.lifecycle.show()
+  resumeChat(second.page,'明天下午的 AI 聚会')
   assert.deepEqual(second.page.question.value,page.question.value)
-  for (const [key,raw] of first.storage) {
-    const saved=JSON.parse(raw)
-    delete saved.modelCard
-    delete saved.manual
-    saved.remaining = 0
-    first.storage.set(key,JSON.stringify(saved))
-  }
-  const legacy=makePage(t,first.storage)
-  legacy.decisions.push(true)
+  const legacyRaw = {idea:'明天下午的 AI 聚会',draft:page.draft.value,exchanges:page.exchanges.value,reply:'',remaining:0}
+  const legacy=makePage(t,new Map([['gather-dialog:v1:local:a',JSON.stringify(legacyRaw)]]))
   await legacy.lifecycle.show()
+  resumeChat(legacy.page,legacyRaw.idea)
   assert.equal(legacy.page.question.value.field,'time')
   let followups = 0
   legacy.api.interpretActivityReply = async () => {
@@ -283,4 +297,84 @@ test('a clarification without a patch remains in history and survives opt-in res
   await legacy.page.answer('15:00–17:00',true)
   assert.equal(followups,1)
   assert.equal(legacy.page.manual.value,false)
+})
+
+test('messages appear before the API responds and each reply keeps its own confirmed facts', async t => {
+  const { page, requests, lifecycle, api, storage } = makePage(t)
+  await lifecycle.show()
+  page.message.value = '明天下午办读书会'
+  page.sendMessage()
+  assert.equal(page.sentIdea.value, '明天下午办读书会')
+  assert.equal(page.message.value, '')
+  assert.deepEqual(page.openingFacts.value, [])
+  requests[0].resolve({ draft: blankDraft })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.ok(page.openingFacts.value.some(fact => fact.startsWith('时间')))
+  let resolveReply, calls = 0
+  api.interpretActivityReply = () => new Promise(resolve => { calls++; resolveReply = resolve })
+  const text = '下午三点到五点，免费，最多20人'
+  page.message.value = text
+  page.sendMessage()
+  assert.equal(page.outgoing.value.answer, text)
+  assert.equal(page.message.value, '')
+  assert.equal(page.exchanges.value.length, 0)
+  await page.answer(text)
+  assert.equal(calls, 1)
+  lifecycle.hide()
+  const interrupted = makePage(t, new Map(storage))
+  await interrupted.lifecycle.show()
+  resumeChat(interrupted.page,'明天下午办读书会')
+  assert.equal(interrupted.page.reply.value,text)
+  assert.equal(interrupted.requests.length,0)
+  resolveReply({ draft: { ...blankDraft, title: null, description: null } })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(page.outgoing.value, null)
+  assert.equal(page.exchanges.value.length, 1)
+  const [turn] = page.exchanges.value
+  assert.equal(turn.answer, text)
+  assert.deepEqual(turn.facts.map(fact => fact.slice(0, 2)), ['时间', '费用', '人数'])
+  lifecycle.unload()
+  const resumed = makePage(t, storage)
+  await resumed.lifecycle.show()
+  resumeChat(resumed.page,'明天下午办读书会')
+  assert.deepEqual(resumed.page.openingFacts.value, page.openingFacts.value)
+  assert.deepEqual(resumed.page.exchanges.value[0].facts, turn.facts)
+})
+
+test('restoring and leaving a chat does not extend the seven-day window', async t => {
+  const key='gather-dialog:v1:local:a'
+  const saved={idea:'读书会',exchanges:[],reply:'',chatId:'legacy-1',updatedAt:Date.now()-6*86400000}
+  const next=makePage(t,new Map([[key,JSON.stringify(saved)]]))
+  await next.lifecycle.show()
+  assert.equal(next.storage.has(key),false)
+  const restored=resumeChat(next.page,saved.idea)
+  assert.equal(restored.updatedAt,saved.updatedAt)
+  next.lifecycle.hide()
+  next.page.openHistory()
+  assert.equal(next.page.history.value[0].updatedAt,saved.updatedAt)
+  const expired=makePage(t,new Map([[key,JSON.stringify({...saved,updatedAt:Date.now()-7*86400000})]]))
+  await expired.lifecycle.show()
+  expired.page.openHistory()
+  assert.equal(expired.page.idea.value,'')
+  assert.equal(expired.page.history.value.length,0)
+  assert.deepEqual(expired.modals,[])
+
+})
+
+test('starting over keeps sent messages readable in local history', async t => {
+  const first=makePage(t)
+  await first.lifecycle.show()
+  first.page.idea.value='园区读书会'
+  const turn=first.page.generate()
+  first.requests[0].resolve({draft:blankDraft})
+  await turn
+  await first.page.answer('明天')
+  first.lifecycle.unload()
+  const next=makePage(t,first.storage)
+  await next.lifecycle.show()
+  next.page.openHistory()
+  assert.equal(next.page.idea.value,'')
+  assert.equal(next.page.history.value.length,1)
+  assert.equal(next.page.history.value[0].idea,'园区读书会')
+  assert.equal(next.page.history.value[0].exchanges[0].answer,'明天')
 })

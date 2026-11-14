@@ -21,9 +21,21 @@ test('one contextual reply supplies the time range, fee and capacity while prese
   assert.equal(after.capacity,20)
   assert.equal(after.location,model.location)
   assert.equal(after.feeType,'free')
+  assert.deepEqual(methods.gatherFacts(before, after), [
+    '时间 2026-11-14 15:00–17:00', '费用 免费', '人数 最多 20 人'
+  ])
+  assert.deepEqual(methods.gatherFacts(after, {...after, startsAt: new Date(after.startsAt).toISOString()}), [])
   assert.equal(nextGatherQuestion(after,now).field,'contact')
   assert.equal(nextGatherQuestion(applyGatherAnswer(after,'contact','向值班室咨询',now),now),null)
   assert.equal(before.feeType,null)
+})
+test('opening facts omit unknown fee and capacity; cross-day times and later changes remain explicit', () => {
+  const first = createGatherDraft('下周六', model, now)
+  assert.deepEqual(methods.gatherFacts(null, first), ['时间 2026-11-21', '地点 猩球创客', '主题 AI 聚会', '活动介绍已整理'])
+  const second = {...first, startsAt:'2026-11-21T21:00:00+08:00', endsAt:'2026-11-22T01:00:00+08:00', capacity:12}
+  assert.deepEqual(methods.gatherFacts(first, second), ['时间 2026-11-21 21:00–2026-11-22 01:00', '人数 最多 12 人'])
+  const last = applyGatherAnswer(second, 'capacity', '人数不限，每人19.9元', now)
+  assert.deepEqual(methods.gatherFacts(second, last), ['费用 19.9 元/人', '人数 不限'])
 })
 test('paid registration asks for the amount, missing time never silently uses a suggested slot', () => {
   const before=createGatherDraft('下周六上午',model,now)
@@ -69,4 +81,16 @@ test('only public activity context and the six most recent non-contact turns rea
   const context=methods.gatherContext(draft,turns)
   assert.equal(context.recent.length,6)
   assert.doesNotMatch(JSON.stringify(context),/private-|room-private|123|456|789|abcd|example-0/)
+})
+
+test('online venue needs no joining card; volunteered access and contact stay in their own fields', () => {
+  const link = 'https://example.invalid/room'
+  const d = createGatherDraft('明天下午三点到五点线上读书会，会议链接 ' + link, {...model, location:'线上聚会',feeType:'free'}, now)
+  assert.equal(d.location, '线上聚会 · 会议链接 ' + link)
+  assert.equal(nextGatherQuestion(d, now).field,'contact')
+  const extra = applyGatherAnswer(d,'contact','报名后在群里通知',now)
+  assert.equal(extra.consultationContact,'')
+  assert.ok(extra.location.endsWith('报名后在群里通知'))
+  assert.equal(nextGatherQuestion(applyGatherAnswer(extra,'contact','咨询请联系班长',now),now),null)
+  assert.ok(!JSON.stringify(methods.gatherContext(extra, [])).includes(link))
 })

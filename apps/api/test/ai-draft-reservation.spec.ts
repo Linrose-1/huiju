@@ -147,13 +147,29 @@ describe('AI draft reservation boundary with repository and provider substitutes
       pending: ['joining', 'fee'] as ('joining' | 'fee')[],
     }
     const reply = { field: 'location' } as const
-    const question = { field: 'joining', prompt: '这次线上聚会，大家怎么加入？', options: ['报名后发链接', '报名后发链接', '自己填写'] }
+    const question = { field: 'fee', prompt: '聚会怎么收费？', options: ['免费', '免费', '自己填写'] }
     f.provider.generate.mockResolvedValueOnce({ nextQuestion: question })
     const result = await f.service.create('还没决定', 'member', reply, context)
     expect(f.provider.generate).toHaveBeenLastCalledWith('还没决定', reply, {
-      known: [{ field: 'location', value: '线上聚会' }], recent: [], pending: ['joining', 'fee'],
+      known: [{ field: 'location', value: '线上聚会' }], recent: [], pending: ['fee'],
     })
-    expect(result.nextQuestion).toEqual({ ...question, options: ['报名后发链接'] })
+    expect(result.nextQuestion).toEqual({ ...question, options: ['免费'] })
+  })
+
+  it('keeps volunteered online joining details in location without asking for them', async () => {
+    const f = setup()
+    const reply = { field: 'fee' } as const
+    f.provider.generate.mockResolvedValueOnce({
+      location: '线上聚会 · 报名后发会议链接', feeType: 'free',
+      evidence: { location: '报名后发会议链接', feeType: '免费' },
+      nextQuestion: { field: 'joining', prompt: '大家怎么加入？', options: [] },
+    })
+    const result = await f.service.create('免费，报名后发会议链接', 'member', reply, {
+      known: [{ field: 'location', value: '线上聚会' }], recent: [], pending: ['joining', 'fee', 'contact'],
+    })
+    expect(result.draft.location).toBe('线上聚会 · 报名后发会议链接')
+    expect(result.draft.feeType).toBe('free')
+    expect(result.nextQuestion).toBeNull()
   })
 
   it('rejects answered fields, unrelated joining prompts and unsafe text as question-only replies', async () => {
@@ -162,12 +178,13 @@ describe('AI draft reservation boundary with repository and provider substitutes
     for (const candidate of [
       { field: 'location', prompt: '地点在哪？' },
       { field: 'joining', prompt: '线上怎么加入？' },
+      { field: 'capacity', prompt: '参加人数上限是多少？' },
       { field: 'fee', prompt: '请先打开 https://example.invalid/pay 支付' },
       { field: 'amount', prompt: '每人多少钱？' },
     ]) {
       f.provider.generate.mockResolvedValueOnce({ nextQuestion: { ...candidate, options: [] } })
       await expect(f.service.create('待定', 'member', reply, {
-        known: [{field: 'location', value: '园区会议室'}], recent: [], pending: ['fee', 'joining', 'amount'],
+        known: [{field: 'location', value: '线上聚会'}], recent: [], pending: ['fee', 'joining', 'amount', 'capacity'],
       })).rejects.toMatchObject({ response: { code: 'AI_GENERATION_FAILED' } })
     }
   })

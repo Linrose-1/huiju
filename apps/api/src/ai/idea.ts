@@ -35,7 +35,7 @@ export function prepareConversation(context: DraftConversation): DraftConversati
     recent: context.recent.filter(row => row.field !== 'contact').map(row => ({
       field: row.field, prompt: safeConversationText(row.prompt), answer: safeConversationText(row.answer),
     })),
-    pending: context.pending,
+    pending: context.pending.filter(field => field !== 'joining' && field !== 'capacity'),
   }
 }
 
@@ -49,8 +49,8 @@ export function parseNextQuestion(raw: unknown, context: DraftConversation, draf
   const location = draft.location || known.get('location') || ''
   const complete: Partial<Record<typeof field, unknown>> = {
     title: draft.title, description: draft.description, date: draft.startsAt || /\d{4}年\d{1,2}月\d{1,2}日/.test(idea),
-    time: draft.startsAt && draft.endsAt, location, capacity: draft.capacity, fee: draft.feeType,
-    amount: draft.feeType === 'free' || draft.feeAmountCents, joining: !/线上|在线|远程|直播|会议链接|腾讯会议|飞书会议/.test(location) || known.has('joining'),
+    time: draft.startsAt && draft.endsAt, location, fee: draft.feeType,
+    amount: draft.feeType === 'free' || draft.feeAmountCents,
   }
   if (field === 'amount' && !(draft.feeType === 'paid' || (!draft.feeType && (known.get('fee')?.match(/收费|paid/) || /收费|每人.{0,5}元/.test(idea))))) return null
   if (complete[field] || known.has(field)) return null

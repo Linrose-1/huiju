@@ -51,6 +51,7 @@ function parseRange(text: string, period: string) {
 export function createGatherDraft(idea: string, draft: AiActivityDraft, now = new Date()): GatherDraft {
   const date = draft.startsAt ? chinaDate(Date.parse(draft.startsAt)) : parseDay(idea, now)
   const result = { ...draft, date, period: idea.match(/上午|下午|晚上|早上|中午/)?.[0] || '', consultationContact: '' }
+  result.location = withJoiningDetails(result.location, idea)
   const range = parseRange(idea, result.period)
   if (range && date && !result.startsAt && !result.endsAt) setRange(result, range)
   return result
@@ -59,10 +60,17 @@ function setRange(d: GatherDraft, times: string[]) {
   d.startsAt = d.date + 'T' + times[0] + ':00+08:00'
   d.endsAt = d.date + 'T' + times[1] + ':00+08:00'
 }
-// A bare online venue still needs instructions for guests. Store the confirmed
-// arrangement in the existing location so the invitation and editor agree.
-function needsJoining(location: string | null) {
-  return !!location && /^(?:线上|在线|网络|远程|腾讯会议|飞书会议|钉钉会议|zoom)(?:聚会|活动|交流|举行|举办|会议)?$/i.test(location.trim())
+// Joining details are optional venue information; keep explicitly supplied links on device.
+function joiningClauses(text: string) {
+  return text.split(/[，,。；;\n]/).map(part => part.trim()).filter(part =>
+    /会议链接|入会链接|会议号|入会口令|入会密码|会议密码|报名后.{0,10}(?:发链接|发群|通知)|^(?:https?:\/\/)(?:meeting\.tencent\.com|[\w.-]+\.zoom\.us)\//i.test(part))
+}
+export function withJoiningDetails(location: string | null, text: string) {
+  if (!location || !/线上|在线|远程|直播|会议|zoom/i.test(location)) return location
+  const additions = joiningClauses(text).filter(part => !location.includes(part))
+  if (!additions.length) return location
+  const venue = location.split(/[，,·]/).map(part => part.trim()).filter(part => part && !part.includes('已省略')).join(' · ')
+  return [venue, ...additions].filter(Boolean).join(' · ')
 }
 export function pendingGatherFields(d: GatherDraft, now = new Date()): GatherField[] {
   const fields: GatherField[] = []
@@ -70,8 +78,7 @@ export function pendingGatherFields(d: GatherDraft, now = new Date()): GatherFie
   if (!d.description?.trim()) fields.push('description')
   if (!d.date || d.date < chinaDate(+now)) fields.push('date')
   else if (!d.startsAt || !d.endsAt || Date.parse(d.startsAt) <= +now || Date.parse(d.endsAt) <= Date.parse(d.startsAt)) fields.push('time')
-  if (!d.location?.trim()) fields.push('location')
-  else if (needsJoining(d.location)) fields.push('joining')
+  if (!d.location?.trim() || d.location.trim() === '线下聚会') fields.push('location')
   if (!d.feeType) fields.push('fee')
   else if (d.feeType === 'paid' && !d.feeAmountCents) fields.push('amount')
   if (!d.consultationContact.trim()) fields.push('contact')
@@ -83,9 +90,40 @@ export function nextGatherQuestion(d: GatherDraft, now = new Date()): GatherQues
 }
 export function usableModelQuestion(q: GatherQuestion | null | undefined, d: GatherDraft): GatherQuestion | null {
   if (!q || !pendingGatherFields(d).includes(q.field) || !q.prompt?.trim() || !Array.isArray(q.options)) return null
+  if (q.field === 'location') return gatherQuestionFor('location', d)
   return { field:q.field, prompt:q.prompt.trim(), options:[...new Set(q.options.map(x => x.trim()).filter(x => x && x !== '自己填写'))].slice(0,4) }
 }
 export type GatherTurn = { field:GatherField; prompt:string; answer:string }
+
+function gatherTime(d: GatherDraft) {
+  const local = (value: string | null) => {
+    const stamp = value ? Date.parse(value) : NaN
+    return Number.isFinite(stamp) ? new Date(stamp + 8 * 3600000).toISOString().slice(0, 16).replace('T', ' ') : ''
+  }
+  const start = local(d.startsAt), end = local(d.endsAt)
+  if (start && end) return start + '–' + (start.slice(0, 10) === end.slice(0, 10) ? end.slice(11) : end)
+  if (start) return start + ' 开始'
+  if (end) return end + ' 结束'
+  return [d.date, d.period].filter(Boolean).join(' ')
+}
+
+// Compare what the chat can display, so equivalent ISO offsets don't create a new confirmation.
+export function gatherFacts(before: GatherDraft | null, after: GatherDraft): string[] {
+  const facts: string[] = []
+  const time = gatherTime(after)
+  if (time && (!before || time !== gatherTime(before))) facts.push('时间 ' + time)
+  if (after.location && after.location !== before?.location) facts.push('地点 ' + after.location)
+  if (after.feeType && (after.feeType !== before?.feeType || after.feeAmountCents !== before?.feeAmountCents)) {
+    const price = after.feeType === 'free' ? '免费' : after.feeAmountCents == null ? '收费，金额待定' : after.feeAmountCents / 100 + ' 元/人'
+    facts.push('费用 ' + price)
+  }
+  if (after.capacity != null && after.capacity !== before?.capacity) facts.push('人数 最多 ' + after.capacity + ' 人')
+  else if (after.capacity == null && before?.capacity != null) facts.push('人数 不限')
+  if (after.title && after.title !== before?.title) facts.push('主题 ' + after.title)
+  if (after.description && after.description !== before?.description) facts.push('活动介绍已整理')
+  if (after.consultationContact && after.consultationContact !== before?.consultationContact) facts.push('联系方式已填写')
+  return facts
+}
 export function publicText(value: string) {
   return value.replace(/(?:https?:\/\/|www\.)[^\s，。；]+/gi, '（链接已省略）')
     .replace(/(?:\+?86[ -]?)?1[3-9](?:[ -]?\d){9}(?!\d)|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:微信号?|QQ|会议号|密码|口令)\s*[:：]?\s*[a-z0-9_.-]+(?:[ -]+[0-9]+)*/gi, '（信息已省略）')
@@ -106,10 +144,12 @@ export function applyGatherAnswer(draft: GatherDraft, field: GatherField, answer
   const d = {...draft}
   const text = answer.trim()
   if (!text) return d
-  if (field==='contact') { d.consultationContact=text; return d }
-  if (field==='joining') {
-    const arrangement = text.split(/[，,；;](?=\s*(?:免费|收费|限|最多|每人))/)[0].trim()
-    if (arrangement) d.location = (d.location?.split(' · ')[0] || '线上聚会') + ' · ' + arrangement
+  const details = joiningClauses(text)
+  if (details.length && field !== 'location') d.location = withJoiningDetails(d.location, text)
+  if (field==='contact') {
+    const contact = details.length && d.location && /线上|在线|远程|直播|会议|zoom/i.test(d.location) ? text.split(/[，,。；;\n]/).map(part => part.trim()).filter(part => !details.includes(part)).join('，') : text
+    if (contact) d.consultationContact = contact
+    return d
   }
   if (field==='title' || field==='description' || field==='location') { d[field]=text; return d }
   const date = parseDay(text, now)
@@ -137,18 +177,18 @@ export function applyGatherAnswer(draft: GatherDraft, field: GatherField, answer
   return d
 }
 export function gatherQuestionFor(field: GatherField, draft: GatherDraft, now = new Date()): GatherQuestion {
-  const prompts: Record<GatherField, string> = {
+  if (field === 'joining') field = 'location' // Historical turns now edit the venue.
+  const prompts: Record<Exclude<GatherField, 'joining'>, string> = {
     title:'聚会的主题叫什么？', description:'想怎么介绍这次聚会？', date:'聚会改到哪天？',
     time:'几点开始和结束？', location:'聚会在哪里举办？', fee:'这场聚会怎么收费？',
-    joining:'大家怎么加入这场线上聚会？', amount:'每人收多少元？', contact:'参与者可以怎样联系你？', capacity:'最多多少人可以参加？'
+    amount:'每人收多少元？', contact:'参与者可以怎样联系你？', capacity:'最多多少人可以参加？'
   }
   let options: string[] = []
   if (field === 'title') options = ['商友主题交流会', '创业者经验分享', '学友小聚']
   if (field === 'description') options = draft.title
     ? ['围绕「' + draft.title + '」分享经验，交流想法。', '欢迎对「' + draft.title + '」感兴趣的朋友一起交流。']
     : ['分享近期实践，交流彼此的经验。']
-  if (field === 'location') options = ['线上聚会']
-  if (field === 'joining') options = ['填写会议链接','报名后发会议链接']
+  if (field === 'location') options = ['线下聚会']
   if (field === 'amount') options = ['每人 30 元', '每人 50 元', '每人 100 元']
   if (field === 'fee') options = ['免费','收费']
   if (field === 'date') options = ['今天','明天','后天']
