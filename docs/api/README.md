@@ -1,5 +1,11 @@
 # API 契约
 
+## 有聚榜单
+
+`GET /members/me/leaderboard` 供资料完整的会员访问。可选参数 `period` 取 `month`（默认）或 `all`，`kind` 取 `attendance`（默认）或 `organized`。本月按北京时间自然月统计。参与榜以活动开始时间归月，每场有效报名实际标记到场计一次。发起榜以发布时间归月，每场当前处于已发布状态的活动计一次。下架为独立的审核状态，榜单仅展示会员汇总数。
+
+返回 `{ items, month }`，本月返回 YYYY-MM，累计返回 null。每条仅含 `memberId/displayName/avatarUrl/count`，仅列资料完整且有对应记录的学友，按次数降序、同次数按会员 ID 升序，最多返回 20 人。
+
 ## 品牌及后台账号分页（2026-11-05）
 
 - `GET /platform/brand`：公开、no-store，仅返回 `{ displayName, visible }`；默认有聚点/true。

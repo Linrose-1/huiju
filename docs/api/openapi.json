@@ -941,6 +941,137 @@
         ]
       }
     },
+    "/api/v1/members/me/leaderboard": {
+      "get": {
+        "operationId": "FlowController_leaderboard",
+        "parameters": [
+          {
+            "name": "period",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "month",
+              "type": "string",
+              "enum": [
+                "month",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "attendance",
+              "type": "string",
+              "enum": [
+                "attendance",
+                "organized"
+              ]
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaderboardDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "activities"
+        ]
+      }
+    },
     "/api/v1/activities/{id}/registrations/me/answers": {
       "post": {
         "operationId": "FlowController_editFromMiniapp",
@@ -12560,6 +12691,52 @@
           "activeCount",
           "counts",
           "items"
+        ]
+      },
+      "LeaderboardEntryDto": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "count": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "memberId",
+          "displayName",
+          "avatarUrl",
+          "count"
+        ]
+      },
+      "LeaderboardDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardEntryDto"
+            }
+          },
+          "month": {
+            "type": "string",
+            "nullable": true,
+            "description": "北京时间的 YYYY-MM，累计榜为 null"
+          }
+        },
+        "required": [
+          "items",
+          "month"
         ]
       },
       "RegistrationInput": {

@@ -205,6 +205,14 @@
       }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pages/leaderboard",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "有聚榜单", "enablePullDownRefresh": true } }
+      ]
+    }
+  ],
   "tabBar": {
     "color": "#737A76",
     "selectedColor": "#0B6847",

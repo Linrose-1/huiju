@@ -2,6 +2,7 @@ import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL, NETWORK_DEBUG } from './environment'
 import type { SpecialInviteCode, SpecialInviteList, SpecialInviteVerified } from './types'
 import type { FellowList, ConnectionPath } from './types'
+import type { Leaderboard, LeaderboardPeriod, LeaderboardKind } from './types'
 import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
 import type { ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult, DraftConversation, DraftReplyContext } from './types'
@@ -79,6 +80,8 @@ export const api = {
   activityPosterCode: (id: string) => request<import('./types').PosterCode>(`/activities/${encodeURIComponent(id)}/poster-code`, 'POST', {}, true, 30000),
   resolveActivityPoster: (scene: string) => request<import('./types').PosterDestination>(`/activity-posters/resolve/${encodeURIComponent(scene)}`, 'GET', undefined, 'none'),
   fellows: (query: ListQuery = {}) => request<FellowList>(`/members/me/fellows?${listQuery(query)}`, 'GET', undefined, true),
+  leaderboard: (period: LeaderboardPeriod, kind: LeaderboardKind) =>
+    request<Leaderboard>(`/members/me/leaderboard?period=${period}&kind=${kind}`, 'GET', undefined, true),
   connectionPath: (id: string, cursor = 0) => request<ConnectionPath>(`/members/${encodeURIComponent(id)}/connection-path?cursor=${cursor}&limit=20`, 'GET', undefined, true),
   advertising: (placement: 'activity' | 'circle' | 'assistant', offset = 0) => request<AdvertisingPublicAdList>(`/advertising/ads?placement=${placement}&offset=${offset}&limit=20`, 'GET', undefined, 'none'),
   advertisingIntroduction: (id: string) => request<AdvertisingIntroduction>('/advertising/introductions/' + encodeURIComponent(id), 'GET', undefined, 'none'),

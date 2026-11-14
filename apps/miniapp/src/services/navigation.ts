@@ -10,6 +10,7 @@ export const routes = {
   feedback: '/pages/activity/feedback',
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',
   fellows: '/pages/member/fellows', connection: '/pages/member/connection',
+  leaderboard: '/pages/leaderboard/index',
   invitation: '/pages/invitation/index',
   activityDraft: '/pages/assistant/activity-draft',
   activitySearch: '/pages/assistant/activity-search',

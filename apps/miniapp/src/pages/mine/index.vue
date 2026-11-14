@@ -245,6 +245,29 @@ onUnload(() => { active = false; generation++ })
         <view
           class="menu-row row"
           hover-class="menu-pressed"
+          @click="openMemberPage(routes.leaderboard)"
+        >
+          <view class="menu-icon">
+            <uni-icons
+              type="medal"
+              size="48rpx"
+              color="#17543d"
+            />
+          </view>
+          <view class="grow">
+            <view class="tile-title">有聚榜单</view>
+            <view class="muted small">查看参与榜和发起榜</view>
+          </view>
+          <text
+            class="entry-arrow"
+            aria-hidden="true"
+          >
+            {{ '>' }}
+          </text>
+        </view>
+        <view
+          class="menu-row row"
+          hover-class="menu-pressed"
           @click="openMemberPage(routes.fellows)"
         >
           <view class="menu-icon">

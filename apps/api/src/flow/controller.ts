@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Headers, HttpCode, HttpException, Param,
 import { ApiBearerAuth, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { ActivityService } from './activity.js'
 import { ActivityListQuery } from './activity-list-dto.js'
+import { LeaderboardDto, LeaderboardQuery } from './leaderboard-dto.js'
 import { MyRegistrationQuery, PageQuery } from './pagination.js'
 import { ActivityDto, ActivityListDto, AnswersInput, ErrorDto, PublicRosterDto, RegistrationDto, RegistrationInput, RegistrationListDto } from './dto.js'
 
@@ -87,6 +88,13 @@ export class FlowController {
     @Query() query: MyRegistrationQuery,
     @Headers('authorization')
     header?: string) { return this.activity.allMine(header, query) }
+
+  @Get('members/me/leaderboard')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOkResponse({ type: LeaderboardDto })
+  leaderboard(@Query() query: LeaderboardQuery, @Headers('authorization') header?: string) {
+    return this.activity.leaderboard(query, header)
+  }
 
   @HttpCode(200)
   @Post('activities/:id/registrations')

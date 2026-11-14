@@ -18,6 +18,8 @@ import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
 import { ActivityDto, AnswerInput, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
 import { ActivityListQuery } from './activity-list-dto.js'
+import type { LeaderboardQuery } from './leaderboard-dto.js'
+import { readLeaderboard } from './leaderboard.js'
 import { PageQuery, MyRegistrationQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 import { RecommendationRecordsService } from '../recommendations/records.js'
 import { activityImages } from './activity-images.js'
@@ -288,6 +290,12 @@ export class ActivityService {
       fail('REGISTRATION_NOT_FOUND', '尚未报名此活动', 404)
     }
     return this.registrationDto(row)
+  }
+
+  async leaderboard(query: LeaderboardQuery, header?: string) {
+    const member = (await this.identity.require(header))!
+    if (!complete(member)) fail('PROFILE_INCOMPLETE', '请先完善手机号、头像和用户名称', 403)
+    return readLeaderboard(this.database.db, query)
   }
 
   async allMine(header?: string, query: MyRegistrationQuery = new MyRegistrationQuery()) {

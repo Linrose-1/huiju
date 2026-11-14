@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/members/me/leaderboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FlowController_leaderboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/activities/{id}/registrations/me/answers": {
         parameters: {
             query?: never;
@@ -1969,6 +1985,17 @@ export interface components {
             counts: components["schemas"]["ActivityCountsDto"];
             items: components["schemas"]["MyRegistrationDto"][];
         };
+        LeaderboardEntryDto: {
+            memberId: string;
+            displayName: string;
+            avatarUrl: string | null;
+            count: number;
+        };
+        LeaderboardDto: {
+            items: components["schemas"]["LeaderboardEntryDto"][];
+            /** @description 北京时间的 YYYY-MM，累计榜为 null */
+            month: string | null;
+        };
         RegistrationInput: {
             specialInviteCode?: string;
             recommendationToken?: string;
@@ -3589,6 +3616,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RegistrationListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    FlowController_leaderboard: {
+        parameters: {
+            query?: {
+                period?: "month" | "all";
+                kind?: "attendance" | "organized";
+            };
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaderboardDto"];
                 };
             };
             400: {
