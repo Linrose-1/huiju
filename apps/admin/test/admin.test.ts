@@ -77,9 +77,9 @@ describe('admin session and transport', () => {
   })
   it('exports the complete applied engagement filter as text rather than parsing CSV as JSON', async () => {
     authenticated()
-    network.mockResolvedValue(new Response('会员编号,浏览次数\r\nHJ0001,2', { headers: { 'Content-Type': 'text/csv' } }))
+    network.mockResolvedValue(new Response('用户编号,浏览次数\r\nXJBFA000001,2', { headers: { 'Content-Type': 'text/csv' } }))
     const csv = await admin.adminApi.exportEngagement({ days: 7, behavior: 'browse', profile: 'complete', offset: 0 })
-    expect(csv).toContain('HJ0001,2')
+    expect(csv).toContain('XJBFA000001,2')
     const request = network.mock.calls[0]![0] as Request
     expect(request.credentials).toBe('include')
     const url = new URL(request.url)

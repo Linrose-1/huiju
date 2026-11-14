@@ -162,6 +162,13 @@
       "when": 1794665728322,
       "tag": "0022_member_short_invite_codes",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1794667581260,
+      "tag": "0023_community_user_numbers",
+      "breakpoints": true
     }
   ]
 }

@@ -24,7 +24,7 @@ const css = source => source.replace(/(?<![\w.-])(image|text|view)(?=[\s.{:#>])/
 const mock = `
 import { reactive, onMounted } from 'vue';
 export const page = new URLSearchParams(location.search).get('page') || 'activity';
-export const member = { id:'visual-member', memberNumber:'HJ-视觉示例', displayName:'示例学友', avatarUrl:null, boundPhone:'13800000000', profileComplete:true, inviteCode:'012345' };
+export const member = { id:'visual-member', memberNumber:'XJBFA000002', displayName:'示例学友', avatarUrl:null, boundPhone:'13800000000', profileComplete:true, inviteCode:'012345' };
 const session = reactive({ token:page==='login'?'':'visual-only-not-a-token', member:page==='login'?null:member, pendingInvite:'', clear(){this.token='';this.member=null} });
 export const useSessionStore = () => session;
 export const activity = {id:'visual-activity',title:'学加资产运营闭门沙龙：存量时代的增长机会',description:'视觉示例内容：交流资产运营实践，分享园区合作经验与行业观察。本预览不表示真实活动或真实报名。',coverUrl:'/static/huiju/campus.jpg',location:'深圳 · 南山科技园（视觉示例）',startsAt:'2026-10-18T06:00:00Z',endsAt:'2026-10-18T09:30:00Z',registrationDeadline:'2026-10-16T16:00:00Z',capacity:60,activeRegistrationCount:38,feeType:'paid',feeAmountCents:29900,registrationState:'open',organizer:member,consultationContact:'视觉示例咨询文本，无真实联系方式',questions:[

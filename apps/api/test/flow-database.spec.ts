@@ -9,6 +9,8 @@ import { activities, registrationQuestions } from '../src/database/schema/activi
 import { registrations, registrationOperations } from '../src/database/schema/registrations.js'
 import { ActivityService } from '../src/flow/activity.js'
 import { FlowDatabase } from '../src/flow/common.js'
+import { allocateCommunityNumber, DEFAULT_COMMUNITY_ID } from '../src/flow/member-number.js'
+import { communities, communityMembers } from '../src/database/schema/communities.js'
 import { IdentityService } from '../src/flow/identity.js'
 import { WechatAdapter } from '../src/flow/wechat.js'
 
@@ -46,13 +48,29 @@ describe.skipIf(!enabled)('real MySQL flow in a rolled-back transaction', () => 
         const headerA = `Bearer ${sessionA.token}`
         const headerB = `Bearer ${sessionB.token}`
         const headerC = `Bearer ${sessionC.token}`
-        expect(sessionA.member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
+        expect(sessionA.member.memberNumber).toMatch(/^XJ[A-J]{2}[A-L][0-9]{6}$/)
         expect(new Set([sessionA, sessionB, sessionC].map(value => value.member.memberNumber)).size).toBe(3)
         const repeated = await login(codeB, sessionC.member.inviteCode)
         expect(repeated.member.memberNumber).toBe(sessionB.member.memberNumber)
         expect(repeated.member.id).toBe(sessionB.member.id)
         const [memberB] = await tx.select().from(members).where(eq(members.id, sessionB.member.id))
         expect(memberB.inviterMemberId).toBe(sessionA.member.id)
+        const [defaultMembership] = await tx.select().from(communityMembers).where(and(
+          eq(communityMembers.communityId, DEFAULT_COMMUNITY_ID), eq(communityMembers.memberId, memberB.id),
+        ))
+        expect(defaultMembership.userNumber).toBe(repeated.member.memberNumber)
+        expect(defaultMembership.joinedAt.getTime()).toBe(memberB.createdAt.getTime())
+
+        // A second community starts its own sequence for the same person.
+        const otherId = 'rollback-' + randomUUID().slice(0, 20)
+        await tx.insert(communities).values({ id: otherId, name: '回滚测试社群', numberPrefix: 'HX' })
+        const firstOther = await allocateCommunityNumber(tx, otherId, new Date('2026-01-31T15:59:59Z'))
+        await tx.insert(communityMembers).values({ ...firstOther, memberId: memberB.id })
+        const secondOther = await allocateCommunityNumber(tx, otherId, new Date('2026-01-31T16:00:00Z'))
+        await tx.insert(communityMembers).values({ ...secondOther, memberId: sessionA.member.id })
+        expect([firstOther.userNumber, secondOther.userNumber]).toEqual(['HXBFA000001', 'HXBFB000002'])
+        expect((await identity.me(headerB)).memberNumber).toBe(defaultMembership.userNumber)
+
         const [memberC] = await tx.select().from(members).where(eq(members.id, sessionC.member.id))
         const [root] = await tx.select().from(members).where(eq(members.id, memberC.inviterMemberId!))
         expect(root.kind).toBe('platform_root')
@@ -80,7 +98,7 @@ describe.skipIf(!enabled)('real MySQL flow in a rolled-back transaction', () => 
         const input = { contactPhone: '13900000000', answers: questionIds.map((questionId, index) => ({ questionId, value: index === 3 ? ['甲', '乙'] : index === 2 ? '甲' : '回答' })) }
         const publicDetail = await service.detail(activityId)
         expect(publicDetail).not.toHaveProperty('consultationContact')
-        expect(Object.keys(publicDetail.organizer!).sort()).toEqual(['avatarUrl', 'displayName'])
+        expect(Object.keys(publicDetail.organizer!).sort()).toEqual(['avatarUrl', 'displayName', 'memberId'])
         await expect(service.write(activityId, headerA, 'register', input)).rejects.toThrow('绑定手机号')
         await expect(service.write(activityId, headerB, 'register', { ...input, answers: [] })).rejects.toThrow('必填问题')
         const first = await service.write(activityId, headerB, 'register', input)
@@ -90,7 +108,9 @@ describe.skipIf(!enabled)('real MySQL flow in a rolled-back transaction', () => 
         expect((await service.write(activityId, headerB, 'register', input)).id).toBe(first.id)
         expect((await service.detail(activityId)).activeRegistrationCount).toBe(1)
         expect((await service.detail(activityId, headerB)).consultationContact).toBe('仅历史报名者可见')
-        expect(Object.keys((await service.roster(activityId)).items[0]).sort()).toEqual(['avatarUrl', 'displayName'])
+        const publicEntry = (await service.roster(activityId)).items[0]
+        expect(Object.keys(publicEntry).sort()).toEqual(['avatarUrl', 'displayName', 'memberId', 'publicAnswers'])
+        expect(publicEntry.publicAnswers).toEqual([])
         await expect(service.mine(activityId, headerC)).rejects.toThrow('尚未报名')
         await tx.update(members).set({ boundPhone: '13700000000', displayName: '测试丙', nameSetByUser: true, avatarUrl: '/fixture.png', avatarSetByUser: true }).where(eq(members.id, sessionC.member.id))
         await expect(service.write(activityId, headerC, 'register', input)).rejects.toThrow('名额已满')

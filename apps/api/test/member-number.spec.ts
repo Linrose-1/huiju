@@ -6,7 +6,8 @@ import { members, memberSessions, wechatIdentities } from '../src/database/schem
 import { describe, expect, it } from 'vitest'
 import { MySqlDialect } from 'drizzle-orm/mysql-core'
 import type { SQL } from 'drizzle-orm'
-import { memberNumberPrefix, nextMemberNumber } from '../src/flow/member-number.js'
+import { communityMembers, communities } from '../src/database/schema/communities.js'
+import { communityUserNumber } from '../src/flow/member-number.js'
 import { allocateInviteCode } from '../src/flow/invite-code.js'
 import { LEGAL_VERSION } from '../src/platform/legal.js'
 import { legalConsents } from '../src/database/schema/platform.js'
@@ -16,19 +17,14 @@ describe('member number format', () => {
     const member = { memberNumber: 'HJ20260927000002', inviteCode: '000123' } as Member
     expect(memberDto(member).inviteCode).toBe('000123')
   })
-  it('uses Shanghai registration date across midnight and year boundaries', () => {
-    expect(memberNumberPrefix(new Date('2026-09-27T15:59:59.999Z'))).toBe('HJ20260927')
-    expect(memberNumberPrefix(new Date('2026-09-27T16:00:00.000Z'))).toBe('HJ20260928')
-    expect(memberNumberPrefix(new Date('2026-12-31T16:00:00.000Z'))).toBe('HJ20270101')
+  it('encodes Shanghai join month and official example', () => {
+    expect(communityUserNumber('XJ', new Date('2026-01-01T00:00:00Z'), 2)).toBe('XJBFA000002')
+    expect(communityUserNumber('XJ', new Date('2026-12-31T15:59:59.999Z'), 97)).toBe('XJBFL000097')
+    expect(communityUserNumber('XJ', new Date('2026-12-31T16:00:00Z'), 98)).toBe('XJBGA000098')
+    expect(communityUserNumber('HX', new Date('2030-05-01T00:00:00Z'), 1)).toBe('HXCJE000001')
   })
-  it('starts each new date at one and carries six-digit sequence correctly', () => {
-    expect(nextMemberNumber('HJ20260928')).toBe('HJ20260928000001')
-    expect(nextMemberNumber('HJ20260928', 'HJ20260928000009')).toBe('HJ20260928000010')
-    expect(nextMemberNumber('HJ20260928', 'HJ20260928999998')).toBe('HJ20260928999999')
-    expect(nextMemberNumber('HJ20260929')).toBe('HJ20260929000001')
-  })
-  it('rejects overflow rather than wrapping or changing the format', () => {
-    expect(() => nextMemberNumber('HJ20260928', 'HJ20260928999999')).toThrow('今日注册名额已达上限')
+  it('rejects sequence overflow without issuing an existing number', () => {
+    expect(() => communityUserNumber('XJ', new Date(), 1000000)).toThrow('编号已分配完')
   })
 })
 
@@ -40,11 +36,12 @@ describe('registration allocates inside the member transaction', () => {
     let inserted: Record<string, unknown> = {}
     let queryIndex = 0
     let invitationQuery: { sql: string; params: unknown[] } | undefined
+    let membership: Record<string, unknown> | undefined
     let agreed: Record<string, unknown> | undefined
     const db = {
       select() {
         const index = queryIndex++
-        const results = () => [[], [{ id: 'root' }], ...(valid ? [[{ id: 'inviter' }]] : []), [{ number: memberNumberPrefix(new Date()) + '000009' }], [], [inserted], []][index]
+        const results = () => [[], [{ id: 'root' }], ...(valid ? [[{ id: 'inviter' }]] : []), [{ numberPrefix: 'XJ', lastSequence: 9 }], [], [inserted], []][index]
         const chain = {
           from: () => chain, where: (condition: SQL) => { if (valid && index === 2) invitationQuery = new MySqlDialect().sqlToQuery(condition); return chain }, limit: () => chain, orderBy: () => chain,
           for: () => { events.push('lock:' + index); return chain },
@@ -55,13 +52,19 @@ describe('registration allocates inside the member transaction', () => {
       insert(table: unknown) { return { values: async (value: Record<string, unknown>) => {
         if (table === members) { inserted = value; events.push('insert-member') }
         if (table === legalConsents) agreed = value
+        if (table === communityMembers) membership = value
       } } },
+      update(table: unknown) {
+        expect(table).toBe(communities)
+        return { set: (value: unknown) => { expect(value).toEqual({ lastSequence: 10 }); return { where: async () => undefined } } }
+      },
       transaction: async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback(db),
     }
     const service = new IdentityService({ db } as unknown as FlowDatabase, { exchange: async () => ({ appId: 'test', openId: 'test', unionId: null }) } as unknown as WechatAdapter)
     const result = await service.login('code', inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
     expect(agreed).toMatchObject({ memberId: inserted.id, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
-    expect(result.member.memberNumber).toBe(memberNumberPrefix(inserted.createdAt as Date) + '000010')
+    expect(result.member.memberNumber).toBe(communityUserNumber('XJ', inserted.createdAt as Date, 10))
+    expect(membership).toMatchObject({ memberId: inserted.id, communityId: 'xuejia', joinedAt: inserted.createdAt, sequenceNo: 10, userNumber: result.member.memberNumber })
     expect(inserted.inviteCode).toMatch(/^[0-9]{6}$/)
     expect(result.member.inviteCode).toBe(inserted.inviteCode)
     expect(events.slice(0, 3)).toEqual(['lock:1', 'lock:' + (valid ? 3 : 2), 'insert-member'])

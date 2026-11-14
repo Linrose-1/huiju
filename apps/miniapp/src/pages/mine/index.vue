@@ -116,7 +116,7 @@ onUnload(() => { active = false; generation++ })
             color="#a4b6ac"
           />
         </view><view class="grow">
-          <view class="name serif">{{ session.member?.profileComplete ? session.member.displayName : '游客' }}</view><view class="member-number">{{ session.member?.profileComplete ? '会员编号 '+session.member.memberNumber : '完善头像、用户名称和手机号后成为会员' }}</view><view class="complete">
+          <view class="name serif">{{ session.member?.profileComplete ? session.member.displayName : '游客' }}</view><view class="member-number">{{ session.member?.memberNumber ? '用户编号 '+session.member.memberNumber : '完善头像、用户名称和手机号后成为会员' }}</view><view class="complete">
             <uni-icons
               :type="session.member?.profileComplete?'checkbox-filled':'info'"
               size="32rpx"

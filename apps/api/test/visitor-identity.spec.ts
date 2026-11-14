@@ -6,6 +6,7 @@ import { IdentityService, type Member } from '../src/flow/identity.js'
 import type { FlowDatabase } from '../src/flow/common.js'
 import type { WechatAdapter } from '../src/flow/wechat.js'
 import { members, memberSessions, wechatIdentities } from '../src/database/schema/members.js'
+import { communities } from '../src/database/schema/communities.js'
 import { legalConsents } from '../src/database/schema/platform.js'
 import { LEGAL_VERSION } from '../src/platform/legal.js'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -35,7 +36,7 @@ function fixture(options: { existing?: boolean; complete?: boolean; inviter?: bo
           if (table === wechatIdentities) rows = identity ? [identity] : []
           else if (table === memberSessions) rows = []
           else if (table === members && filter?.params.includes('platform_root')) rows = [{ id: 'platform' }]
-          else if (table === members && filter?.params.some(value => typeof value === 'string' && value.includes('%'))) rows = []
+          else if (table === communities) rows = [{ numberPrefix: 'XJ', lastSequence: 0 }]
           else if (table === members && filter?.params.includes('member')) rows = options.inviter ? [{ id: 'inviter' }] : []
           else if (table === members) rows = owner ? [owner] : []
           else throw new Error('Unexpected identity query')
@@ -49,6 +50,7 @@ function fixture(options: { existing?: boolean; complete?: boolean; inviter?: bo
       if (table === members) owner = value as Member
       if (table === wechatIdentities) identity = { memberId: value.memberId as string }
     } } },
+    update: () => ({ set: () => ({ where: async () => undefined }) }),
     transaction: async <T>(callback: (tx: unknown) => Promise<T>): Promise<T> => callback(db),
   }
   const exchange = vi.fn(async () => ({ appId: 'test', openId: 'test-open-id', unionId: null }))

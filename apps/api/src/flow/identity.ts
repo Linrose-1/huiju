@@ -4,9 +4,7 @@ import {
   desc,
   eq,
   gt,
-  isNull,
-  like,
-  sql
+  isNull
 } from 'drizzle-orm'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -14,7 +12,8 @@ import { resolve } from 'node:path'
 import sharp from 'sharp'
 import { members, memberSessions, memberVisibilities, wechatIdentities } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
-import { memberNumberPrefix, nextMemberNumber } from './member-number.js'
+import { communityMembers } from '../database/schema/communities.js'
+import { allocateCommunityNumber, DEFAULT_COMMUNITY_ID } from './member-number.js'
 import { allocateInviteCode } from './invite-code.js'
 import { WechatAdapter } from './wechat.js'
 import { AvatarInput, MemberDto } from './dto.js'
@@ -109,24 +108,19 @@ export class IdentityService {
             .from(members)
             .where(and(eq(members.inviteCode, inviteCode), eq(members.kind, 'member')))
             .limit(1))[0] : undefined
-          // Serialize number allocation across API processes using the existing root row.
-          // Locking reads see the latest committed number even under REPEATABLE READ.
           const createdAt = new Date()
-          const prefix = memberNumberPrefix(createdAt)
-          const [latest] = await tx.select({ number: members.memberNumber }).from(members)
-            .where(and(like(members.memberNumber, prefix + '%'), sql`${members.memberNumber} regexp ${'^' + prefix + '[0-9]{6}$'}`))
-            .orderBy(desc(members.memberNumber)).limit(1).for('update')
-          const memberNumber = nextMemberNumber(prefix, latest?.number)
+          const membership = await allocateCommunityNumber(tx, DEFAULT_COMMUNITY_ID, createdAt)
           const id = randomUUID()
           await tx
             .insert(members)
             .values({
               id,
-              memberNumber,
+              memberNumber: membership.userNumber,
               createdAt,
               inviteCode: await allocateInviteCode(tx),
               inviterMemberId: inviter?.id ?? root.id
             })
+          await tx.insert(communityMembers).values({ ...membership, memberId: id })
           await tx
             .insert(wechatIdentities)
             .values({

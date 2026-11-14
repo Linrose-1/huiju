@@ -64,7 +64,7 @@ onMounted(() => load(true))
           <el-input
             v-model="query"
             aria-label="搜索会员"
-            placeholder="编号、用户名称、真实姓名或手机号"
+            placeholder="用户编号、用户名称、真实姓名或手机号"
             :maxlength="100"
             clearable
           />
@@ -125,7 +125,7 @@ onMounted(() => load(true))
       >
         <el-table-column
           prop="memberNumber"
-          label="会员编号"
+          label="用户编号"
           min-width="150"
         />
         <el-table-column
@@ -233,7 +233,7 @@ onMounted(() => load(true))
           border
           class="member-details"
         >
-          <el-descriptions-item label="会员编号">
+          <el-descriptions-item label="用户编号">
             {{ detail.memberNumber }}
           </el-descriptions-item>
           <el-descriptions-item label="真实姓名">

@@ -46,7 +46,7 @@ async function loadEditors() {
 }
 async function search(reset = true) {
   if (reset) { requestedSearchOffset = 0; searchOffset.value = 0; candidates.value = []; searchMore.value = false; appliedQuery.value = query.value.trim() }
-  if (!appliedQuery.value) { searchError.value = '请填写会员编号或名称。'; return }
+  if (!appliedQuery.value) { searchError.value = '请填写用户编号或名称。'; return }
   const targetOffset = requestedSearchOffset
   const current = beginSearch(); searchLoading.value = true; searchError.value = ''
   try { const value = await adminApi.members({ q: appliedQuery.value, offset: targetOffset }); if (current()) { searchOffset.value = targetOffset; candidates.value = value.items; searchMore.value = value.hasMore } }
@@ -197,7 +197,7 @@ onMounted(() => { void load(); void loadHistory(); void loadEditors() })
       >
         <el-input
           v-model="query"
-          placeholder="会员编号或名称"
+          placeholder="用户编号或名称"
           aria-label="搜索授权会员"
           style="width: 260px"
           :maxlength="100"
@@ -229,7 +229,7 @@ onMounted(() => { void load(); void loadHistory(); void loadEditors() })
       >
         <el-table-column
           prop="memberNumber"
-          label="会员编号"
+          label="用户编号"
         /><el-table-column
           prop="displayName"
           label="用户名称"
@@ -279,7 +279,7 @@ onMounted(() => { void load(); void loadHistory(); void loadEditors() })
       >
         <el-table-column
           prop="memberNumber"
-          label="会员编号"
+          label="用户编号"
         /><el-table-column
           prop="displayName"
           label="用户名称"

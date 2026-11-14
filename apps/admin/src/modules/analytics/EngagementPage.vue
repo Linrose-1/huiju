@@ -113,7 +113,7 @@ onMounted(() => load(true))
           clearable
           :remote-method="searchInviters"
           :loading="inviterLoading"
-          placeholder="搜索直接邀请人的编号或名称"
+          placeholder="搜索直接邀请人的用户编号或名称"
           aria-label="直接邀请人"
           style="width: 280px"
         >
@@ -175,7 +175,7 @@ onMounted(() => load(true))
       >
         <el-table-column
           prop="memberNumber"
-          label="会员编号"
+          label="用户编号"
           min-width="170"
         /><el-table-column
           label="用户名称"
@@ -245,7 +245,7 @@ onMounted(() => load(true))
           :column="1"
           border
         >
-          <el-descriptions-item label="会员编号">
+          <el-descriptions-item label="用户编号">
             {{ detail.memberNumber }}
           </el-descriptions-item><el-descriptions-item label="联系方式">
             {{ detail.boundPhone || '—' }}

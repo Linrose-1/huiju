@@ -421,7 +421,7 @@ onMounted(() => load())
             </template>
           </el-table-column><el-table-column
             prop="memberNumber"
-            label="会员编号"
+            label="用户编号"
             min-width="170"
           /><el-table-column
             prop="displayName"

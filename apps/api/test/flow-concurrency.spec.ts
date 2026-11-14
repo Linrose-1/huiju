@@ -89,7 +89,7 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
       })
       expect(new Set(sessions.map(session => session.member.id)).size).toBe(1)
       expect(new Set(sessions.map(session => session.member.memberNumber)).size).toBe(1)
-      expect(sessions[0].member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
+      expect(sessions[0].member.memberNumber).toMatch(/^XJ[A-J]{2}[A-L][0-9]{6}$/)
       const memberId = sessions[0].member.id
       const identityRows = await db.select().from(wechatIdentities).where(and(
         eq(wechatIdentities.appId, appId), eq(wechatIdentities.openId, loginCodes[0]),
@@ -109,7 +109,7 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
       const assigned = new Set<string>()
       const numbers = newMembers.map(result => {
         if (result.status !== 'fulfilled') throw result.reason
-        expect(result.value.member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
+        expect(result.value.member.memberNumber).toMatch(/^XJ[A-J]{2}[A-L][0-9]{6}$/)
         expect(result.value.member.inviteCode).toMatch(/^[0-9]{6}$/)
         assigned.add(result.value.member.inviteCode)
         return result.value.member.memberNumber

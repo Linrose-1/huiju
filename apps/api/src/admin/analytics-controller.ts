@@ -31,7 +31,7 @@ export class AnalyticsController {
   @Header('Content-Disposition','attachment; filename="member-activity.csv"') @ApiOkResponse({ schema: { type: 'string' } })
   export(@Query() query: AnalyticsMemberQuery, @Req() request: { headers: { cookie?: string } }) {
     return this.admin.withSession({ cookie: request.headers.cookie }, async tx=> {
-      const lines = ['会员编号,用户名称,浏览次数,报名次数,到场次数,发起次数,评论次数,点评次数,最近活跃时间']
+      const lines = ['用户编号,用户名称,浏览次数,报名次数,到场次数,发起次数,评论次数,点评次数,最近活跃时间']
       const now = new Date()
       for (let offset=0; ; offset+=40) {
         const page = await this.analytics.memberList(tx,{...query,offset},now)
