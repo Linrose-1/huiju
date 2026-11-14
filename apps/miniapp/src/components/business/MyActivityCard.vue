@@ -1,106 +1,96 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Activity, ManagedActivity } from '@/services/api/types'
+import type { Activity, ManagedActivity, MyRegistration } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
-import { activityTimeRangeWeekday, fee } from '@/services/presentation'
+import { activityTimeRangeWeekday, chinaParts, dateTime, fee } from '@/services/presentation'
 import { myActivityState, myActivityLabel } from '@/services/my-activities'
-const props = defineProps<{ activity: Activity | ManagedActivity; registrationStatus?: string; feeQualification?: 'ordinary' | 'invited_free'; organized?: boolean; now: number }>()
-defineEmits<{ (e: 'open'): void; (e: 'edit'): void }>()
-const state = computed(() => myActivityState(props.activity, props.registrationStatus, props.now))
-const label = computed(() => myActivityLabel(props.activity, props.registrationStatus, props.now))
-const action = computed(() => !props.organized || ['ended', 'cancelled', 'removed'].includes(state.value) ? '查看' : state.value === 'draft' ? '编辑草稿' : '管理')
+
+const props = defineProps<{ activity: Activity | ManagedActivity; registration?: MyRegistration; previousStart?: string; now: number }>()
+defineEmits<{ (e: 'open'): void; (e: 'edit'): void; (e: 'roster'): void }>()
+const state = computed(() => myActivityState(props.activity, undefined, props.now))
+const label = computed(() => myActivityLabel(props.activity, undefined, props.now))
+const time = computed(() => activityTimeRangeWeekday(props.activity.startsAt, props.activity.endsAt))
 const count = computed(() => props.activity.registrationState === 'cancelled' ? props.activity.cancellationRegistrationCount ?? props.activity.activeRegistrationCount : props.activity.activeRegistrationCount)
+const editable = computed(() => ['draft', 'upcoming', 'ongoing'].includes(state.value))
+const start = computed(() => chinaParts(props.activity.startsAt))
+const end = computed(() => chinaParts(props.activity.endsAt))
+const newMonth = computed(() => !props.previousStart || chinaParts(props.previousStart)?.monthLabel !== start.value?.monthLabel)
+const schedule = computed(() => {
+  if (!start.value || !end.value) return '时间待更新'
+  const endDate = end.value.date !== start.value.date ? end.value.date + ' ' : ''
+  return start.value.time + '–' + endDate + end.value.time
+})
 </script>
 <template>
-  <view
-    class="activity-card"
-    @click="$emit('open')"
-  >
-    <view class="cover-wrap">
-      <image
-        v-if="activity.coverUrl"
-        :src="mediaUrl(activity.coverUrl)"
-        class="cover"
-        mode="aspectFill"
-      />
-      <view
-        v-else
-        class="cover no-cover"
-      >
-        <uni-icons
-          type="image"
-          size="48rpx"
-          color="#91a79c"
-        /><text>暂无封面</text>
+  <view v-if="registration" class="itinerary">
+    <view v-if="newMonth" class="month">{{ start?.monthLabel || '时间待更新' }}</view>
+    <view class="entry" @click="$emit('open')">
+      <view class="date-col">
+        <view class="day">{{ start?.date.slice(-2) || '—' }}</view>
+        <view>{{ start?.week }}</view>
       </view>
-      <text
-        class="status"
-        :class="state"
-      >
-        {{ label }}
-      </text>
-    </view>
-    <view class="content">
-      <view class="activity-title">
-        {{ activity.title || '未命名草稿' }}
-      </view>
-      <view class="meta">
-        <view class="clock-icon" /><text class="meta-copy">
-          {{ activityTimeRangeWeekday(activity.startsAt, activity.endsAt) }}
-        </text>
-      </view>
-      <view class="meta">
-        <uni-icons
-          type="location"
-          size="28rpx"
-          color="#243c32"
-        /><text class="meta-copy">
-          {{ activity.location || '地点待填写' }}
-        </text>
-      </view>
-      <view
-        class="fee"
-        :class="{paid:activity.feeType==='paid' && feeQualification!=='invited_free'}"
-      >
-        {{ feeQualification==='invited_free' ? (registrationStatus==='active'?'特邀免费':'原报名：特邀免费') : activity.feeType==='paid' ? '收费活动 ' + fee(activity) : '免费活动' }}<text
-          v-if="registrationStatus==='active' && !['removed','cancelled'].includes(state)"
-          class="joined"
-        >
-          已报名
-        </text>
-      </view>
-      <view class="card-bottom">
-        <view class="stat">
-          <text class="number">
-            {{ count }}
-          </text><text>{{ activity.registrationState==='cancelled'?'取消前报名':'已报名' }}</text>
-        </view>
-        <view class="stat capacity">
-          <text class="number">
-            {{ activity.capacity ?? '不限' }}
-          </text><text>名额限制</text>
-        </view>
-        <view class="card-actions">
-          <button
-            v-if="organized && action === '管理'"
-            class="action"
-            @click.stop="$emit('edit')"
-          >
-            编辑
-          </button>
-          <button
-            class="action"
-            @click.stop="$emit('open')"
-          >
-            {{ action }}
-          </button>
+      <view class="entry-main">
+        <view class="time">{{ schedule }}</view>
+        <view class="title">{{ activity.title }}</view>
+        <view class="detail"><uni-icons type="location" size="26rpx" color="#657167" /> {{ activity.location }}</view>
+        <view class="receipt">
+          <view>
+            <view>{{ registration.status === 'cancelled' ? '已取消报名' : '已报名' }} · {{ registration.feeQualification === 'invited_free' ? '特邀免费' : fee(activity) }}</view>
+            <view v-if="state === 'removed' || state === 'cancelled'">{{ label }}</view>
+            <view class="stamp">报名时间 {{ dateTime(registration.currentRegisteredAt) }}</view>
+          </view>
+          <button class="link" @click.stop="$emit('open')">查看报名信息 ›</button>
         </view>
       </view>
     </view>
   </view>
+  <view v-else class="organizer" @click="$emit('open')">
+    <view class="overview">
+      <image v-if="activity.coverUrl" class="cover" :src="mediaUrl(activity.coverUrl)" mode="aspectFill" />
+      <view class="summary">
+        <view class="title">{{ activity.title || '未命名草稿' }}</view>
+        <text class="badge" :class="{ live: activity.registrationState === 'open' && state === 'upcoming' }">{{ activity.registrationState === 'open' && state === 'upcoming' ? '报名中' : label }}</text>
+        <view class="detail"><uni-icons type="calendar" size="26rpx" color="#657167" /> {{ time }}</view>
+      </view>
+    </view>
+    <view class="actions">
+      <view v-if="state !== 'draft'" class="numbers">
+        <view><text class="count">{{ count }}</text> {{ state === 'cancelled' ? '人曾报名' : '人已报名' }}</view>
+        <view class="stamp">{{ activity.capacity == null ? '人数不限' : '限额 ' + activity.capacity + ' 人' }}</view>
+      </view>
+      <button v-if="state !== 'draft'" class="primary-action" @click.stop="$emit('roster')">报名名单</button>
+      <button v-if="editable" :class="state === 'draft' ? 'primary-action' : 'action'" @click.stop="$emit('edit')">{{ state === 'draft' ? '编辑草稿' : '编辑' }}</button>
+      <button class="action" @click.stop="$emit('open')">管理</button>
+    </view>
+  </view>
 </template>
 <style scoped>
-.card-actions{display:flex;align-items:center;gap:12rpx;margin-left:auto;flex-shrink:0}.card-actions .action{margin:0;white-space:nowrap}
-.activity-card{display:flex;gap:20rpx;padding:18rpx;background:#fff;border-radius:18rpx;margin-bottom:14rpx}.cover-wrap{width:164rpx;min-height:190rpx;flex-shrink:0;position:relative}.cover{width:100%;height:100%;position:absolute;left:0;top:0;border-radius:10rpx}.no-cover{display:flex;flex-direction:column;gap:12rpx;align-items:center;justify-content:center;background:#edf3ef;color:#80948a;font-size:22rpx}.status{position:absolute;left:8rpx;top:10rpx;padding:6rpx 10rpx;border-radius:8rpx;background:#dff7e8;color:#128a51;font-size:26rpx;line-height:1.35}.status.ended,.status.draft,.status.removed{background:#f0f2f4;color:#63717e}.status.cancelled{background:#ffe9ec;color:#c25162}.content{flex:1;min-width:0}.activity-title{font-size:29rpx;line-height:1.45;font-weight:600;color:#14201c;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;margin-bottom:10rpx;overflow-wrap:anywhere}.meta{display:flex;align-items:flex-start;gap:10rpx;font-size:26rpx;line-height:1.5;color:#718077;margin-top:5rpx}.meta-copy{min-width:0;overflow-wrap:anywhere}.fee{font-size:24rpx;color:#218256;margin-top:9rpx}.fee.paid{color:#bb763c}.joined{margin-left:14rpx;color:#218256}.card-bottom{display:flex;align-items:center;margin-top:15rpx;gap:12rpx}.stat{display:flex;flex-direction:column;align-items:center;font-size:24rpx;color:#8a958f;line-height:1.45;min-width:78rpx}.number{font-size:26rpx;color:#16251f}.capacity{border-left:1rpx solid #edf1ef;padding-left:12rpx}.action{margin:0 0 0 auto;padding:0 20rpx;height:68rpx;line-height:68rpx;min-width:112rpx;background:#edf8f2;color:#168453;font-size:28rpx;border-radius:26rpx;font-weight:500}.action::after{border:0}
-.clock-icon{position:relative;box-sizing:border-box;width:26rpx;height:26rpx;border:2rpx solid #243c32;border-radius:50%;flex-shrink:0;margin:4rpx 1rpx 0}.clock-icon::before{content:'';position:absolute;left:10rpx;top:4rpx;width:2rpx;height:8rpx;background:#243c32}.clock-icon::after{content:'';position:absolute;left:10rpx;top:10rpx;width:7rpx;height:2rpx;transform:rotate(25deg);transform-origin:left;background:#243c32}
+.itinerary,.organizer{color:#152119}
+.month{margin-top:20rpx;background:#edf3ee;padding:12rpx 28rpx;font-size:30rpx;font-weight:600}
+.entry,.overview,.actions,.receipt{display:flex}
+.entry{margin:28rpx 26rpx 36rpx;gap:22rpx}
+.date-col{width:82rpx;flex-shrink:0;border-right:1rpx solid #d4ded7;font-size:25rpx;color:#58615b}
+.day,.count{font-variant-numeric:tabular-nums;font-size:48rpx;font-weight:700;color:#19271e}
+.entry-main,.summary{min-width:0;flex:1}
+.time,.count{color:#205f36}
+.time{font-size:32rpx;font-weight:650}
+.title{font-size:33rpx;font-weight:650;line-height:1.4;overflow-wrap:anywhere}
+.entry .title{margin:8rpx 0}
+.detail,.stamp{font-size:24rpx;color:#626c64;line-height:1.5;overflow-wrap:anywhere}
+.receipt,.actions{border-top:1rpx solid #e0e6e0;align-items:center;gap:10rpx;flex-wrap:wrap}
+.receipt{justify-content:space-between;margin-top:22rpx;padding-top:14rpx;font-size:25rpx;color:#465249}
+.stamp{margin-top:3rpx;font-size:22rpx}
+.link,.action,.primary-action{margin:0;line-height:1.4;white-space:nowrap;font-size:26rpx}
+.link{background:transparent;color:#205f36;padding:12rpx 0}
+.link::after,.action::after,.primary-action::after{border:0}
+.organizer{margin:20rpx 20rpx 0;padding:22rpx;background:white;border-radius:18rpx;border:1rpx solid #e2e9e3}
+.overview{align-items:center;gap:20rpx}
+.cover{flex:none;width:148rpx;height:148rpx;border-radius:12rpx}
+.badge{display:inline-block;font-size:22rpx;color:#5f685f;background:#f0f2ef;padding:3rpx 10rpx;border-radius:6rpx;margin:7rpx 0}
+.badge.live{background:#e4f1e3;color:#235d37}
+.actions{justify-content:flex-end;padding-top:17rpx;margin-top:18rpx}
+.numbers{margin-right:auto;font-size:23rpx}
+.count{font-size:42rpx}
+.action,.primary-action{padding:12rpx 17rpx;border-radius:8rpx;border:1rpx solid #bbc7bd;background:white;color:#293c2d}
+.primary-action{background:#205f36;color:white;border-color:#205f36}
 </style>

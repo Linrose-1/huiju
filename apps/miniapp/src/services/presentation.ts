@@ -7,7 +7,7 @@ export function dateTime(value: string): string {
 }
 export function fee(activity: Activity) { return activity.feeType === 'paid' ? `¥${((activity.feeAmountCents || 0) / 100).toFixed(2)}` : '免费' }
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-function chinaParts(value: string) {
+export function chinaParts(value: string) {
   const date = new Date(Date.parse(value) + 8 * 60 * 60 * 1000)
   if (!Number.isFinite(date.getTime())) return null
   const pad = (v: number) => String(v).padStart(2, '0')
@@ -15,6 +15,7 @@ function chinaParts(value: string) {
     date: `${date.getUTCFullYear()}.${pad(date.getUTCMonth() + 1)}.${pad(date.getUTCDate())}`,
     time: `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`,
     week: WEEKDAYS[date.getUTCDay()],
+    monthLabel: `${date.getUTCFullYear()}年${date.getUTCMonth() + 1}月`,
     cnDate: `${date.getUTCFullYear()}年${date.getUTCMonth() + 1}月${date.getUTCDate()}日`,
   }
 }

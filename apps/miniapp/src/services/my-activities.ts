@@ -1,8 +1,8 @@
 import type { Activity, ManagedActivity } from './api/types'
 export type MyActivityState = 'ongoing' | 'upcoming' | 'ended' | 'cancelled' | 'draft' | 'removed'
 export const activityFilters = [
-  { key: 'all', label: '全部' }, { key: 'ongoing', label: '进行中' },
-  { key: 'upcoming', label: '未开始' }, { key: 'ended', label: '已结束' },
+  { key: 'all', label: '全部' }, { key: 'upcoming', label: '未开始' },
+  { key: 'ongoing', label: '进行中' }, { key: 'ended', label: '已结束' },
   { key: 'cancelled', label: '已取消' }, { key: 'draft', label: '草稿' },
   { key: 'removed', label: '已下架' }
 ] as const

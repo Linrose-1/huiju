@@ -15,6 +15,7 @@ const session = useSessionStore()
 const id = ref(''), activity = ref<ManagedActivity | null>(null), roster = ref<OrganizerRegistration[]>([])
 const loading = ref(false), error = ref(''), actionError = ref(''), busy = ref(false), cancelling = ref(false), reason = ref(''), filter = ref('active'), expanded = ref('')
 const attendanceBusy = ref('')
+const rosterOnly = ref(false)
 const targetRegistration = ref('')
 const rosterLoading = ref(false), rosterError = ref(''), rosterHasMore = ref(false), rosterMoreError = ref('')
 const attendanceCount = ref(0), activeCount = ref(0)
@@ -73,7 +74,7 @@ async function load(background = false) {
       activity.value = detail; roster.value = nextItems; rosterOffset = nextItems.length
       rosterHasMore.value = registrations.hasMore; attendanceCount.value = registrations.attendedCount; activeCount.value = registrations.activeCount
       if (targetRegistration.value) expanded.value = targetRegistration.value
-      void loadStats()
+      if (!rosterOnly.value) void loadStats()
     }
   } catch (e) { if (active()) error.value = errorMessage(e) }
   finally { if (active()) { loading.value = false; rosterLoading.value = false; uni.stopPullDownRefresh() } }
@@ -142,7 +143,13 @@ function answer(item: OrganizerRegistration, questionId: string) {
   return Array.isArray(value) ? value.join('、') : value || '未填写'
 }
 const stop = watch(() => [session.token, session.epoch], () => { clear(); if (shown) void load() }, { flush: 'sync' })
-onLoad(options => { id.value = String(options?.id || ''); targetRegistration.value = String(options?.registrationId || ''); if (targetRegistration.value) filter.value = 'all' })
+onLoad(options => {
+  id.value = String(options?.id || '')
+  targetRegistration.value = String(options?.registrationId || '')
+  rosterOnly.value = options?.section === 'roster'
+  if (targetRegistration.value) filter.value = 'all'
+  if (rosterOnly.value) uni.setNavigationBarTitle({ title: '报名名单' })
+})
 onShow(() => { shown = true; void load(true) })
 onHide(() => { shown = false; generation++; rosterGeneration++; loading.value = false; rosterLoading.value = false; busy.value = false; attendanceBusy.value = ''; cancelling.value = false })
 onUnload(() => { shown = false; clear(); stop() })
@@ -155,7 +162,7 @@ onShareAppMessage(shareMessage)
   <view class="page-pad manage-page">
     <PageReturn />
     <view
-      v-if="shareError"
+      v-if="shareError && !rosterOnly"
       class="error"
       role="alert"
     >
@@ -174,7 +181,7 @@ onShareAppMessage(shareMessage)
     >
       登录后管理自己的活动<button
         class="text-button"
-        @click="loginPage(routes.manage+'?id='+id)"
+        @click="loginPage(routes.manage+'?id='+id+(rosterOnly?'&section=roster':''))"
       >
         去登录
       </button>
@@ -192,7 +199,7 @@ onShareAppMessage(shareMessage)
         {{ actionError }}
       </view>
       <template v-if="activity && !loading">
-        <view class="card">
+        <view v-if="!rosterOnly" class="card">
           <view class="row between"><text class="tag">{{ state }}</text><text class="tag fee-tag">{{ fee(activity) }}</text></view>
           <view class="title">{{ activity.title }}</view>
           <view class="meta">{{ dateTime(activity.startsAt) }} — {{ dateTime(activity.endsAt) }}</view>
@@ -251,7 +258,7 @@ onShareAppMessage(shareMessage)
             </button>
           </view>
         </view>
-        <view class="card">
+        <view v-if="!rosterOnly" class="card">
           <view class="section-title">浏览统计</view>
           <view
             v-if="readingStats"
@@ -281,7 +288,7 @@ onShareAppMessage(shareMessage)
         </view>
         <view class="card">
           <view class="row between">
-            <view class="section-title">{{ targetRegistration?'特邀报名记录':'报名名单' }}</view><text
+            <view class="section-title">{{ rosterOnly ? activity.title : targetRegistration ? '特邀报名记录' : '报名名单' }}</view><text
               v-if="!targetRegistration"
               class="muted small"
             >
@@ -404,7 +411,7 @@ onShareAppMessage(shareMessage)
           />
         </view>
         <view
-          v-if="cancellable"
+          v-if="cancellable && !rosterOnly"
           class="card"
         >
           <button

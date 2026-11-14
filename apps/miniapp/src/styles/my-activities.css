@@ -1,0 +1,13 @@
+.activities-page{box-sizing:border-box;min-height:100vh;padding-bottom:calc(32rpx + env(safe-area-inset-bottom));background:#fff;color:#17241c}
+.organizer-page{background:#f3f7f4}
+.activity-tabs,.filter-row{display:flex;align-items:center;background:#fff}
+.activity-tabs{gap:42rpx;padding:0 28rpx;height:100rpx;border-bottom:1rpx solid #e5ebe6}
+.tab{position:relative;display:flex;align-items:center;height:100%;font-size:32rpx;color:#646964}
+.tab.active{color:#16231a;font-weight:650}
+.tab.active::after{content:'';position:absolute;bottom:12rpx;left:22%;right:22%;height:5rpx;border-radius:4rpx;background:#205d38}
+.start{margin:0 0 0 auto;padding:0 16rpx;border:1rpx solid #28673e;border-radius:10rpx;background:#fff;color:#205b36;font-size:26rpx;line-height:56rpx}
+.filters{width:100%;white-space:nowrap;background:#fff;border-bottom:1rpx solid #e5ebe6}
+.filter-row{width:max-content;min-width:100%}
+.filter{flex:none;min-width:156rpx;padding:19rpx 8rpx;text-align:center;font-size:28rpx;color:#656c66}
+.filter.selected{color:#1f5f37;font-weight:650}
+.browse{background:#edf5ef;color:#205b36;font-size:28rpx;margin:20rpx auto;width:240rpx}
