@@ -52,7 +52,7 @@ function harness({ storage = new Map(), showModal = options => options.success({
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { optionRows, writeOption, addOption, addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -342,6 +342,22 @@ test('question sheet isolates unsaved changes, validates choice options and pres
   assert.equal(h.page.questions.value.length, 1)
   h.unload()
 })
+
+for (const type of ['single', 'multiple']) {
+  test(type + ' options reopen separately and newly added rows preserve order', async () => {
+    const h = harness({ record: activity({ questions: [{ id: 'q1', type, prompt: '学加几期', required: true, options: ['一期', '二期'] }] }) })
+    h.page.id.value = 'activity-a'
+    await h.page.load()
+    h.page.beginQuestion(h.page.questions.value[0])
+    assert.deepEqual(h.page.optionRows.value, ['一期', '二期'])
+    h.page.addOption()
+    h.page.writeOption(2, { detail: { value: '三期' } })
+    h.page.saveQuestion()
+    assert.deepEqual(h.page.payload().questions[0].options, ['一期', '二期', '三期'])
+    assert.equal(h.page.payload().questions[0].id, 'q1')
+    h.unload()
+  })
+}
 
 test('existing questions remain content-locked after registration while reordering stays available', async () => {
   const record = activity({ questions: [{ id: 'q1', type: 'short_text', prompt: '题一', required: true, options: null },{ id: 'q2', type: 'short_text', prompt: '题二', required: false, options: null }] })
