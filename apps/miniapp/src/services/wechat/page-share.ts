@@ -29,7 +29,7 @@ export function usePageShare(target: () => ShareTarget | null, timeline = false)
       await bootstrapIdentity()
       if (current !== generation || !visible.value) return
       if (epoch !== session.epoch) { shareError.value = '身份已变更，请重试分享'; return }
-      if (!session.token || !session.member?.inviteCode) throw new Error('missing identity')
+      if (!session.token || !session.member || !/^\d{6}$/.test(session.member.inviteCode)) throw new Error('missing current invitation code')
       verifiedEpoch.value = session.epoch; verifiedToken.value = session.token; verifiedCode.value = session.member.inviteCode
     } catch {
       if (current === generation && visible.value) shareError.value = '身份识别未完成，暂不能分享。请重试'

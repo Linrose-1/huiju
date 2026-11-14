@@ -11,7 +11,6 @@ import type { FlowDatabase } from '../src/flow/common.js'
 import { fail } from '../src/flow/common.js'
 import type { IdentityService } from '../src/flow/identity.js'
 import type { WechatAdapter } from '../src/flow/wechat.js'
-import { memberInviteCode } from '../src/flow/member-number.js'
 import { Test } from '@nestjs/testing'
 import { ValidationPipe } from '@nestjs/common'
 import { ActivityPosterController } from '../src/flow/poster-controller.js'
@@ -22,7 +21,7 @@ type Activity = typeof activities.$inferSelect
 const activityId = 'd0119012-e628-4e8c-81bb-6d12ed1f65c2'
 const ownerId = '008aa4bb-2fcc-478d-ac42-823a408e81a2'
 const otherId = '88aa14bb-2fcc-478d-ac42-823a408e81a2'
-const member = (id: string) => ({ id, kind: 'member', memberNumber: 'HJ20261105000001', inviteCode: 'invitation', boundPhone: '13800000000', displayName: '会员', avatarUrl: '/avatar', avatarSetByUser: true, nameSetByUser: true }) as Member
+const member = (id: string) => ({ id, kind: 'member', memberNumber: 'HJ20261105000001', inviteCode: id === ownerId ? '010101' : '020202', boundPhone: '13800000000', displayName: '会员', avatarUrl: '/avatar', avatarSetByUser: true, nameSetByUser: true }) as Member
 const activity = () => ({ id: activityId, organizerMemberId: ownerId, title: '案例分享', description: '交流实际应用经验', coverUrl: '/cover.jpg',
   startsAt: new Date('2026-12-01T01:00:00Z'), endsAt: new Date('2026-12-01T03:00:00Z'), location: '上海', feeType: 'free', feeAmountCents: null,
   lifecycle: 'published', moderation: 'normal', activeRegistrationCount: 0, consultationContact: 'private-contact' }) as Activity
@@ -144,7 +143,7 @@ describe('poster copy and sharing boundaries', () => {
     const first = await f.service.code(activityId, otherId), again = await f.service.code(activityId, otherId)
     expect(first.scene).toMatch(/^p[a-f0-9]{24}$/); expect(again).toEqual(first)
     expect(f.store.rows.shares).toHaveLength(1); expect(f.wechat.activityCode).toHaveBeenCalledTimes(1)
-    expect(await f.service.resolve(first.scene)).toEqual({ activityId, inviteCode: memberInviteCode(f.store.rows.members[1]!.memberNumber, 'invitation') })
+    expect(await f.service.resolve(first.scene)).toEqual({ activityId, inviteCode: '020202' })
     expect((await f.service.code(activityId, ownerId)).scene).not.toBe(first.scene)
     f.store.rows.activities[0]!.moderation = 'removed'
     await expect(f.service.resolve(first.scene)).rejects.toMatchObject(code('ACTIVITY_UNAVAILABLE'))

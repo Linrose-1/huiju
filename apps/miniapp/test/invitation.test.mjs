@@ -8,7 +8,7 @@ import ts from 'typescript'
 const require = createRequire(import.meta.url)
 const {reactive, effectScope} = require('vue')
 function harness(t) {
-  const session = reactive({token:'member-a',epoch:0,member:{inviteCode:'real-code-a',profileComplete:true}})
+  const session = reactive({token:'member-a',epoch:0,member:{inviteCode:'001234',profileComplete:true}})
   const refreshes=[],copies=[],tabs=[]
   let unload
   const deps={
@@ -28,11 +28,20 @@ function harness(t) {
 }
 test('copy uses the current member code, blocks duplicate taps and anonymous copying',async t=>{
   const h=harness(t)
+  await h.page.copy(); assert.equal(h.copies.length,0)
+  const loading=h.page.load(); h.refreshes[0].resolve(h.session.member); await loading
   const first=h.page.copy();await h.page.copy()
-  assert.equal(h.copies.length,1);assert.equal(h.copies[0].data,'real-code-a')
+  assert.equal(h.copies.length,1);assert.equal(h.copies[0].data,'001234')
   h.copies[0].resolve();await first
   h.session.token='';h.session.member=null;await setImmediate();await h.page.copy()
   assert.equal(h.copies.length,1)
+})
+test('a legacy session code cannot be copied; refresh uses all six returned digits',async t=>{
+  const h=harness(t); h.session.member.inviteCode='HJYQM20261020000002'
+  const first=h.page.load(); h.refreshes[0].resolve(h.session.member); await first
+  await h.page.copy(); assert.equal(h.copies.length,0)
+  const next=h.page.load(); h.session.member.inviteCode='000002'; h.refreshes[1].resolve(h.session.member); await next
+  const copying=h.page.copy(); assert.equal(h.copies[0].data,'000002'); h.copies[0].resolve(); await copying
 })
 test('late refresh failure cannot overwrite a new account or an unloaded page',async t=>{
   const h=harness(t)

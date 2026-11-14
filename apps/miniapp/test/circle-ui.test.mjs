@@ -19,7 +19,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve))
 const routes={circle:'/pages/circle/index',circleDetail:'/pages/circle/detail',circleEditor:'/pages/circle/editor',circleMine:'/pages/circle/mine',circleIntents:'/pages/circle/intents'}
 const post=()=>({id:'post-a',category:'park',subtype:'rent',title:'园区资源',body:'说明',state:'open',isOwner:false,images:[],author:{id:'author-a',displayName:'作者'},createdAt:'2026-09-30T00:00:00Z'})
 function harness(page='detail',overrides={}) {
-  const session=reactive({token:'token-a',epoch:0,member:{profileComplete:true,boundPhone:'13800000000',inviteCode:'sharer-code'}}),hooks={},calls=[],sent=[],saved=[],uploaded=[]
+  const session=reactive({token:'token-a',epoch:0,member:{profileComplete:true,boundPhone:'13800000000',inviteCode:'001234'}}),hooks={},calls=[],sent=[],saved=[],uploaded=[]
   session.captureInvite=()=>{}
   const uni={hideShareMenu(){},showShareMenu(){},stopPullDownRefresh(){},showToast:options=>calls.push(['toast',options.title]),switchTab:options=>calls.push(['tab',options.url]),...overrides.uni}
   const api={circlePost:async()=>post(),circlePosts:async()=>({items:[],hasMore:false}),circleIntents:async()=>({items:[],hasMore:false}),endCirclePost:async id=>calls.push(['end',id]),submitCircleIntent:async(...args)=>{sent.push(args)},saveCirclePost:async(...args)=>{saved.push(args);return {...post(),isOwner:true}},uploadCircleImage:async(...args)=>{uploaded.push(args);return {id:'image-a'}},...overrides.api}
@@ -62,7 +62,7 @@ test('logout clears confirmation, contact and old response cannot restore conten
   const other=harness();await other.page.activate();await other.page.confirmIntent();other.session.token='token-b';assert.equal(other.page.sheet.value,false);assert.equal(other.page.phone.value,'')
 })
 test('share source is the actual sharer and return link omits submission flag',async()=>{
-  const h=harness();h.hooks.onShow();await tick();await h.page.activate();assert.equal(h.hooks.onShareAppMessage().path,'/pages/circle/detail?id=post-a&inviteCode=sharer-code')
+  const h=harness();h.hooks.onShow();await tick();await h.page.activate();assert.equal(h.hooks.onShareAppMessage().path,'/pages/circle/detail?id=post-a&inviteCode=001234')
 })
 test('editor requires title/body and store name, supports zero images',async()=>{
   const h=harness('editor');await h.page.activate();await h.page.save();assert.equal(h.saved.length,0)

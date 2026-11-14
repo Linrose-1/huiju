@@ -9,20 +9,26 @@ import { useSessionStore } from '@/stores/session'
 import RequestState from '@/components/base/RequestState.vue'
 const session = useSessionStore()
 const loading = ref(false), error = ref(''), busy = ref(false)
+const currentCode = ref('')
 let generation = 0
 async function load() {
   const current = ++generation
-  error.value = ''
+  currentCode.value = ''; error.value = ''
   if (!session.token) { loading.value = false; return }
   loading.value = true
-  try { await refreshMember() }
+  try {
+    const member = await refreshMember()
+    if (current !== generation || !member?.profileComplete) return
+    if (!/^\d{6}$/.test(member.inviteCode)) { error.value = '邀请码暂不可用，请重新加载'; return }
+    currentCode.value = member.inviteCode
+  }
   catch (e) { if (current === generation) error.value = errorMessage(e) }
   finally { if (current === generation) loading.value = false }
 }
 async function copy() {
-  const code = session.member?.inviteCode
+  const code = currentCode.value
   if (!session.member?.profileComplete) { loginPage(routes.invitation); return }
-  if (busy.value || loading.value || error.value || !session.token || !code) return
+  if (busy.value || loading.value || error.value || !session.token || !code || code !== session.member.inviteCode) return
   const current = generation
   busy.value = true
   try { await uni.setClipboardData({ data: code }) }
@@ -54,7 +60,7 @@ onUnload(() => { generation++; stop() })
         :error="error"
         @retry="load"
       />
-      <template v-if="!loading && !error && session.member">
+      <template v-if="!loading && !error && session.member && currentCode">
         <view class="card invitation-card">
           <view class="row member-row">
             <view class="avatar">
@@ -76,7 +82,7 @@ onUnload(() => { generation++; stop() })
             class="invite-code"
             user-select
           >
-            {{ session.member.inviteCode }}
+            {{ currentCode }}
           </text>
           <button
             class="primary copy-button"
@@ -117,7 +123,7 @@ onUnload(() => { generation++; stop() })
 .member-name{font-size:34rpx;font-weight:600;line-height:1.5;overflow-wrap:anywhere}
 .subtitle{font-size:26rpx;line-height:1.6;margin-top:8rpx}
 .code-label{text-align:center;font-size:28rpx;color:#748078;margin-top:30rpx}
-.invite-code{display:block;text-align:center;overflow-wrap:anywhere;font-size:50rpx;font-weight:700;color:#175e49;line-height:1.4;letter-spacing:2rpx;margin:18rpx 0 28rpx;font-family:monospace}
+.invite-code{display:block;text-align:center;font-size:72rpx;font-weight:700;color:#175e49;line-height:1.4;letter-spacing:8rpx;margin:18rpx 0 28rpx;font-family:monospace;font-variant-numeric:tabular-nums}
 .copy-button{font-size:30rpx;min-height:84rpx}
 .invite-hint{display:flex;align-items:center;gap:16rpx;border-radius:18rpx;background:#e6f4ec;color:#225d49;padding:22rpx;margin:22rpx 0;font-size:27rpx;line-height:1.6}
 .steps{padding:28rpx;border-radius:22rpx}

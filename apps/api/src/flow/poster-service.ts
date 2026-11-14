@@ -8,7 +8,6 @@ import { PosterCopyProvider, parsePosterCopy } from '../ai/poster-provider.js'
 import { beijingDayBounds } from '../ai/service.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
-import { memberInviteCode } from './member-number.js'
 import { requireOrganizer } from './organizer.js'
 import { WechatAdapter } from './wechat.js'
 import type { ActivityPosterDto, PosterCopyInput } from './poster-dto.js'
@@ -162,7 +161,7 @@ export class ActivityPosterService {
         const [old] = await tx.select().from(activityPosterShares).where(filter)
         if (old) return old
         const value = { scene: 'p' + randomBytes(12).toString('hex'), activityId: id, memberId: member.id,
-          inviteCode: memberInviteCode(currentMember.memberNumber, currentMember.inviteCode), createdAt: new Date() }
+          inviteCode: currentMember.inviteCode, createdAt: new Date() }
         await tx.insert(activityPosterShares).values(value)
         return value
       })

@@ -60,7 +60,8 @@ describe('visitor silent identification without real database or WeChat', () => 
   it.each([
     { code: undefined, valid: false, inviter: 'platform' },
     { code: 'invalid-code', valid: false, inviter: 'platform' },
-    { code: 'HJYQM20261019000002', valid: true, inviter: 'inviter' },
+    { code: 'HJYQM20261019000002', valid: false, inviter: 'platform' },
+    { code: '000012', valid: true, inviter: 'inviter' },
   ])('creates a visitor and fixes the first source for $code', async ({ code, valid, inviter }) => {
     const f = fixture({ inviter: valid })
     const first = await f.service.identify('temporary-code', code)

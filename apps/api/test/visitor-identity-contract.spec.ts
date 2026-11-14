@@ -10,7 +10,7 @@ import { IdentityService } from '../src/flow/identity.js'
 describe('silent identity HTTP contract without database or WeChat', () => {
   let app: INestApplication, base: string
   const session = { token: 'session', expiresAt: '2026-10-26T00:00:00.000Z', member: {
-    id: 'visitor', memberNumber: 'HJ20261019000001', inviteCode: 'HJYQM20261019000001', displayName: null,
+    id: 'visitor', memberNumber: 'HJ20261019000001', inviteCode: '000001', displayName: null,
     avatarUrl: null, boundPhone: null, profileComplete: false,
   } }
   const identify = vi.fn(async () => session)
@@ -35,8 +35,8 @@ describe('silent identity HTTP contract without database or WeChat', () => {
     expect(accessed).not.toHaveBeenCalled()
   })
   it('forwards the first entry invitation source', async () => {
-    expect((await post({ code: 'wx-code', inviteCode: 'HJYQM20261019000002' })).status).toBe(200)
-    expect(identify).toHaveBeenCalledExactlyOnceWith('wx-code', 'HJYQM20261019000002')
+    expect((await post({ code: 'wx-code', inviteCode: '000002' })).status).toBe(200)
+    expect(identify).toHaveBeenCalledExactlyOnceWith('wx-code', '000002')
   })
   it.each([
     {}, { code: '' }, { code: 'x'.repeat(513) }, { code: 123 }, { code: 'wx-code', inviteCode: '' },

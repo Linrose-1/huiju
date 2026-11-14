@@ -6,21 +6,15 @@ import { members, memberSessions, wechatIdentities } from '../src/database/schem
 import { describe, expect, it } from 'vitest'
 import { MySqlDialect } from 'drizzle-orm/mysql-core'
 import type { SQL } from 'drizzle-orm'
-import { memberNumberPrefix, nextMemberNumber, memberInviteCode, inviteMemberNumber } from '../src/flow/member-number.js'
+import { memberNumberPrefix, nextMemberNumber } from '../src/flow/member-number.js'
+import { allocateInviteCode } from '../src/flow/invite-code.js'
 import { LEGAL_VERSION } from '../src/platform/legal.js'
 import { legalConsents } from '../src/database/schema/platform.js'
 
 describe('member number format', () => {
-  it('maps invitation codes without changing the date or sequence and rejects malformed new codes', () => {
-    expect(memberInviteCode('HJ20260927000002', 'old-code')).toBe('HJYQM20260927000002')
-    expect(inviteMemberNumber('HJYQM20260927000002')).toBe('HJ20260927000002')
-    for (const code of ['HJ20260927000002', 'hjyqm20260927000002', 'HJYQM20260927000002x', 'old-code']) expect(inviteMemberNumber(code)).toBeNull()
-    expect(memberInviteCode('DEMO_AI_fixture', 'demo-code')).toBe('demo-code')
-  })
-  it('returns the new code for an existing member while retaining their stored legacy code', () => {
-    const member = { memberNumber: 'HJ20260927000002', inviteCode: 'old-code' } as Member
-    expect(memberDto(member).inviteCode).toBe('HJYQM20260927000002')
-    expect(member.inviteCode).toBe('old-code')
+  it('returns the fixed stored invitation including leading zeros', () => {
+    const member = { memberNumber: 'HJ20260927000002', inviteCode: '000123' } as Member
+    expect(memberDto(member).inviteCode).toBe('000123')
   })
   it('uses Shanghai registration date across midnight and year boundaries', () => {
     expect(memberNumberPrefix(new Date('2026-09-27T15:59:59.999Z'))).toBe('HJ20260927')
@@ -40,7 +34,8 @@ describe('member number format', () => {
 
 
 describe('registration allocates inside the member transaction', () => {
-  it.each([undefined, 'HJYQM20260927000002', 'legacy-code'])('registers with invitation %s inside the locked transaction', async inviteCode => {
+  it.each([undefined, '012345', 'HJYQM20260927000002', 'legacy-code'])('registers with invitation %s inside the locked transaction', async inviteCode => {
+    const valid = inviteCode === '012345'
     const events: string[] = []
     let inserted: Record<string, unknown> = {}
     let queryIndex = 0
@@ -49,9 +44,9 @@ describe('registration allocates inside the member transaction', () => {
     const db = {
       select() {
         const index = queryIndex++
-        const results = () => [[], [{ id: 'root' }], ...(inviteCode ? [[{ id: 'inviter' }]] : []), [{ number: memberNumberPrefix(new Date()) + '000009' }], [inserted], []][index]
+        const results = () => [[], [{ id: 'root' }], ...(valid ? [[{ id: 'inviter' }]] : []), [{ number: memberNumberPrefix(new Date()) + '000009' }], [], [inserted], []][index]
         const chain = {
-          from: () => chain, where: (condition: SQL) => { if (inviteCode && index === 2) invitationQuery = new MySqlDialect().sqlToQuery(condition); return chain }, limit: () => chain, orderBy: () => chain,
+          from: () => chain, where: (condition: SQL) => { if (valid && index === 2) invitationQuery = new MySqlDialect().sqlToQuery(condition); return chain }, limit: () => chain, orderBy: () => chain,
           for: () => { events.push('lock:' + index); return chain },
           then: (resolve: (value: unknown) => unknown) => Promise.resolve(results()).then(resolve),
         }
@@ -67,20 +62,20 @@ describe('registration allocates inside the member transaction', () => {
     const result = await service.login('code', inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
     expect(agreed).toMatchObject({ memberId: inserted.id, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
     expect(result.member.memberNumber).toBe(memberNumberPrefix(inserted.createdAt as Date) + '000010')
-    expect(inserted.inviteCode).toBe('HJYQM' + result.member.memberNumber.slice(2))
-    expect(events.slice(0, 3)).toEqual(['lock:1', 'lock:' + (inviteCode ? 3 : 2), 'insert-member'])
-    expect(inserted.inviterMemberId).toBe(inviteCode ? 'inviter' : 'root')
-    if (inviteCode?.startsWith('HJYQM')) {
-      expect(invitationQuery?.params).toEqual(['HJ20260927000002', inviteCode, 'member'])
-      expect(invitationQuery?.sql).toContain('member_number')
+    expect(inserted.inviteCode).toMatch(/^[0-9]{6}$/)
+    expect(result.member.inviteCode).toBe(inserted.inviteCode)
+    expect(events.slice(0, 3)).toEqual(['lock:1', 'lock:' + (valid ? 3 : 2), 'insert-member'])
+    expect(inserted.inviterMemberId).toBe(valid ? 'inviter' : 'root')
+    if (valid) {
+      expect(invitationQuery?.params).toEqual([inviteCode, 'member'])
       expect(invitationQuery?.sql).toContain('invite_code')
-    } else if (inviteCode) expect(invitationQuery?.params).toEqual([inviteCode, 'member'])
+    }
   })
 })
 
 describe('existing member invitation remains unchanged', () => {
   it.each(['HJYQM20260927000003', 'different-legacy-code'])('creates a new session without rebinding invitation %s', async inviteCode => {
-    const owner = { id: 'existing-member', memberNumber: 'HJ20260927000002', inviteCode: 'original-code', inviterMemberId: 'original-inviter' }
+    const owner = { id: 'existing-member', memberNumber: 'HJ20260927000002', inviteCode: '001234', inviterMemberId: 'original-inviter' }
     const queries: { table: unknown; filter?: { sql: string; params: unknown[] }; locked?: boolean }[] = []
     const writes: { table: unknown; value: Record<string, unknown> }[] = []
     let transactions = 0
@@ -109,6 +104,7 @@ describe('existing member invitation remains unchanged', () => {
     const service = new IdentityService({ db } as unknown as FlowDatabase, { exchange: async () => ({ appId: 'test', openId: 'existing-openid', unionId: null }) } as unknown as WechatAdapter)
     const result = await service.login('code', inviteCode, { termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
     expect(result.member.id).toBe(owner.id)
+    expect(result.member.inviteCode).toBe('001234')
     expect(result.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(Date.parse(result.expiresAt)).toBeGreaterThan(Date.now())
     expect(owner.inviterMemberId).toBe('original-inviter')
@@ -120,5 +116,26 @@ describe('existing member invitation remains unchanged', () => {
     expect(writes.map(write => write.table)).toEqual([memberSessions, legalConsents])
     expect(writes[0]?.value).toMatchObject({ memberId: owner.id, expiresAt: new Date(result.expiresAt) })
     expect(writes[1]?.value).toMatchObject({ memberId: owner.id, termsVersion: LEGAL_VERSION, privacyVersion: LEGAL_VERSION })
+  })
+})
+
+describe('invitation allocator collisions', () => {
+  function occupied(count: number, available: string | null) {
+    let probes = 0
+    const tx = {
+      select: () => ({ from: () => ({ where: () => ({ limit: () => ++probes <= count ? [{ id: 'taken' }] : [] }) }) }),
+      execute: async () => [[{ available }]],
+    }
+    return { tx: tx as unknown as Parameters<typeof allocateInviteCode>[0], probes: () => probes }
+  }
+
+  it('retries a collision and returns a six-digit string', async () => {
+    const f = occupied(1, null)
+    expect(await allocateInviteCode(f.tx)).toMatch(/^[0-9]{6}$/)
+    expect(f.probes()).toBe(2)
+  })
+  it('returns the remaining free code after repeated collisions, and fails only for an exhausted pool', async () => {
+    expect(await allocateInviteCode(occupied(8, '000000').tx)).toBe('000000')
+    await expect(allocateInviteCode(occupied(8, null).tx)).rejects.toMatchObject({ response: { code: 'INVITE_CODES_EXHAUSTED' } })
   })
 })

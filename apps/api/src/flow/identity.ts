@@ -6,7 +6,6 @@ import {
   gt,
   isNull,
   like,
-  or,
   sql
 } from 'drizzle-orm'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
@@ -15,7 +14,8 @@ import { resolve } from 'node:path'
 import sharp from 'sharp'
 import { members, memberSessions, memberVisibilities, wechatIdentities } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
-import { memberNumberPrefix, nextMemberNumber, memberInviteCode, inviteMemberNumber } from './member-number.js'
+import { memberNumberPrefix, nextMemberNumber } from './member-number.js'
+import { allocateInviteCode } from './invite-code.js'
 import { WechatAdapter } from './wechat.js'
 import { AvatarInput, MemberDto } from './dto.js'
 import { LEGAL_VERSION, recordLegalConsent, requireLegalConsent } from '../platform/legal.js'
@@ -32,7 +32,7 @@ export function memberDto(member: Member): MemberDto {
   return {
     id: member.id,
     memberNumber: member.memberNumber,
-    inviteCode: memberInviteCode(member.memberNumber, member.inviteCode),
+    inviteCode: member.inviteCode,
     displayName: member.displayName,
     avatarUrl: member.avatarUrl,
     boundPhone: member.boundPhone,
@@ -104,11 +104,10 @@ export class IdentityService {
           if (!root) {
             fail('PLATFORM_NOT_READY', '平台身份尚未初始化，请联系运营人员', 503)
           }
-          const inviteNumber = inviteCode ? inviteMemberNumber(inviteCode) : null
-          const inviter = inviteCode ? (await tx
+          const inviter = inviteCode && /^[0-9]{6}$/.test(inviteCode) ? (await tx
             .select()
             .from(members)
-            .where(and(inviteNumber ? or(eq(members.memberNumber, inviteNumber), eq(members.inviteCode, inviteCode)) : eq(members.inviteCode, inviteCode), eq(members.kind, 'member')))
+            .where(and(eq(members.inviteCode, inviteCode), eq(members.kind, 'member')))
             .limit(1))[0] : undefined
           // Serialize number allocation across API processes using the existing root row.
           // Locking reads see the latest committed number even under REPEATABLE READ.
@@ -125,7 +124,7 @@ export class IdentityService {
               id,
               memberNumber,
               createdAt,
-              inviteCode: memberInviteCode(memberNumber, ''),
+              inviteCode: await allocateInviteCode(tx),
               inviterMemberId: inviter?.id ?? root.id
             })
           await tx

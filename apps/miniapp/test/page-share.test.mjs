@@ -7,7 +7,7 @@ import { loadPageShare } from './page-share-harness.mjs'
 
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b }); return { promise, resolve, reject } }
 function harness(t, { timeline = true, identify = async () => {} } = {}) {
-  const session = reactive({ token: 'token-a', epoch: 0, member: { inviteCode: 'my-code', profileComplete: false }, captureInvite(value) { this.pendingInvite = value } })
+  const session = reactive({ token: 'token-a', epoch: 0, member: { inviteCode: '001234', profileComplete: false }, captureInvite(value) { this.pendingInvite = value } })
   const target = ref({ path: '/pages/activity/detail', title: '公开活动', id: 'a/b&x=1', contactPhone: 'private', answers: ['secret'], searchId: 'tracking' })
   const hooks = {}, menus = [], scope = effectScope()
   let attempts = 0, identifyNext = identify
@@ -28,7 +28,7 @@ test('identified incomplete-profile visitors can share with only their own invit
   assert.equal(h.page.shareReady.value, true)
   const friend = h.page.shareMessage(), timeline = h.page.shareTimeline()
   assert.equal(friend.title, '公开活动')
-  assert.deepEqual(Object.fromEntries(new URLSearchParams(timeline.query)), { id: 'a/b&x=1', inviteCode: 'my-code' })
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(timeline.query)), { id: 'a/b&x=1', inviteCode: '001234' })
   assert.equal(friend.path, '/pages/activity/detail?' + timeline.query)
   assert.deepEqual(Object.keys(friend), ['title', 'path', 'imageUrl'])
   assert.equal(friend.imageUrl, '/static/huiju/campus.jpg')
@@ -47,18 +47,27 @@ test('identity is gated while resolving; repeated retries share the in-flight op
   wait.resolve(); await setImmediate(); assert.equal(h.page.shareReady.value, true)
 })
 
+test('old incoming links are captured while outgoing shares use the refreshed short code', async t => {
+  const h = harness(t), legacy = 'HJYQM20261020000002'
+  h.hooks.onLoad({inviteCode:legacy}); h.session.member.inviteCode = legacy
+  await h.show(); assert.equal(h.session.pendingInvite, legacy); assert.equal(h.page.shareReady.value, false)
+  h.identify(async session => { session.member.inviteCode = '000002' })
+  await h.page.retryShare()
+  assert.equal(new URLSearchParams(h.page.shareTimeline().query).get('inviteCode'), '000002')
+})
+
 test('missing identity and failures remain unavailable and explicit retry can recover', async t => {
   const h = harness(t, { identify: async () => { throw new Error('offline') } }); h.session.token = ''; h.session.member = null
   await h.show(); assert.equal(h.page.shareReady.value, false); assert.match(h.page.shareError.value, /重试/)
   h.identify(async () => {}); await h.page.retryShare(); assert.equal(h.page.shareReady.value, false)
-  h.identify(async session => { session.token = 'visitor'; session.member = { inviteCode: 'visitor-code', profileComplete: false } })
+  h.identify(async session => { session.token = 'visitor'; session.member = { inviteCode: '000002', profileComplete: false } })
   await h.page.retryShare(); assert.equal(h.page.shareReady.value, true); assert.equal(h.page.shareError.value, '')
 })
 
 test('epoch or invite changes revoke an otherwise identical token and require fresh verification', async t => {
   for (const change of ['epoch', 'invite']) {
     const h = harness(t); await h.show()
-    if (change === 'epoch') h.session.epoch++; else h.session.member.inviteCode = 'new-code'
+    if (change === 'epoch') h.session.epoch++; else h.session.member.inviteCode = '000003'
     assert.equal(h.page.shareReady.value, false); assert.equal(h.menus.at(-1)[0], 'hide')
     assert.match(h.page.shareError.value, /重试/)
     await h.page.retryShare(); assert.equal(h.page.shareReady.value, true)
@@ -89,5 +98,5 @@ test('unavailable content closes sharing and homepage sharing carries no stale c
   assert.equal(h.page.shareReady.value, false); assert.equal(h.menus.at(-1)[0], 'hide')
   h.target.value = { path: '/pages/assistant/index', title: '助手' }
   assert.equal(h.page.shareReady.value, true)
-  assert.equal(h.page.shareMessage().path, '/pages/assistant/index?inviteCode=my-code')
+  assert.equal(h.page.shareMessage().path, '/pages/assistant/index?inviteCode=001234')
 })

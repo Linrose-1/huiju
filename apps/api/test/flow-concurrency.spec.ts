@@ -10,6 +10,7 @@ import { activities } from '../src/database/schema/activities.js'
 import { registrations, registrationOperations } from '../src/database/schema/registrations.js'
 import { ActivityService } from '../src/flow/activity.js'
 import { FlowDatabase } from '../src/flow/common.js'
+import { allocateInviteCode } from '../src/flow/invite-code.js'
 import { IdentityService } from '../src/flow/identity.js'
 import { WechatAdapter } from '../src/flow/wechat.js'
 
@@ -36,7 +37,7 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
     const runId = randomUUID()
     const appId = `huiju-concurrency-${runId}`
     const inviterIds = [randomUUID(), randomUUID()]
-    const inviteCodes = inviterIds.map(id => id.replaceAll('-', ''))
+    const inviteCodes: string[] = []
     const activityId = randomUUID()
     const loginCodes = [randomUUID(), randomUUID()]
     const snapshot = async () => {
@@ -55,10 +56,14 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
       const [root] = await db.select({ id: members.id }).from(members)
         .where(eq(members.kind, 'platform_root')).limit(1)
       if (!root) throw new Error('Existing platform root is required')
-      await db.insert(members).values(inviterIds.map((id, index) => ({
-        id, memberNumber: `I${id.slice(0, 24)}`, inviteCode: inviteCodes[index],
-        inviterMemberId: root.id,
-      })))
+      await db.transaction(async tx => {
+        await tx.select({ id: members.id }).from(members).where(eq(members.id, root.id)).for('update')
+        for (const id of inviterIds) {
+          const inviteCode = await allocateInviteCode(tx)
+          await tx.insert(members).values({ id, memberNumber: `I${id.slice(0, 24)}`, inviteCode, inviterMemberId: root.id })
+          inviteCodes.push(inviteCode)
+        }
+      })
       const database = Object.create(FlowDatabase.prototype) as FlowDatabase
       Object.defineProperty(database, 'db', { value: db })
       class FixtureWechat extends WechatAdapter {
@@ -101,11 +106,15 @@ describe.skipIf(!enabled)('real MySQL multiple-connection concurrency', () => {
       expect(second.member.memberNumber).not.toBe(firstMember.memberNumber)
       const newMembers = await Promise.allSettled(Array.from({ length: 6 }, () => login(randomUUID())))
       expect(newMembers.every(result => result.status === 'fulfilled')).toBe(true)
+      const assigned = new Set<string>()
       const numbers = newMembers.map(result => {
         if (result.status !== 'fulfilled') throw result.reason
         expect(result.value.member.memberNumber).toMatch(/^HJ[0-9]{14}$/)
+        expect(result.value.member.inviteCode).toMatch(/^[0-9]{6}$/)
+        assigned.add(result.value.member.inviteCode)
         return result.value.member.memberNumber
       })
+      expect(assigned.size).toBe(newMembers.length)
       expect(new Set(numbers).size).toBe(numbers.length)
       const participantIds = [memberId, second.member.id]
       await db.update(members).set({
