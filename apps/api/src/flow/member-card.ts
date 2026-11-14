@@ -7,6 +7,7 @@ import { members, memberVisibilities } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar, type Member } from './identity.js'
 import { AvatarInput } from './dto.js'
+import { cityCode, uniqueSchools } from './fellow-profile.js'
 import { CardSettingsDto, MemberCardDto, ProfileDetailsDto, ProfileDetailsInput, WechatQrDto } from './member-card-dto.js'
 
 const fields = ['realName', 'email', 'hometown', 'bio', 'resources', 'needs', 'wechatId', 'personalTag'] as const
@@ -19,6 +20,7 @@ const settingKeys = [...Object.keys(visibilityFields), 'showWechatQr'] as (keyof
 const qrUrl = (member: Member) => member.wechatQrFile ? `/api/v1/members/${member.id}/wechat-qr` : null
 const profileDetails = (member: Member): ProfileDetailsDto => ({
   ...Object.fromEntries(fields.map(field => [field, member[field] ?? null])), wechatQrUrl: qrUrl(member),
+  industry: member.industry ?? null, schools: member.schools ?? [], hometownCityCode: member.hometownCityCode ?? null,
 }) as ProfileDetailsDto
 
 export function cardSettings(row?: Partial<CardSettingsDto>): CardSettingsDto {
@@ -48,7 +50,16 @@ export class MemberCardService {
 
   async saveProfile(input: ProfileDetailsInput, header?: string): Promise<ProfileDetailsDto> {
     const member = (await this.identity.require(header))!
-    const values = Object.fromEntries(fields.filter(field => input[field] !== undefined).map(field => [field, input[field]!.trim() || null]))
+    const values: Partial<Member> = Object.fromEntries(fields.filter(field => input[field] !== undefined).map(field => [field, input[field]!.trim() || null]))
+    if (input.industry !== undefined) values.industry = input.industry.trim() || null
+    if (input.schools !== undefined) values.schools = uniqueSchools(input.schools)
+    if (input.hometownCityCode !== undefined) {
+      const hometown = values.hometown === undefined ? member.hometown : values.hometown
+      values.hometownCityCode = hometown ? cityCode(input.hometownCityCode) : null
+    } else if (values.hometown !== undefined && values.hometown !== member.hometown) {
+      // A previous client may replace the city text without sending its code.
+      values.hometownCityCode = null
+    }
     await this.database.db.update(members).set(values).where(eq(members.id, member.id))
     return profileDetails({ ...member, ...values })
   }

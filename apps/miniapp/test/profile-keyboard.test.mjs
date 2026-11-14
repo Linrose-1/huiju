@@ -10,7 +10,7 @@ function harness(t) {
   const source = readFileSync(new URL('../src/pages/member/profile.vue', import.meta.url), 'utf8').split('<script setup lang="ts">')[1].split('</script>')[0]
   const deps = {
     vue,
-    '@dcloudio/uni-app': Object.fromEntries(['onShow', 'onHide', 'onUnload'].map(name => [name, fn => { hooks[name] = fn }])),
+    '@dcloudio/uni-app': Object.fromEntries(['onLoad', 'onShow', 'onHide', 'onUnload'].map(name => [name, fn => { hooks[name] = fn }])),
     '@/stores/session': { useSessionStore: () => session },
     '@/services/api': { api: {}, refreshMember: async () => null, errorMessage: e => e.message },
     '@/services/api/environment': { mediaUrl: value => value },

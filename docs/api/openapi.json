@@ -13864,6 +13864,20 @@
       "ProfileDetailsDto": {
         "type": "object",
         "properties": {
+          "industry": {
+            "type": "string",
+            "nullable": true
+          },
+          "hometownCityCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "schools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "realName": {
             "type": "string",
             "nullable": true
@@ -13902,6 +13916,9 @@
           }
         },
         "required": [
+          "industry",
+          "hometownCityCode",
+          "schools",
           "realName",
           "email",
           "hometown",
@@ -13927,6 +13944,21 @@
           "hometown": {
             "type": "string",
             "maxLength": 100
+          },
+          "industry": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "hometownCityCode": {
+            "type": "string",
+            "description": "家乡地级市行政区划代码，空字符串清除"
+          },
+          "schools": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "bio": {
             "type": "string",
@@ -14095,6 +14127,51 @@
           "canOpenCard"
         ]
       },
+      "InvitedFellowDto": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "canOpenCard": {
+            "type": "boolean"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "同行",
+                "同乡",
+                "同校"
+              ]
+            }
+          },
+          "attendanceCount": {
+            "type": "number"
+          },
+          "organizedCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "memberId",
+          "displayName",
+          "avatarUrl",
+          "canOpenCard",
+          "tags",
+          "attendanceCount",
+          "organizedCount"
+        ]
+      },
       "FellowListDto": {
         "type": "object",
         "properties": {
@@ -14110,7 +14187,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/FellowSummaryDto"
+              "$ref": "#/components/schemas/InvitedFellowDto"
             }
           },
           "total": {

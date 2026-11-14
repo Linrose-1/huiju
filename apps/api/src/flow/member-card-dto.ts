@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
-import { IsBoolean, IsEmail, IsString, MaxLength, ValidateIf } from 'class-validator'
+import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsNotEmpty, IsString, Matches, MaxLength, ValidateIf } from 'class-validator'
 
 const trim = ({ value }: { value: unknown }) => typeof value === 'string' ? value.trim() : value
 
@@ -14,6 +14,18 @@ export class ProfileDetailsInput {
 
   @ApiProperty({ maxLength: 100 }) @Transform(trim) @IsString() @MaxLength(100)
   hometown!: string
+
+  @ApiPropertyOptional({ maxLength: 100 }) @ValidateIf((_object, value) => value !== undefined)
+  @Transform(trim) @IsString() @MaxLength(100) industry?: string
+
+  @ApiPropertyOptional({ description: '家乡地级市行政区划代码，空字符串清除' })
+  @ValidateIf((_object, value) => value !== undefined) @IsString() @Matches(/^(?:[1-9]\d{5})?$/)
+  hometownCityCode?: string
+
+  @ApiPropertyOptional({ type: [String], maxItems: 20 }) @ValidateIf((_object, value) => value !== undefined)
+  @Transform(({ value }) => Array.isArray(value) ? value.map(item => typeof item === 'string' ? item.trim() : item) : value)
+  @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(100, { each: true })
+  schools?: string[]
 
   @ApiProperty({ maxLength: 2000 }) @Transform(trim) @IsString() @MaxLength(2000)
   bio!: string
@@ -32,6 +44,9 @@ export class ProfileDetailsInput {
 }
 
 export class ProfileDetailsDto {
+  @ApiProperty({ type: String, nullable: true }) industry!: string | null
+  @ApiProperty({ type: String, nullable: true }) hometownCityCode!: string | null
+  @ApiProperty({ type: [String] }) schools!: string[]
   @ApiProperty({ type: String, nullable: true }) realName!: string | null
   @ApiProperty({ type: String, nullable: true }) email!: string | null
   @ApiProperty({ type: String, nullable: true }) hometown!: string | null

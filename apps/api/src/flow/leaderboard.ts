@@ -5,6 +5,9 @@ import { registrations } from '../database/schema/registrations.js'
 import { FlowDatabase } from './common.js'
 import type { LeaderboardDto, LeaderboardQuery } from './leaderboard-dto.js'
 
+export const publishedForCount = eq(activities.lifecycle, 'published')
+export const attendedForCount = and(publishedForCount, eq(registrations.attended, true), eq(registrations.status, 'active'))
+
 export function beijingMonth(now: Date) {
   const offset = 8 * 60 * 60 * 1000
   const local = new Date(now.getTime() + offset)
@@ -25,10 +28,10 @@ export async function readLeaderboard(db: FlowDatabase['db'], query: Leaderboard
   const totals = query.kind === 'attendance'
     ? db.select({ memberId: registrations.memberId, total: count().as('total') }).from(registrations)
       .innerJoin(activities, eq(activities.id, registrations.activityId))
-      .where(and(eq(activities.lifecycle, 'published'), eq(registrations.attended, true), eq(registrations.status, 'active'), dates ?? undefined))
+      .where(and(attendedForCount, dates ?? undefined))
       .groupBy(registrations.memberId).as('totals')
     : db.select({ memberId: activities.organizerMemberId, total: count().as('total') }).from(activities)
-      .where(and(eq(activities.lifecycle, 'published'), dates ?? undefined))
+      .where(and(publishedForCount, dates ?? undefined))
       .groupBy(activities.organizerMemberId).as('totals')
 
   const rows = await db.select({ memberId: members.id, displayName: members.displayName, avatarUrl: members.avatarUrl, count: totals.total })

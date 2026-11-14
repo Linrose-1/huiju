@@ -3,14 +3,14 @@ import PageReturn from '@/components/base/PageReturn.vue'
 import { ref, watch } from 'vue'
 import { onShow, onHide, onUnload, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
-import type { FellowSummary } from '@/services/api/types'
+import type { FellowList, FellowSummary } from '@/services/api/types'
 import { routes, navigate, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import FellowPerson from '@/components/business/FellowPerson.vue'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
 const session = useSessionStore()
-const inviter = ref<FellowSummary | null>(null), items = ref<FellowSummary[]>([]), total = ref(0), hasMore = ref(false)
+const inviter = ref<FellowSummary | null>(null), items = ref<FellowList['items']>([]), total = ref(0), hasMore = ref(false)
 const loading = ref(false), loadingMore = ref(false), error = ref(''), moreError = ref(''), ready = ref(false)
 let generation = 0, offset = 0, visible = false
 function currentRequest() { const g = generation, token = session.token, epoch = session.epoch; return () => visible && g === generation && token === session.token && epoch === session.epoch }
@@ -59,7 +59,6 @@ onPullDownRefresh(load)
 <template>
   <view class="page-pad fellows-page">
     <PageReturn />
-    <view class="notice">这里展示直接邀请你的人，以及你直接邀请的人。邀请关系建立后保持不变。</view>
     <RequestState
       :loading="loading"
       :error="error"
@@ -83,7 +82,8 @@ onPullDownRefresh(load)
           暂无直接邀请你的学友
         </view>
       </view>
-      <view class="group-heading">我邀请的学友 <text class="muted">· {{ total }}</text></view>
+      <view class="group-heading">我邀请的学友 <text class="member-total">{{ total }} 位</text></view>
+      <view class="relation-hint">关系由双方资料自动匹配，仅自己可见</view>
       <view class="card person-card">
         <view
           v-if="!items.length"
@@ -105,7 +105,10 @@ onPullDownRefresh(load)
             :name="person.displayName"
             :avatar-url="person.avatarUrl"
             :clickable="person.canOpenCard"
-            :subtitle="person.canOpenCard?'直接学友':'资料尚未完善，暂不可查看名片'"
+            :tags="person.tags"
+            :attendance-count="person.canOpenCard ? person.attendanceCount : null"
+            :organized-count="person.canOpenCard ? person.organizedCount : null"
+            :subtitle="person.canOpenCard ? '' : '资料尚未完善，暂不可查看名片'"
             @open="open(person)"
           />
         </view>
@@ -123,4 +126,5 @@ onPullDownRefresh(load)
 </template>
 <style scoped>
 .fellows-page{min-height:100vh;background:#f3f8f5;padding-bottom:calc(32rpx + env(safe-area-inset-bottom))}.group-label{font-size:25rpx;color:#7e9185;margin:32rpx 0 12rpx}.group-heading{font-size:29rpx;font-weight:600;margin:36rpx 0 18rpx}.person-card{padding:4rpx 28rpx}.no-inviter{font-size:27rpx;color:#7e9185;padding:32rpx 0}.fellow-row + .fellow-row{border-top:1rpx solid #eaf0ec}.privacy-copy{line-height:1.7;margin-top:22rpx}
+.group-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:6rpx;font-size:34rpx}.member-total{font-size:25rpx;font-weight:500;color:#155741}.relation-hint{font-size:24rpx;color:#62756b;margin-bottom:16rpx}.group-label{margin-top:12rpx}
 </style>

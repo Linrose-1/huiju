@@ -80,8 +80,8 @@ describe('member card service authorization', () => {
 
   it('allows incomplete members to maintain their own profile, writing only the six fields', async () => {
     const f = fixture([], { ...member, boundPhone: null })
-    expect(await f.service.profile('session')).toEqual({ realName: '姓名', email: 'a@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求', wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrUrl: null })
-    expect(await f.service.saveProfile({ ...empty, bio: ' 新简介 ' }, 'session')).toEqual({ realName: null, email: null, hometown: null, bio: '新简介', resources: null, needs: null, wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrUrl: null })
+    expect(await f.service.profile('session')).toEqual({ realName: '姓名', email: 'a@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求', wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrUrl: null, industry: null, hometownCityCode: null, schools: [] })
+    expect(await f.service.saveProfile({ ...empty, bio: ' 新简介 ' }, 'session')).toEqual({ realName: null, email: null, hometown: null, bio: '新简介', resources: null, needs: null, wechatId: 'rose_wechat', personalTag: '保持好奇', wechatQrUrl: null, industry: null, hometownCityCode: null, schools: [] })
     expect(f.writes).toHaveLength(1)
     expect(f.requireIdentity).toHaveBeenCalledWith('session')
   })
@@ -91,6 +91,17 @@ describe('member card service authorization', () => {
     expect(await f.service.settings('session')).toEqual(cardSettings())
     expect(await f.service.saveSettings(all, 'session')).toEqual(cardSettings(all))
     expect(f.writes).toEqual([{ values: { memberId: member.id, ...all }, update: { set: all } }])
+  })
+
+  it('validates profile matching inputs and preserves optional fields across legacy saves', async () => {
+    const existing = { ...member, industry: '医疗', hometownCityCode: '440300', schools: ['甲大学'] }
+    const f = fixture([], existing)
+    expect(await f.service.saveProfile({ ...empty, hometown: '深圳' })).toMatchObject({ industry: '医疗', hometownCityCode: '440300', schools: ['甲大学'] })
+    expect(f.writes[0]).not.toHaveProperty('hometownCityCode')
+    expect(await f.service.saveProfile({ ...empty, hometown: '广州' })).toMatchObject({ hometownCityCode: null })
+    expect(await f.service.saveProfile(await validateProfile({ ...empty, hometown: '广东省 广州市', hometownCityCode: '440106', industry: ' 科技 ', schools: [' 北大 ', '北大', '清华'] }))).toMatchObject({ industry: '科技', schools: ['北大', '清华'], hometownCityCode: '440100' })
+    expect(await f.service.saveProfile({ ...empty, industry: '', schools: [], hometownCityCode: '' })).toMatchObject({ industry: null, schools: [], hometownCityCode: null })
+    for (const extras of [{ schools: null }, { schools: [' '] }, { schools: '北大' }, { schools: [null] }, { hometownCityCode: '广州' }, { industry: 123 }]) await expect(validateProfile({ ...empty, ...extras })).rejects.toThrow()
   })
 
   it('blocks incomplete viewers before querying targets', async () => {

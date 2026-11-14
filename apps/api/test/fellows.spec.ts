@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { connectionMembers, connectionPage, fellowSummary, FellowsService, type RelationMember } from '../src/flow/fellows.js'
 import { ConnectionQuery } from '../src/flow/fellows-dto.js'
 import { PageQuery } from '../src/flow/pagination.js'
+import { cityCode, fellowTags } from '../src/flow/fellow-profile.js'
 import type { FlowDatabase } from '../src/flow/common.js'
 import type { IdentityService } from '../src/flow/identity.js'
 
@@ -109,7 +110,7 @@ describe('fellows permission and pagination', () => {
 
   it('returns natural inviter summary and anonymous invitees without extra fields', async () => {
     const fixture = serviceFixture([[member('inviter')], [{ total: 1 }], [member('guest', 'me', { nameSetByUser: false })]], member('me', 'inviter'))
-    expect(await fixture.service.list(new PageQuery())).toEqual({ inviter: fellowSummary(member('inviter')), items: [fellowSummary(member('guest', 'me', { nameSetByUser: false }))], total: 1, hasMore: false })
+    expect(await fixture.service.list(new PageQuery())).toEqual({ inviter: fellowSummary(member('inviter')), items: [{ ...fellowSummary(member('guest', 'me', { nameSetByUser: false })), tags: [], attendanceCount: 0, organizedCount: 0 }], total: 1, hasMore: false })
   })
 
   it('does not expose root or absent targets', async () => {
@@ -132,4 +133,14 @@ describe('fellows permission and pagination', () => {
     expect(await parse({ cursor: '1000001' })).toEqual({ cursor: 1000001, limit: 20 })
     for (const value of [{ cursor: -1 }, { cursor: 0.5 }, { limit: 101 }, { source: 'someone' }]) await expect(parse(value)).rejects.toThrow()
   })
+})
+
+it('matches city by prefecture, industry by whole value, and any overlapping school', () => {
+  const me = { industry: ' AI ', schools: ['乙大学', '甲大学'], hometownCityCode: cityCode('440106') }
+  expect(fellowTags(me, { industry: 'ＡＩ', schools: ['丙大学', '乙大学'], hometownCityCode: cityCode('440103') })).toEqual(['同行', '同乡', '同校'])
+  expect(fellowTags(me, { industry: 'AI服务', schools: ['甲大学附中'], hometownCityCode: cityCode('440300') })).toEqual([])
+  expect(fellowTags(me, { industry: '', schools: null, hometownCityCode: null })).toEqual([])
+  expect(cityCode('310101')).toBe(cityCode('310151'))
+  expect(cityCode('469001')).not.toBe(cityCode('469002'))
+  expect(cityCode('440000')).toBeNull()
 })

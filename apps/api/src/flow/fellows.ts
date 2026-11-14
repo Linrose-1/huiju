@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common'
-import { and, asc, count, eq } from 'drizzle-orm'
+import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { activities } from '../database/schema/activities.js'
+import { registrations } from '../database/schema/registrations.js'
 import { members } from '../database/schema/members.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, type Member } from './identity.js'
 import { ConnectionPathDto, ConnectionQuery, FellowListDto, FellowSummaryDto } from './fellows-dto.js'
 import { PageQuery } from './pagination.js'
+import { attendedForCount, publishedForCount } from './leaderboard.js'
+import { fellowTags } from './fellow-profile.js'
 
 const relationFields = {
   id: members.id, kind: members.kind, inviterMemberId: members.inviterMemberId,
@@ -80,9 +84,22 @@ export class FellowsService {
     if (!inviter || inviter.id === caller.id) incomplete()
     const condition = and(eq(members.inviterMemberId, caller.id), eq(members.kind, 'member'))
     const [totals] = await this.database.db.select({ total: count() }).from(members).where(condition)
-    const rows = await this.database.db.select(relationFields).from(members).where(condition)
+    // The two indexed, correlated counts do not multiply rows or alter pagination.
+    const rows = await this.database.db.select({
+      ...relationFields, industry: members.industry, schools: members.schools, hometownCityCode: members.hometownCityCode,
+      attendanceCount: sql<number>`(select count(*) from ${registrations} join ${activities} on ${eq(registrations.activityId, activities.id)}
+        where ${and(eq(registrations.memberId, members.id), attendedForCount)})`.mapWith(Number),
+      organizedCount: sql<number>`(select count(*) from ${activities}
+        where ${and(eq(activities.organizerMemberId, members.id), publishedForCount)})`.mapWith(Number),
+    }).from(members).where(condition)
       .orderBy(asc(members.createdAt), asc(members.id)).limit(query.limit + 1).offset(query.offset)
-    return { inviter: inviter.kind === 'platform_root' ? null : fellowSummary(inviter), items: rows.slice(0, query.limit).map(fellowSummary), total: Number(totals.total), hasMore: rows.length > query.limit }
+    const items = rows.slice(0, query.limit).map(row => {
+      const summary = fellowSummary(row)
+      return { ...summary, tags: summary.canOpenCard ? fellowTags(caller, row) : [],
+        attendanceCount: summary.canOpenCard ? row.attendanceCount : 0,
+        organizedCount: summary.canOpenCard ? row.organizedCount : 0 }
+    })
+    return { inviter: inviter.kind === 'platform_root' ? null : fellowSummary(inviter), items, total: Number(totals.total), hasMore: rows.length > query.limit }
   }
 
   async path(id: string, query: ConnectionQuery, header?: string): Promise<ConnectionPathDto> {

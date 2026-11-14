@@ -19,9 +19,18 @@ export class FellowSummaryDto {
   @ApiProperty() canOpenCard!: boolean
 }
 
+export const fellowTagNames = ['同行', '同乡', '同校'] as const
+export type FellowTag = typeof fellowTagNames[number]
+
+export class InvitedFellowDto extends FellowSummaryDto {
+  @ApiProperty({ enum: [...fellowTagNames], isArray: true }) tags!: FellowTag[]
+  @ApiProperty() attendanceCount!: number
+  @ApiProperty() organizedCount!: number
+}
+
 export class FellowListDto {
   @ApiProperty({ type: FellowSummaryDto, nullable: true }) inviter!: FellowSummaryDto | null
-  @ApiProperty({ type: [FellowSummaryDto] }) items!: FellowSummaryDto[]
+  @ApiProperty({ type: [InvitedFellowDto] }) items!: InvitedFellowDto[]
   @ApiProperty() total!: number
   @ApiProperty() hasMore!: boolean
 }

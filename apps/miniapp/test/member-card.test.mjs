@@ -21,7 +21,7 @@ function harness(t, pageName, names) {
   const member = { displayName: '甲', memberNumber: '001', avatarUrl: '/a.png', boundPhone: '13800000001', profileComplete: true }
   const session = reactive({ token: 'a', epoch: 0, member })
   const navigations = [], refreshes = [], cards = [], details = [], settings = [], saves = [], namesSaved = [], toasts = [], hooks = {}
-  const queue = list => () => { const call = deferred(); list.push(call); return call.promise }
+  const queue = list => (...args) => { const call = { ...deferred(), args }; list.push(call); return call.promise }
   const deps = {
     '@dcloudio/uni-app': Object.fromEntries(['onShow', 'onHide', 'onLoad', 'onUnload'].map(name => [name, fn => { hooks[name] = fn }])),
     '@/stores/session': { useSessionStore: () => session },
@@ -103,6 +103,35 @@ test('profile explains partial save and does not continue saving under a changed
   assert.match(h.page.actionError.value, /补充资料已保存，用户名称未保存/)
   const again = h.page.save(); h.session.token = ''; h.session.member = null; h.saves[1].resolve(privateDetails); await again
   assert.equal(h.namesSaved.length, 1); assert.equal(h.page.form.email, '')
+})
+test('editing relations keeps free-text legacy hometown until a new city is chosen, saves and clears schools', async t => {
+  const h = harness(t, 'profile', 'load,save,form,changeHometown,clearHometown,needsCounty')
+  const load = h.page.load(); h.refreshes[0].resolve(h.member); h.details[0].resolve(privateDetails); await load
+  assert.equal(h.page.form.hometown, '深圳')
+  assert.equal(h.page.form.hometownCityCode, '')
+  h.page.form.schools.push(' 中山大学 ', '', '暨南大学', '中山大学')
+  const save = h.page.save()
+  assert.deepEqual(h.saves[0].args[0].schools, ['中山大学', '暨南大学'])
+  assert.equal(h.saves[0].args[0].hometown, '深圳')
+  h.saves[0].resolve({}); await save
+  const select = (value, code) => h.page.changeHometown({detail:{value, code}})
+  select(['广东省', '广州市'], ['440000', '440100'])
+  assert.equal(h.page.form.hometownCityCode, '440100')
+  select(['北京市','市辖区'], ['110000','110100'])
+  assert.equal(h.page.form.hometownCityCode, '110000')
+  assert.equal(h.page.form.hometown, '北京市')
+  select(['湖北省','省直辖县级行政区划'], ['420000','429000'])
+  assert.equal(h.page.needsCounty.value, true)
+  await h.page.save(); assert.equal(h.saves.length, 1)
+  select(['湖北省','省直辖县级行政区划','仙桃市'], ['420000','429000','429004'])
+  assert.equal(h.page.form.hometownCityCode, '429004')
+  assert.equal(h.page.form.hometown, '湖北省 · 仙桃市')
+  h.page.clearHometown(); h.page.form.schools.splice(0)
+  const next = h.page.save()
+  assert.deepEqual(h.saves[1].args[0].schools, [])
+  assert.equal(h.saves[1].args[0].hometownCityCode, '')
+  assert.equal(h.saves[1].args[0].hometown, '')
+  h.saves[1].resolve({}); await next
 })
 test('avatar file read cannot upload under a replacement account', async () => {
   const session = { token: 'a', epoch: 0 }, uploads = []

@@ -148,6 +148,13 @@
       "when": 1794060216711,
       "tag": "0020_activity_poster_organizations",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "5",
+      "when": 1794664466972,
+      "tag": "0021_member_fellow_profiles",
+      "breakpoints": true
     }
   ]
 }

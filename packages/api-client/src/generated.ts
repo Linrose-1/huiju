@@ -2274,6 +2274,9 @@ export interface components {
             displayName: string;
         };
         ProfileDetailsDto: {
+            industry: string | null;
+            hometownCityCode: string | null;
+            schools: string[];
             realName: string | null;
             email: string | null;
             hometown: string | null;
@@ -2288,6 +2291,10 @@ export interface components {
             realName: string;
             email: string;
             hometown: string;
+            industry?: string;
+            /** @description 家乡地级市行政区划代码，空字符串清除 */
+            hometownCityCode?: string;
+            schools?: string[];
             bio: string;
             resources: string;
             needs: string;
@@ -2329,9 +2336,18 @@ export interface components {
             avatarUrl: string | null;
             canOpenCard: boolean;
         };
+        InvitedFellowDto: {
+            memberId: string | null;
+            displayName: string;
+            avatarUrl: string | null;
+            canOpenCard: boolean;
+            tags: ("同行" | "同乡" | "同校")[];
+            attendanceCount: number;
+            organizedCount: number;
+        };
         FellowListDto: {
             inviter: components["schemas"]["FellowSummaryDto"] | null;
-            items: components["schemas"]["FellowSummaryDto"][];
+            items: components["schemas"]["InvitedFellowDto"][];
             total: number;
             hasMore: boolean;
         };

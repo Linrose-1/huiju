@@ -145,7 +145,7 @@
     {
       "path": "pages/member/profile",
       "style": {
-        "navigationBarTitleText": "个人资料"
+        "navigationBarTitleText": "编辑个人资料"
       }
     },
     {
