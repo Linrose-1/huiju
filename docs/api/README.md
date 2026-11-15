@@ -162,6 +162,8 @@
 
 活动：
 
+- `GET /activities` 的每张活动卡片包含 `readerCount`，与对应活动公开读者名单的 `total` 使用同一统计口径。同一会员多次阅读只计一人。
+
 - `POST /activities/:id/views`：可选会话；UUID v4 `eventId`、`visitorId`。只在详情成功打开后调用，重试与身份就绪沿用 eventId。同事件幂等；已绑定其他身份时返回 `VISITOR_CHANGED`，换新访客/事件后重试一次。
 - `GET /activities/:id/readers?offset=0`：公开，40条分页 `{items,total,hasMore}`；items 仅 `memberId`、当前 `avatarUrl` 与 `displayName`，同会员一次、最近阅读优先，不包含阅读时间或联系方式。
 - `GET /activities/:id/view-stats`：发起人专属 `{views,visitors,conversionRate}`，转化率为百分数，无浏览时 null。

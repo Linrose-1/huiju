@@ -272,9 +272,14 @@ export class ActivityDto {
   questions!: QuestionDto[]
 }
 
+export class ActivityListItemDto extends ActivityDto {
+  @ApiProperty({ minimum: 0, description: '公开读者名单的去重人数' })
+  readerCount!: number
+}
+
 export class ActivityListDto {
-  @ApiProperty({ type: [ActivityDto] })
-  items!: ActivityDto[]
+  @ApiProperty({ type: [ActivityListItemDto] })
+  items!: ActivityListItemDto[]
 
   @ApiProperty()
   hasMore!: boolean

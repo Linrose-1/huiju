@@ -7,6 +7,7 @@ export type ActivityRecommendation = components['schemas']['ActivityRecommendati
 export type Member = components['schemas']['MemberDto']
 export type Session = components['schemas']['SessionDto']
 export type Activity = components['schemas']['ActivityDto']
+export type ActivityList = components['schemas']['ActivityListDto']
 export type Registration = components['schemas']['RegistrationDto']
 export type MyRegistration = components['schemas']['MyRegistrationDto']
 export type RegistrationInput = components['schemas']['RegistrationInput']

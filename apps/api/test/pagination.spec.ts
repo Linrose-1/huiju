@@ -18,7 +18,7 @@ function fixture(results: unknown[][]) {
     const index = query++, result = results[index]
     if (!result) throw new Error(`Unexpected database query ${index}`)
     const chain: Record<string, unknown> = { then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve(result).then(resolve) }
-    for (const method of ['from', 'innerJoin', 'where', 'orderBy', 'limit', 'offset', 'groupBy']) {
+    for (const method of ['from', 'innerJoin', 'where', 'orderBy', 'limit', 'offset', 'groupBy', 'as']) {
       chain[method] = (...args: unknown[]) => { calls.push({ method, args, query: index }); return chain }
     }
     return chain
@@ -31,6 +31,16 @@ const notification = (id: string) => ({ id, activityId: 'activity', type: 'activ
 const registration = (id: string) => ({ id, activityId: 'activity', status: 'active', contactPhone: '13800000000', currentRegisteredAt: now, cancelledAt: null, attended: true, attendedAt: now })
 
 describe('bounded list pagination', () => {
+  it('groups reader counts once for the returned activity page, excluding the lookahead row', async () => {
+    const rows = Array.from({ length: 11 }, (_, index) => ({ id: String(index), startsAt: now, endsAt: now }))
+    const f = fixture([rows, [{ activityId: '4', total: 7 }], [], [], ...Array.from({ length: 20 }, () => [])])
+    const page = await f.activity.list()
+    expect(page.hasMore).toBe(true)
+    expect(page.items.map(item => item.readerCount)).toEqual([0, 0, 0, 0, 7, 0, 0, 0, 0, 0])
+    const filter = f.calls.find(call => call.query === 1 && call.method === 'where')!.args[0]
+    expect(dialect.sqlToQuery(filter as Parameters<MySqlDialect['sqlToQuery']>[0]).params).toEqual(page.items.map(item => item.id))
+    expect(f.calls.filter(call => call.method === 'groupBy')).toHaveLength(1)
+  })
   it('validates transformed page bounds and rejects unsupported status values', async () => {
     expect(plainToInstance(PageQuery, {})).toEqual({ offset: 0, limit: 20 })
     expect(await validate(plainToInstance(PageQuery, { offset: '100', limit: '100' }))).toHaveLength(0)

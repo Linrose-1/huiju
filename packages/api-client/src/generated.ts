@@ -1918,6 +1918,45 @@ export interface components {
             required: boolean;
             options: string[] | null;
         };
+        ActivityListItemDto: {
+            hostOrganization: string | null;
+            organizingOrganization: string | null;
+            sponsorOrganization: string | null;
+            organizer: components["schemas"]["PublicMemberDto"] | null;
+            registeredMembers?: components["schemas"]["PublicMemberDto"][];
+            id: string;
+            title: string;
+            description: string;
+            descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
+            registrationNotice?: string | null;
+            coverUrl: string | null;
+            imageUrls: string[];
+            location: string;
+            /** @description 微信地图 GCJ-02 纬度，旧活动可为空 */
+            locationLatitude?: number | null;
+            /** @description 微信地图 GCJ-02 经度，旧活动可为空 */
+            locationLongitude?: number | null;
+            startsAt: string;
+            endsAt: string;
+            registrationDeadline: string;
+            capacity: number | null;
+            activeRegistrationCount: number;
+            cancellationRegistrationCount: number | null;
+            /** @enum {string} */
+            feeType: "free" | "paid";
+            feeAmountCents: number | null;
+            /** @enum {string} */
+            registrationState: "open" | "closed" | "full" | "cancelled" | "removed";
+            cancellationReason: string | null;
+            consultationContact?: string;
+            questions: components["schemas"]["QuestionDto"][];
+            /** @description 公开读者名单的去重人数 */
+            readerCount: number;
+        };
+        ActivityListDto: {
+            items: components["schemas"]["ActivityListItemDto"][];
+            hasMore: boolean;
+        };
         ActivityDto: {
             hostOrganization: string | null;
             organizingOrganization: string | null;
@@ -1950,10 +1989,6 @@ export interface components {
             cancellationReason: string | null;
             consultationContact?: string;
             questions: components["schemas"]["QuestionDto"][];
-        };
-        ActivityListDto: {
-            items: components["schemas"]["ActivityDto"][];
-            hasMore: boolean;
         };
         PublicRegistrationAnswerDto: {
             questionId: string;

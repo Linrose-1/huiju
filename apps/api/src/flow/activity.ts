@@ -3,6 +3,7 @@ import {
   and,
   asc,
   count,
+  countDistinct,
   desc,
   eq,
   gt,
@@ -13,10 +14,11 @@ import {
 import { randomUUID } from 'node:crypto'
 import { activities, registrationQuestions } from '../database/schema/activities.js'
 import { members } from '../database/schema/members.js'
+import { readingEvents, readingVisitors } from '../database/schema/interactions.js'
 import { registrations, registrationAnswers, registrationOperations } from '../database/schema/registrations.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
-import { ActivityDto, AnswerInput, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
+import { ActivityDto, ActivityListDto, AnswerInput, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
 import { ActivityListQuery } from './activity-list-dto.js'
 import type { LeaderboardQuery } from './leaderboard-dto.js'
 import { readLeaderboard } from './leaderboard.js'
@@ -145,7 +147,7 @@ export class ActivityService {
     }
   }
 
-  async list(query: ActivityListQuery = new ActivityListQuery()) {
+  async list(query: ActivityListQuery = new ActivityListQuery()): Promise<ActivityListDto> {
     const pageSize = 10
     const keyword = query.q?.trim()
     const where = and(
@@ -166,6 +168,11 @@ export class ActivityService {
     const hasMore = rows.length > pageSize
     rows.length = Math.min(rows.length, pageSize)
     if (!rows.length) return { items: [], hasMore: false }
+    const activityIds = rows.map(row => row.id)
+    const counts = await this.database.db.select({ activityId: readingEvents.activityId, total: countDistinct(readingVisitors.memberId) })
+      .from(readingEvents).innerJoin(readingVisitors, eq(readingVisitors.visitorHash, readingEvents.visitorHash))
+      .where(inArray(readingEvents.activityId, activityIds)).groupBy(readingEvents.activityId)
+    const readersByActivity = new Map(counts.map(row => [row.activityId, row.total]))
     const ranked = this.database.db
       .select({
         activityId: registrations.activityId,
@@ -176,7 +183,7 @@ export class ActivityService {
       })
       .from(registrations)
       .innerJoin(members, eq(members.id, registrations.memberId))
-      .where(and(inArray(registrations.activityId, rows.map(row => row.id)), eq(registrations.status, 'active')))
+      .where(and(inArray(registrations.activityId, activityIds), eq(registrations.status, 'active')))
       .as('ranked')
     const previews = await this.database.db
       .select({
@@ -196,6 +203,7 @@ export class ActivityService {
     }
     return { hasMore, items: await Promise.all(rows.map(async row => ({
       ...await this.present(row),
+      readerCount: readersByActivity.get(row.id) ?? 0,
       registeredMembers: membersByActivity.get(row.id) ?? []
     }))) }
   }

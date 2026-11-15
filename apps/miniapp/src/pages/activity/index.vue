@@ -5,7 +5,7 @@ import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
 import { onShareAppMessage, onShareTimeline, onShow, onHide, onPullDownRefresh, onReachBottom, onLoad, onUnload } from '@dcloudio/uni-app'
 import { api, errorMessage } from '@/services/api'
-import type { Activity } from '@/services/api/types'
+import type { ActivityList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
 import { activityTimeRangeWeekday, fee } from '@/services/presentation'
 import { navigate, routes } from '@/services/navigation'
@@ -17,7 +17,7 @@ const adActive = ref(false), adRefresh = ref(0)
 onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
 onPullDownRefresh(() => { adRefresh.value++ })
 
-const items = ref<Activity[]>([]), loading = ref(false), loadingMore = ref(false), hasMore = ref(false)
+const items = ref<ActivityList['items']>([]), loading = ref(false), loadingMore = ref(false), hasMore = ref(false)
 const error = ref(''), moreError = ref(''), search = ref(''), tab = ref('最新')
 let generation = 0, offset = 0, searchTimer: ReturnType<typeof globalThis.setTimeout> | undefined
 const scanning = ref(false)
@@ -101,6 +101,9 @@ async function more() {
         hasMore.value = result.hasMore
     } catch (e) { if (current === generation) moreError.value = errorMessage(e) }
     finally { if (current === generation) loadingMore.value = false }
+}
+function openReaders(id: string) {
+    navigate(routes.activityPeople + '?id=' + encodeURIComponent(id) + '&kind=readers')
 }
 function retryMore() { moreError.value = ''; void more() }
 function chooseTab(value: string) { if (value === '推荐') {
@@ -277,7 +280,17 @@ onShareTimeline(shareTimeline)
                   />
                   <text v-else>{{ person.displayName?.slice(0, 1) || '友' }}</text>
                 </view>
-              </view><text class="registration-count">{{ activity.activeRegistrationCount ? activity.activeRegistrationCount+' 人已报名' : '暂无报名' }}</text><button
+              </view><text class="registration-count">{{ activity.activeRegistrationCount ? activity.activeRegistrationCount+' 人已报名' : '暂无报名' }}</text>
+            </view>
+            <view class="card-actions">
+              <button
+                class="card-readers"
+                @click.stop="openReaders(activity.id)"
+              >
+                <uni-icons type="eye" size="28rpx" color="#557365" />
+                <text>{{ activity.readerCount }} 人读过</text>
+              </button>
+              <button
                 class="card-share"
                 @click.stop="navigate(routes.activityShare+'?id='+encodeURIComponent(activity.id))"
               >
@@ -321,5 +334,7 @@ onShareTimeline(shareTimeline)
 </style>
 
 <style scoped>
+.card-actions{display:flex;align-items:center;justify-content:space-between;gap:12rpx;margin-top:6rpx}
+.card-readers{display:flex;align-items:center;gap:7rpx;margin:0;padding:8rpx 8rpx 8rpx 0;min-height:64rpx;background:transparent;color:#557365;font-size:24rpx;line-height:1.4}
 .card-share { flex-shrink: 0; margin: 0 0 0 auto; padding: 8rpx 18rpx; min-height: 64rpx; line-height: 48rpx; font-size: 26rpx; color: #155b45; background: #edf4ef; border-radius: 32rpx; }
 </style>

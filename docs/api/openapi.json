@@ -12466,6 +12466,185 @@
           "options"
         ]
       },
+      "ActivityListItemDto": {
+        "type": "object",
+        "properties": {
+          "hostOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizingOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "sponsorOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizer": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicMemberDto"
+              }
+            ]
+          },
+          "registeredMembers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicMemberDto"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "descriptionDelta": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DescriptionDeltaDto"
+              }
+            ]
+          },
+          "registrationNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageUrls": {
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "location": {
+            "type": "string"
+          },
+          "locationLatitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "微信地图 GCJ-02 纬度，旧活动可为空"
+          },
+          "locationLongitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "微信地图 GCJ-02 经度，旧活动可为空"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": "string"
+          },
+          "registrationDeadline": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "number",
+            "nullable": true
+          },
+          "activeRegistrationCount": {
+            "type": "number"
+          },
+          "cancellationRegistrationCount": {
+            "type": "number",
+            "nullable": true
+          },
+          "feeType": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid"
+            ]
+          },
+          "feeAmountCents": {
+            "type": "number",
+            "nullable": true
+          },
+          "registrationState": {
+            "type": "string",
+            "enum": [
+              "open",
+              "closed",
+              "full",
+              "cancelled",
+              "removed"
+            ]
+          },
+          "cancellationReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "consultationContact": {
+            "type": "string"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionDto"
+            }
+          },
+          "readerCount": {
+            "type": "number",
+            "minimum": 0,
+            "description": "公开读者名单的去重人数"
+          }
+        },
+        "required": [
+          "hostOrganization",
+          "organizingOrganization",
+          "sponsorOrganization",
+          "organizer",
+          "id",
+          "title",
+          "description",
+          "coverUrl",
+          "imageUrls",
+          "location",
+          "startsAt",
+          "endsAt",
+          "registrationDeadline",
+          "capacity",
+          "activeRegistrationCount",
+          "cancellationRegistrationCount",
+          "feeType",
+          "feeAmountCents",
+          "registrationState",
+          "cancellationReason",
+          "questions",
+          "readerCount"
+        ]
+      },
+      "ActivityListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityListItemDto"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "hasMore"
+        ]
+      },
       "ActivityDto": {
         "type": "object",
         "properties": {
@@ -12619,24 +12798,6 @@
           "registrationState",
           "cancellationReason",
           "questions"
-        ]
-      },
-      "ActivityListDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ActivityDto"
-            }
-          },
-          "hasMore": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "items",
-          "hasMore"
         ]
       },
       "PublicRegistrationAnswerDto": {

@@ -4,7 +4,7 @@ import type { SpecialInviteCode, SpecialInviteList, SpecialInviteVerified } from
 import type { FellowList, ConnectionPath } from './types'
 import type { Leaderboard, LeaderboardPeriod, LeaderboardKind } from './types'
 import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
-import type { ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
+import type { ActivityList, ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult, DraftConversation, DraftReplyContext } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
 export class ApiError extends Error {
@@ -151,7 +151,7 @@ export const api = {
     const params = [`offset=${query.offset ?? 0}`]
     if (query.sort) params.push(`sort=${query.sort}`)
     if (query.q) params.push(`q=${encodeURIComponent(query.q)}`)
-    return request<{items: Activity[]; hasMore: boolean}>(`/activities?${params.join('&')}`)
+    return request<ActivityList>(`/activities?${params.join('&')}`)
   },
   activity: (id: string) => request<Activity>(`/activities/${encodeURIComponent(id)}`),
   roster: (id: string, query: ListQuery = {}) => request<PublicRoster>(`/activities/${encodeURIComponent(id)}/registrations?${listQuery(query)}`),

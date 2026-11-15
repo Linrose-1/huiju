@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url)
 const { effectScope } = require('vue')
 
 function harness(t) {
-  const requests = []
+  const requests = [], destinations = []
   let bottom, hide, show
   const deps = {
     '@dcloudio/uni-app': {
@@ -19,34 +19,38 @@ function harness(t) {
     '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api': { api: { activities: query => new Promise((resolve, reject) => requests.push({ query, resolve, reject })) }, errorMessage: e => e.message },
     '@/services/wechat/page-share': { usePageShare: () => ({ shareReady: { value: false }, shareError: { value: '' }, shareBusy: { value: false }, retryShare() {} }) },
-    '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': {},
+    '@/services/api/environment': {}, '@/services/presentation': {}, '@/services/navigation': { routes: { activityPeople: '/pages/activity/people' }, navigate: url => destinations.push(url) },
     '@/stores/session': {}, '@/services/wechat': {}, '@/services/activity-code': {}, '@/components/base/RequestState.vue': {}
   }
   const source = readFileSync(new URL('../src/pages/activity/index.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source + '\nexport { load, more, retryMore, items, hasMore, loadingMore, moreError, chooseTab };', {
+  const code = ts.transpileModule(source + '\nexport { load, more, retryMore, items, hasMore, loadingMore, moreError, chooseTab, openReaders };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
   }).outputText
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] || require(name), page, { stopPullDownRefresh() {} }))
   t.after(() => scope.stop())
-  return { page, requests, bottom: () => bottom(), hide: () => hide(), show: () => show() }
+  return { page, requests, destinations, bottom: () => bottom(), hide: () => hide(), show: () => show() }
 }
 
-test('returning from a detail preserves all loaded pages and the next offset', async t => {
+test('opening the readers list makes no detail request and returning refreshes counts across loaded pages', async t => {
   const h = harness(t)
   const first = h.page.load()
-  h.requests[0].resolve({ items: [{ id: 'a' }], hasMore: true }); await first
+  h.requests[0].resolve({ items: [{ id: 'a', readerCount: 0 }], hasMore: true }); await first
   const second = h.page.more()
   h.requests[1].resolve({ items: [{ id: 'b' }], hasMore: true }); await second
+  h.page.openReaders('a')
+  assert.deepEqual(h.destinations, ['/pages/activity/people?id=a&kind=readers'])
+  assert.equal(h.requests.length, 2)
   h.hide(); h.show()
   assert.equal(h.requests.length, 3)
   assert.deepEqual(h.page.items.value.map(item => item.id), ['a', 'b'])
-  h.requests[2].resolve({ items: [{ id: 'a', title: '最新状态' }], hasMore: true })
+  h.requests[2].resolve({ items: [{ id: 'a', title: '最新状态', readerCount: 3 }], hasMore: true })
   await new Promise(resolve => setTimeout(resolve, 0))
   assert.equal(h.requests[3].query.offset, 1)
   h.requests[3].resolve({ items: [{ id: 'b' }], hasMore: true })
   await new Promise(resolve => setTimeout(resolve, 0))
   assert.equal(h.page.items.value[0].title, '最新状态')
+  assert.equal(h.page.items.value[0].readerCount, 3)
   const third = h.page.more()
   assert.equal(h.requests[4].query.offset, 2)
   h.requests[4].resolve({ items: [], hasMore: false }); await third
