@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 import { createDatabase } from '../src/database/db.js'
 import { members, wechatIdentities } from '../src/database/schema/members.js'
+import { communityMembers } from '../src/database/schema/communities.js'
 import { activities, activityOperations } from '../src/database/schema/activities.js'
 import { notifications } from '../src/database/schema/notifications.js'
 import { registrations } from '../src/database/schema/registrations.js'
@@ -66,6 +67,8 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
           await tx.update(members).set({ boundPhone: '13800000000', displayName, nameSetByUser: true, avatarUrl: '/fixture.png', avatarSetByUser: true }).where(eq(members.id, session.member.id))
         }
         const units = { hostOrganization: '回滚主办', organizingOrganization: '回滚承办', sponsorOrganization: '回滚赞助' }
+        await expect(organizer.create(input, ownerHeader)).rejects.toMatchObject({ response: { code: 'COMMUNITY_MEMBERSHIP_REQUIRED' } })
+        await tx.update(communityMembers).set({ isRegistered: true }).where(eq(communityMembers.memberId, owner.member.id))
         const audience: Pick<ActivityWriteInput, 'audienceTypes' | 'audienceOther'> = { audienceTypes: ['friend', 'other'], audienceOther: '园区创业者' }
         const draft = await organizer.create({ ...input, ...units, ...audience }, ownerHeader)
         activityId = draft.id
@@ -79,7 +82,11 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
         for (const action of [() => organizer.detail(activityId, outsiderHeader), () => organizer.edit(activityId, edit, outsiderHeader), () => organizer.publish(activityId, outsiderHeader), () => organizer.roster(activityId, outsiderHeader), () => organizer.cancel(activityId, '外人不能取消', outsiderHeader)]) {
           await expect(action()).rejects.toThrow('仅活动发起人')
         }
+        await tx.update(communityMembers).set({ isRegistered: false }).where(eq(communityMembers.memberId, owner.member.id))
+        await expect(organizer.publish(activityId, ownerHeader)).rejects.toMatchObject({ response: { code: 'COMMUNITY_MEMBERSHIP_REQUIRED' } })
+        await tx.update(communityMembers).set({ isRegistered: true }).where(eq(communityMembers.memberId, owner.member.id))
         expect((await organizer.publish(activityId, ownerHeader)).lifecycle).toBe('published')
+        await tx.update(communityMembers).set({ isRegistered: false }).where(eq(communityMembers.memberId, owner.member.id))
         await organizer.publish(activityId, ownerHeader)
         expect((await tx.select().from(activityOperations).where(eq(activityOperations.activityId, activityId))).filter(row => row.action === 'publish')).toHaveLength(1)
         expect((await publicActivities.list()).items.some(item => item.id === activityId)).toBe(true)

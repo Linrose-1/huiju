@@ -32,7 +32,7 @@ function harness(t, pageName, names) {
   let page
   scope.run(() => { page = compile('../src/pages/member/' + pageName + '.vue', names, deps, { showToast: v => toasts.push(v) }) })
   t.after(() => scope.stop())
-  return { page, session, hooks, navigations, refreshes, cards, details, settings, saves, namesSaved, toasts, member }
+  return { page, session, hooks, navigations, refreshes, cards, details, settings, saves, namesSaved, toasts, member, ApiError: deps['@/services/api'].ApiError }
 }
 const privateDetails = { wechatId: 'private_wechat', wechatQrUrl: '/api/v1/members/00112233-4455-6677-8899-aabbccddeeff/wechat-qr', personalTag: '产业链接者', realName: '真实姓名', email: 'private@example.com', hometown: '深圳', bio: '简介', resources: '资源', needs: '需求' }
 test('preview defaults to avatar/name only and whitelists independently selected fields', () => {
@@ -154,4 +154,18 @@ test('new member routes keep activity as the cold-start page', () => {
   for (const path of ['pages/member/profile', 'pages/member/card-settings', 'pages/member/card']) {
     assert.equal(config.pages.filter(page => page.path === path).length, 1)
   }
+})
+
+test('membership revocation clears the previously visible card and shows the community restriction', async t => {
+  const h = harness(t, 'card', 'card,needsProfile,restricted')
+  h.hooks.onLoad({id:'target'}); h.hooks.onShow()
+  h.refreshes[0].resolve(h.member); await setImmediate()
+  h.cards[0].resolve({displayName:'此前可以查看',email:'private@example.com'}); await setImmediate()
+  assert.equal(h.page.card.value.displayName, '此前可以查看')
+  h.hooks.onHide(); assert.equal(h.page.card.value, null)
+  h.hooks.onShow(); h.refreshes[1].resolve(h.member); await setImmediate()
+  h.cards[1].reject(Object.assign(new h.ApiError(), {code:'COMMUNITY_CARD_RESTRICTED',status:403}))
+  await setImmediate()
+  assert.equal(h.page.restricted.value, true); assert.equal(h.page.needsProfile.value, false)
+  assert.equal(h.page.card.value, null)
 })

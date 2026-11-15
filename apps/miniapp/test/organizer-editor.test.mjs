@@ -32,6 +32,7 @@ function harness({ storage = new Map(), showModal = options => options.success({
   const navigations = [], creates = [], updates = [], publishes = []
   let onUnload
   const api = {
+    communityAccess: async () => ({ isRegistered: true }),
     managedActivity: async () => record,
     createActivity: async input => {
       creates.push(input)
@@ -835,4 +836,23 @@ test('manual create survives immediate back and restores only for its owner; ser
   resumed.unload()
   assert.equal(resumed.creates.length, 1)
   assert.equal(storage.size, 0)
+})
+
+test('non-registered users cannot enter a new or existing draft, but can edit their published activity', async () => {
+  const access = {communityAccess: async () => ({isRegistered:false})}
+  for (const id of ['', 'activity-a']) {
+    const h = harness({apiOverrides:access})
+    h.page.id.value = id
+    await h.page.load()
+    assert.match(h.page.error.value, /在册会员/)
+    assert.equal(h.page.source.value, null)
+    await h.page.submit(true)
+    assert.deepEqual(h.creates, []); assert.deepEqual(h.updates, [])
+    h.unload()
+  }
+  const h = harness({apiOverrides:access, record:activity({lifecycle:'published'})})
+  h.page.id.value = 'activity-a'; await h.page.load()
+  assert.equal(h.page.error.value, '')
+  assert.equal(h.page.source.value.lifecycle, 'published')
+  h.unload()
 })

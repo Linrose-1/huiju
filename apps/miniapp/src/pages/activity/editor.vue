@@ -272,8 +272,14 @@ async function load() {
     const owner = useSessionStore().member?.id || ''
     if (formOwner && formOwner !== owner) reset()
     formOwner = owner
-    if (id.value) {
-      const activity = await api.managedActivity(id.value)
+    const activity = id.value ? await api.managedActivity(id.value) : null
+    if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
+    if (!activity || activity.lifecycle === 'draft') {
+      const access = await api.communityAccess()
+      if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
+      if (!access.isRegistered) { error.value = '只有本社群在册会员可以发起聚会。可联系社群管理员确认会员身份。'; return }
+    }
+    if (activity) {
       if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
       source.value = activity
       if (!initialized) {
@@ -670,7 +676,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
     :class="{ 'settings-page': step === 1, 'confirmation-page': step === 2 }"
   >
     <PageReturn />
-    <view class="steps">
+    <view v-if="!loading && !error" class="steps">
       <button
         class="step"
         :class="{ current: step === 0, completed: step > 0 }"

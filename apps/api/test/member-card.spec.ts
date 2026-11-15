@@ -121,6 +121,18 @@ describe('member card service authorization', () => {
   it('returns not found for missing target', async () => {
     await expect(fixture([[]]).service.card('missing', 'session')).rejects.toMatchObject({ response: { code: 'NOT_FOUND' } })
   })
+
+  it('honors current roster status for both cards and previously shared QR URLs', async () => {
+    const target = { ...member, id: 'target' }
+    const viewer = { id: member.id }, registeredOwner = { id: target.id }
+    const f = fixture([[target], [], [{ showBio: true }], [target], [registeredOwner, viewer], [],
+      [target], [registeredOwner], [target], [registeredOwner]])
+    expect(await f.service.card(target.id)).toMatchObject({ bio: member.bio })
+    expect(await f.service.card(target.id)).toEqual({ avatarUrl: target.avatarUrl, displayName: target.displayName })
+    for (const read of [() => f.service.card(target.id), () => f.service.wechatQr(target.id)]) {
+      await expect(read()).rejects.toMatchObject({ status: 403, response: { code: 'COMMUNITY_CARD_RESTRICTED' } })
+    }
+  })
 })
 
 const qrDirectories: string[] = []
@@ -190,7 +202,7 @@ describe('optional WeChat identity, personal tag and private QR', () => {
     const directory = await qrDirectory(), file = '00000000-0000-4000-8000-000000000001.png'
     await writeFile(join(directory, file), Buffer.from('private-image'))
     const target = { ...member, id: 'target', wechatQrFile: file }
-    const f = fixture([[target], [{ showWechatQr: true }], [target], [{ showWechatQr: false }]])
+    const f = fixture([[target], [], [{ showWechatQr: true }], [target], [], [{ showWechatQr: false }]])
     expect((await f.service.wechatQr('target', 'session')).bytes.toString()).toBe('private-image')
     await expect(f.service.wechatQr('target', 'session')).rejects.toMatchObject({ response: { code: 'NOT_FOUND' } })
     const visitor = fixture([], { ...member, boundPhone: null })

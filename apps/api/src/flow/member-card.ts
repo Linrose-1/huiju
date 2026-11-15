@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { members, memberVisibilities } from '../database/schema/members.js'
+import { communityMembers } from '../database/schema/communities.js'
+import { DEFAULT_COMMUNITY_ID } from './member-number.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar, type Member } from './identity.js'
 import { AvatarInput } from './dto.js'
@@ -82,11 +84,22 @@ export class MemberCardService {
     return this.settingsFor(member.id)
   }
 
+  private async requireCardAccess(viewerId: string, ownerId: string) {
+    if (viewerId === ownerId) return
+    const registered = await this.database.db.select({ id: communityMembers.memberId }).from(communityMembers)
+      .where(and(eq(communityMembers.communityId, DEFAULT_COMMUNITY_ID), eq(communityMembers.isRegistered, true),
+        inArray(communityMembers.memberId, [viewerId, ownerId])))
+    if (registered.some(row => row.id === ownerId) && !registered.some(row => row.id === viewerId)) {
+      fail('COMMUNITY_CARD_RESTRICTED', '仅本社群在册会员可查看此名片', 403)
+    }
+  }
+
   async card(id: string, header?: string): Promise<MemberCardDto> {
     const caller = (await this.identity.require(header))!
     if (!complete(caller)) fail('PROFILE_INCOMPLETE', '请先完善手机号、头像和用户名称', 403)
     const [member] = await this.database.db.select().from(members).where(and(eq(members.id, id), eq(members.kind, 'member'))).limit(1)
     if (!member) fail('NOT_FOUND', '会员名片不存在', 404)
+    await this.requireCardAccess(caller.id, member.id)
     return publicCard(member, await this.settingsFor(id))
   }
 
@@ -112,7 +125,9 @@ export class MemberCardService {
     const caller = (await this.identity.require(header))!
     if (caller.id !== id && !complete(caller)) fail('PROFILE_INCOMPLETE', '请先完善手机号、头像和用户名称', 403)
     const [member] = await this.database.db.select().from(members).where(and(eq(members.id, id), eq(members.kind, 'member'))).limit(1)
-    if (!member?.wechatQrFile) fail('NOT_FOUND', '微信二维码不存在', 404)
+    if (!member) fail('NOT_FOUND', '微信二维码不存在', 404)
+    await this.requireCardAccess(caller.id, member.id)
+    if (!member.wechatQrFile) fail('NOT_FOUND', '微信二维码不存在', 404)
     if (caller.id !== id && !(await this.settingsFor(id)).showWechatQr) fail('NOT_FOUND', '微信二维码不存在', 404)
     if (!/^[a-f0-9-]{36}\.(png|jpg)$/.test(member.wechatQrFile)) fail('NOT_FOUND', '微信二维码不存在', 404)
     try {

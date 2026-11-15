@@ -6,7 +6,9 @@ import { activityValues, OrganizerService, requireOrganizer, validateActivityEdi
 import { ActivityWriteInput } from '../src/flow/organizer-dto.js'
 import { FlowDatabase } from '../src/flow/common.js'
 import { IdentityService } from '../src/flow/identity.js'
-import type { activities, registrationQuestions } from '../src/database/schema/activities.js'
+import { activities, type registrationQuestions } from '../src/database/schema/activities.js'
+import { communityMembers } from '../src/database/schema/communities.js'
+import { members } from '../src/database/schema/members.js'
 
 type Activity = typeof activities.$inferSelect
 type Question = typeof registrationQuestions.$inferSelect
@@ -18,6 +20,24 @@ const base = { ...activityValues(input), organizerMemberId: 'owner', lifecycle: 
 const now = new Date('2030-01-01T00:00:00Z')
 
 describe('organizer write boundaries', () => {
+  it.each([null, { isAdmin: true, isRegistered: false }])('requires registration for creating, editing and publishing drafts (%j)', async relation => {
+    const member = { id: 'owner', boundPhone: 'test', displayName: '甲', avatarUrl: '/avatar', avatarSetByUser: true, nameSetByUser: true }
+    const tx = {
+      select: () => ({ from: (table: unknown) => ({ where: () => {
+        if (table === members) return [member]
+        if (table === activities) return { for: () => [{ ...base, lifecycle: 'draft' }] }
+        if (table === communityMembers) return { for: () => relation ? [relation] : [] }
+        throw new Error('Unexpected query')
+      } }) }),
+    }
+    const database = { db: { transaction: (work: (value: typeof tx) => unknown) => work(tx) } } as unknown as FlowDatabase
+    const service = new OrganizerService(database, { require: async () => member } as unknown as IdentityService)
+    const denied = { response: { code: 'COMMUNITY_MEMBERSHIP_REQUIRED' }, status: 403 }
+    await expect(service.create(input)).rejects.toMatchObject(denied)
+    await expect(service.edit('draft', input)).rejects.toMatchObject(denied)
+    await expect(service.publish('draft')).rejects.toMatchObject(denied)
+  })
+
   it('preserves audience on older edits, clears unused custom labels and permits multiple groups', () => {
     const values = activityValues({ ...input, audienceTypes: ['member', 'other'], audienceOther: '  园区创业者 ' })
     const activity = { ...base, ...values, hasRegistrationEver: true }

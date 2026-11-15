@@ -6,6 +6,7 @@ import { ActivityDraftService } from '../src/ai/service.js'
 import { AgentIsHereDraftProvider } from '../src/ai/provider.js'
 import { aiActivityDraftReservations } from '../src/database/schema/ai.js'
 import { members } from '../src/database/schema/members.js'
+import { communityMembers } from '../src/database/schema/communities.js'
 import { FlowDatabase } from '../src/flow/common.js'
 import { IdentityService } from '../src/flow/identity.js'
 
@@ -20,6 +21,7 @@ const idea = '一起读书'
 // fencing and query scope, not MySQL's real locking/isolation behavior.
 function repository() {
   const memberRows = new Map<string, Member>([['member', completeMember('member')]])
+  const registered = new Set(['member'])
   let reservations = new Map<string, Reservation>()
   let activeTransactions = 0
   let transactionTail = Promise.resolve()
@@ -30,10 +32,14 @@ function repository() {
         const params = dialect.sqlToQuery(where).params
         const id = String(params[0])
         if (table === members) return memberRows.has(id) ? [structuredClone(memberRows.get(id))] : []
+        if (table === communityMembers) {
+          expect(params[0]).toBe('xuejia')
+          return [{ isRegistered: registered.has(String(params[1])) }]
+        }
         if (table === aiActivityDraftReservations) return reservations.has(id) ? [structuredClone(reservations.get(id))] : []
         throw new Error('Unexpected table')
       }
-      return { for: async (mode: string) => { expect(mode).toBe('update'); return read() }, then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve().then(read).then(resolve, reject) }
+      return { for: async (mode: string) => { expect(mode).toBe(table === communityMembers ? 'share' : 'update'); return read() }, then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => Promise.resolve().then(read).then(resolve, reject) }
     } }) }),
     insert: (table: unknown) => ({ values: (values: Reservation) => {
       const insert = () => {
@@ -63,7 +69,7 @@ function repository() {
     },
   }
   return {
-    database: { db } as unknown as FlowDatabase, memberRows,
+    database: { db } as unknown as FlowDatabase, memberRows, registered,
     get reservations() { return reservations }, get activeTransactions() { return activeTransactions },
     set failCleanup(value: boolean) { failCleanup = value },
   }
@@ -89,6 +95,14 @@ function pending() {
 afterEach(() => { vi.useRealTimers() })
 
 describe('AI draft reservation boundary with repository and provider substitutes', () => {
+  it('checks current community membership before reserving or calling the model', async () => {
+    const f = setup()
+    f.store.registered.delete('member')
+    await expect(f.service.create(idea)).rejects.toMatchObject({ status: 403, response: { code: 'COMMUNITY_MEMBERSHIP_REQUIRED' } })
+    expect(f.store.reservations.size).toBe(0)
+    expect(f.provider.generate).not.toHaveBeenCalled()
+  })
+
   it('holds no transaction during the provider wait and releases the reservation on success', async () => {
     const f = setup(), response = pending()
     f.provider.generate.mockImplementation(() => response.promise)
@@ -260,7 +274,10 @@ describe('AI draft reservation boundary with repository and provider substitutes
 
   it('bounds process concurrency at four without queueing and frees slots after failure', async () => {
     const f = setup(), response = pending()
-    for (let n = 0; n < 5; n++) f.store.memberRows.set(`member-${n}`, completeMember(`member-${n}`))
+    for (let n = 0; n < 5; n++) {
+      f.store.memberRows.set(`member-${n}`, completeMember(`member-${n}`))
+      f.store.registered.add(`member-${n}`)
+    }
     f.provider.generate.mockImplementation(() => response.promise)
     const calls = Array.from({ length: 4 }, (_, n) => f.service.create(idea, `member-${n}`))
     const finished = Promise.allSettled(calls)

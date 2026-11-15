@@ -12,6 +12,7 @@ import { registrations } from '../database/schema/registrations.js'
 import { registrationState } from './activity.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar } from './identity.js'
+import { requireGatheringMembership } from './community-roster.js'
 import { AvatarInput } from './dto.js'
 import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
 import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
@@ -278,6 +279,7 @@ export class OrganizerService {
     const id = randomUUID()
     await this.database.db.transaction(async tx => {
       await this.profile(tx, member.id)
+      await requireGatheringMembership(tx, member.id)
       await tx.insert(activities).values({ id, organizerMemberId: member.id, ...values })
       await this.questions(tx, id, input)
     })
@@ -293,6 +295,7 @@ export class OrganizerService {
     const member = (await this.identity.require(header))!
     await this.database.db.transaction(async tx => {
       const activity = await this.owner(tx, id, member.id)
+      if (activity.lifecycle === 'draft') await requireGatheringMembership(tx, member.id)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
       const { values, sameQuestions } = validateActivityEdit(activity, questions, input)
       await this.checkImages(values, member.id, activity)
@@ -330,6 +333,7 @@ export class OrganizerService {
       if (activity.moderation === 'removed' || activity.lifecycle === 'cancelled') fail('ACTIVITY_UNAVAILABLE', '活动已取消或下架，不能发布', 409)
       if (activity.lifecycle === 'published') return
       await this.profile(tx, member.id)
+      await requireGatheringMembership(tx, member.id)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
       activityValues({ ...activity, audienceTypes: activity.audienceTypes ?? [], imageUrls: activityImages(activity), coverSourceUrl: activityCoverSource(activity), startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), registrationDeadline: activity.registrationDeadline?.toISOString() ?? null, questions })
       if (activity.startsAt <= new Date()) fail('INVALID_ACTIVITY_TIME', '开始时间已过，请先修改活动时间')

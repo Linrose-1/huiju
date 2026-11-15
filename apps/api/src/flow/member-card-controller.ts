@@ -50,6 +50,7 @@ export class MemberCardController {
   }
 
   @Get(':id/card')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOkResponse({ type: MemberCardDto })
   card(@Param('id', ParseUUIDPipe) id: string, @Headers('authorization') header?: string) { return this.cards.card(id, header) }
 }

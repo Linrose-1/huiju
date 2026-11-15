@@ -11,12 +11,13 @@ import MemberCard from '@/components/business/MemberCard.vue'
 const session = useSessionStore(), id = ref(''), card = ref<Card | null>(null), loading = ref(false), error = ref(''), needsProfile = ref(false)
 let generation = 0, visible = false
 function completeProfile() { loginPage(routes.memberCard + '?id=' + encodeURIComponent(id.value)) }
-async function load(background = false) {
-  const current = ++generation, retain = background === true && !!card.value
-  if (!retain) card.value = null; error.value = ''; needsProfile.value = false; loading.value = false
+const restricted = ref(false)
+async function load() {
+  const current = ++generation
+  restricted.value = false; card.value = null; error.value = ''; needsProfile.value = false; loading.value = false
   if (!id.value) { error.value = '名片链接无效'; return }
   if (!session.token) { card.value = null; needsProfile.value = true; return }
-  loading.value = !retain
+  loading.value = true
   try {
     const member = await refreshMember()
     if (current !== generation) return
@@ -25,17 +26,18 @@ async function load(background = false) {
     if (current === generation) card.value = result
   } catch (e) {
     if (current !== generation) return
-    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) { card.value = null; needsProfile.value = true }
+    if (e instanceof ApiError && e.code === 'COMMUNITY_CARD_RESTRICTED') restricted.value = true
+    else if (e instanceof ApiError && (e.status === 401 || e.code === 'PROFILE_INCOMPLETE')) { card.value = null; needsProfile.value = true }
     else error.value = errorMessage(e)
   } finally { if (current === generation) loading.value = false }
 }
 const stop = watch(() => [session.token, session.epoch], () => {
-  generation++; card.value = null; error.value = ''; loading.value = false
+  generation++; card.value = null; restricted.value = false; error.value = ''; loading.value = false
   if (visible) void load()
 }, { flush: 'sync' })
 onLoad(options => { id.value = typeof options?.id === 'string' ? options.id : '' })
-onShow(() => { visible = true; void load(true) })
-onHide(() => { visible = false; generation++; loading.value = false })
+onShow(() => { visible = true; void load() })
+onHide(() => { visible = false; generation++; card.value = null; loading.value = false })
 onUnload(() => { generation++; stop() })
 </script>
 <template>
@@ -60,6 +62,10 @@ onUnload(() => { generation++; stop() })
       >
         {{ session.token ? '完善资料' : '登录并完善资料' }}
       </button>
+    </view>
+    <view v-if="restricted" class="profile-gate">
+      <view class="gate-heading">仅限本社群在册会员查看</view>
+      <view class="gate-copy">你仍可查看非会用户开放的名片信息。</view>
     </view>
     <MemberCard
       v-if="card"

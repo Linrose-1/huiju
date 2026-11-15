@@ -10,6 +10,14 @@ import type { PageQuery } from './pagination.js'
 
 const inCommunity = eq(communityMembers.communityId, DEFAULT_COMMUNITY_ID)
 const membership = (id: string) => and(inCommunity, eq(communityMembers.memberId, id))
+type Tx = Parameters<Parameters<FlowDatabase['db']['transaction']>[0]>[0]
+
+export async function requireGatheringMembership(tx: Tx, memberId: string) {
+  const [relation] = await tx.select({ isRegistered: communityMembers.isRegistered })
+    .from(communityMembers).where(membership(memberId)).for('share')
+  if (!relation?.isRegistered) fail('COMMUNITY_MEMBERSHIP_REQUIRED', '只有本社群在册会员可以发起聚会', 403)
+}
+
 const rowFields = {
   memberId: communityMembers.memberId, userNumber: communityMembers.userNumber,
   displayName: members.displayName, avatarUrl: members.avatarUrl, isRegistered: communityMembers.isRegistered,

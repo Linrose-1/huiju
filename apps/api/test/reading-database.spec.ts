@@ -1,5 +1,6 @@
 import { LEGAL_VERSION } from '../src/platform/legal.js'
 import 'reflect-metadata'
+import { communityMembers } from '../src/database/schema/communities.js'
 import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
@@ -43,6 +44,7 @@ describe.skipIf(!enabled)('reading on real MySQL in an outer rollback transactio
         const ownerHeader = `Bearer ${owner.token}`
         const outsiderHeader = `Bearer ${outsider.token}`
         await tx.update(members).set({ boundPhone: '19900000001', displayName: '阅读回滚测试', nameSetByUser: true, avatarUrl: '/reading-fixture.png', avatarSetByUser: true }).where(eq(members.id, owner.member.id))
+        await tx.update(communityMembers).set({ isRegistered: true }).where(eq(communityMembers.memberId, owner.member.id))
         const now = Date.now()
         const draft = await organizer.create({ title: '阅读回滚测试', description: '仅存在于回滚事务', location: '测试', consultationContact: '测试', startsAt: new Date(now + 7200000).toISOString(), endsAt: new Date(now + 10800000).toISOString(), feeType: 'free', questions: [] }, ownerHeader)
         activityId = draft.id

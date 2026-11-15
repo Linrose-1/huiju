@@ -30,7 +30,7 @@ const blankDraft = {
 function makePage(t, storage = new Map()) {
   const session = reactive({ token:'token', epoch:1, member:{id:'a'} })
   const requests = [], navigation = [], lifecycle = {}, decisions = [], modals = []
-  const api = { interpretActivityReply: async () => ({ draft:{...blankDraft,title:null,description:null}, nextQuestion:null }), generateActivityDraft: idea => new Promise((resolve, reject) => requests.push({idea, resolve, reject})) }
+  const api = { communityAccess: async () => ({isRegistered:true}), interpretActivityReply: async () => ({ draft:{...blankDraft,title:null,description:null}, nextQuestion:null }), generateActivityDraft: idea => new Promise((resolve, reject) => requests.push({idea, resolve, reject})) }
   const uni = {
     setStorageSync:(k,v) => storage.set(k,v), getStorageSync:k => storage.get(k), removeStorageSync:k => storage.delete(k),
     hideKeyboard() {}, pageScrollTo() {}, showModal(options) {
@@ -54,7 +54,7 @@ function makePage(t, storage = new Map()) {
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'canInitiate,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
   return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
 }
@@ -377,4 +377,13 @@ test('starting over keeps sent messages readable in local history', async t => {
   assert.equal(next.page.history.value.length,1)
   assert.equal(next.page.history.value[0].idea,'园区读书会')
   assert.equal(next.page.history.value[0].exchanges[0].answer,'明天')
+})
+
+test('community status is checked again before returning to the AI gathering conversation', async t => {
+  const h = makePage(t)
+  await h.lifecycle.show(); assert.equal(h.page.canInitiate.value, true)
+  h.api.communityAccess = async () => ({isRegistered:false})
+  await h.lifecycle.show()
+  assert.equal(h.page.canInitiate.value, false); assert.match(h.page.accessError.value, /在册会员/)
+  assert.equal(h.requests.length, 0)
 })

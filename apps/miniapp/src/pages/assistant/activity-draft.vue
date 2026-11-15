@@ -34,13 +34,15 @@ function useManual() {
 const error = ref('')
 const busy = ref(false)
 const checking = ref(true)
+const canInitiate = ref(false)
+const accessError = ref('')
 const createdId = ref('')
 const uncertainCreate = ref(false)
 let owner = '', version = 0, disposed = false
 let persistTimer: ReturnType<typeof globalThis.setTimeout> | undefined
 const storageKey = () => 'gather-dialog:v1:' + API_BASE_URL + ':' + owner
 function current(request: number) {
-  return !disposed && request === version && !!owner && owner === session.member?.id && !!session.token
+  return !disposed && canInitiate.value && request === version && !!owner && owner === session.member?.id && !!session.token
 }
 function snapshot(): GatherChatSnapshot {
   return { idea: idea.value, draft: draft.value, exchanges: exchanges.value, reply: busy.value && outgoing.value ? outgoing.value.answer : reply.value,
@@ -114,7 +116,7 @@ function forget() {
 watch(() => [session.token, session.epoch, session.member?.id], () => {
   if (!owner) return
   showHistory.value = false; history.value = []; expandedId.value = ''
-  ++version; owner = ''; busy.value = false; checking.value = true; clearForm()
+  ++version; owner = ''; busy.value = false; checking.value = true; canInitiate.value = false; clearForm()
 }, {flush:'sync'})
 function confirm(title: string, content: string, confirmText: string, cancelText: string) {
   return new Promise<boolean|null>(resolve => uni.showModal({title, content, confirmText, cancelText,
@@ -124,10 +126,16 @@ async function checkProfile() {
   if (disposed || busy.value) return
   const request = ++version
   checking.value = true
+  canInitiate.value = false
+  accessError.value = ''
   try {
     const ready = await requireProfile(routes.activityDraft)
     if (disposed || request !== version) return
-    if (!ready || !session.member?.id) { error.value = '请先完善会员资料'; return }
+    if (!ready || !session.member?.id) { accessError.value = '请先完善会员资料'; return }
+    const access = await api.communityAccess()
+    if (disposed || request !== version) return
+    if (!access.isRegistered) { accessError.value = '只有本社群在册会员可以发起聚会。可联系社群管理员确认会员身份。'; return }
+    canInitiate.value = true
     if (owner === session.member.id) {
       refreshHistory()
       if (updatedAt && Date.now() - updatedAt >= GATHER_HISTORY_TTL) clearForm()
@@ -149,7 +157,7 @@ async function checkProfile() {
     archiveGatherHistory(storageKey(), {...historyEntry(savedId, savedTime, saved), snapshot:saved})
     uni.removeStorageSync(storageKey())
     refreshHistory()
-  } catch (e) { if (request === version) error.value = errorMessage(e) }
+  } catch (e) { if (request === version) { if (canInitiate.value) error.value = errorMessage(e); else accessError.value = errorMessage(e) } }
   finally { if (request === version) checking.value = false }
 }
 async function generate() {
@@ -380,7 +388,11 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
 <template>
   <view class="gather-page">
     <PageReturn />
-    <view v-if="showHistory" class="conversation">
+    <view v-if="!canInitiate" class="conversation">
+      <view v-if="checking" class="helper">正在确认社群身份…</view>
+      <view v-else class="error">{{ accessError }} <button class="text-link" @click="checkProfile">重新加载</button></view>
+    </view>
+    <view v-else-if="showHistory" class="conversation">
       <button class="text-link" @click="showHistory = false">返回对话</button>
       <view class="question-title">近七天聊天记录</view>
       <view v-if="!history.length" class="helper">暂无聊天记录</view>
@@ -579,7 +591,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         {{ createdId ? '继续发布' : '确认发布' }}
       </button>
     </view>
-    <view v-if="!showHistory && (!draft || question)" class="chat-dock" :style="{bottom:keyboard + 'px'}">
+    <view v-if="canInitiate && !showHistory && (!draft || question)" class="chat-dock" :style="{bottom:keyboard + 'px'}">
       <view v-if="!draft && !busy" class="opening-actions">
         <button class="text-link" :disabled="busy" @click="navigate(routes.editor)">手动填写</button>
       </view>

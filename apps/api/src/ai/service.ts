@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { aiActivityDraftReservations } from '../database/schema/ai.js'
 import { members } from '../database/schema/members.js'
 import { fail, FlowDatabase } from '../flow/common.js'
+import { requireGatheringMembership } from '../flow/community-roster.js'
 import { complete, IdentityService } from '../flow/identity.js'
 import type { DraftConversation, DraftReplyContext } from './dto.js'
 import { normalizeDraftDates, parseNextQuestion, prepareConversation, safeConversationText } from './idea.js'
@@ -39,6 +40,7 @@ export class ActivityDraftService {
   private async reserve(memberId: string, reservationId: string) {
     await this.database.db.transaction(async tx => {
       await this.lockMember(tx, memberId)
+      await requireGatheringMembership(tx, memberId)
       const now = new Date()
       const [current] = await tx.select().from(aiActivityDraftReservations)
         .where(eq(aiActivityDraftReservations.memberId, memberId)).for('update')

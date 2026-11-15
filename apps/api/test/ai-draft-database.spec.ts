@@ -6,6 +6,8 @@ import { ActivityDraftService } from '../src/ai/service.js'
 import { AgentIsHereDraftProvider } from '../src/ai/provider.js'
 import { createDatabase } from '../src/database/db.js'
 import { members } from '../src/database/schema/members.js'
+import { communityMembers } from '../src/database/schema/communities.js'
+import { allocateCommunityNumber, DEFAULT_COMMUNITY_ID } from '../src/flow/member-number.js'
 import { aiActivityDraftReservations, aiActivityDraftUsages } from '../src/database/schema/ai.js'
 import { FlowDatabase } from '../src/flow/common.js'
 import { IdentityService } from '../src/flow/identity.js'
@@ -40,6 +42,10 @@ describe.skipIf(!enabled)('AI reservations on real MySQL connections', () => {
       await db.insert(members).values({ id: memberId, memberNumber: `AI${memberId.slice(0, 24)}`, inviteCode: memberId.replaceAll('-', ''), inviterMemberId: root.id,
         boundPhone: '19900000001', displayName: 'AI并发测试', avatarUrl: '/fixture.png', avatarSetByUser: true, nameSetByUser: true })
       memberCreated = true
+      await db.transaction(async tx => {
+        const number = await allocateCommunityNumber(tx, DEFAULT_COMMUNITY_ID, new Date())
+        await tx.insert(communityMembers).values({ ...number, memberId, isRegistered: true })
+      })
       const [member] = await db.select().from(members).where(eq(members.id, memberId))
       const database = { db } as unknown as FlowDatabase
       const identity = { require: async () => member } as unknown as IdentityService
