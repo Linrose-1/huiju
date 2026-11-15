@@ -16,21 +16,21 @@ function evaluate(text,deps,globals={}) {
 }
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}}
 const tick=()=>new Promise(resolve=>setImmediate(resolve))
-const routes={circle:'/pages/circle/index',circleDetail:'/pages/circle/detail',circleEditor:'/pages/circle/editor',circleMine:'/pages/circle/mine',circleIntents:'/pages/circle/intents'}
+const routes={circle:'/pages/circle/index',circleDetail:'/pages/circle/detail',circleEditor:'/pages/circle/editor',circleMine:'/pages/circle/mine',circleIntents:'/pages/circle/intents',circleReaders:'/pages/post-readers/index'}
 const post=()=>({id:'post-a',category:'park',subtype:'rent',title:'园区资源',body:'说明',state:'open',isOwner:false,images:[],author:{id:'author-a',displayName:'作者'},createdAt:'2026-09-30T00:00:00Z'})
 function harness(page='detail',overrides={}) {
   const session=reactive({token:'token-a',epoch:0,member:{profileComplete:true,boundPhone:'13800000000',inviteCode:'001234'}}),hooks={},calls=[],sent=[],saved=[],uploaded=[]
   session.captureInvite=()=>{}
   const uni={hideShareMenu(){},showShareMenu(){},stopPullDownRefresh(){},showToast:options=>calls.push(['toast',options.title]),switchTab:options=>calls.push(['tab',options.url]),...overrides.uni}
-  const api={circlePost:async()=>post(),circlePosts:async()=>({items:[],hasMore:false}),circleIntents:async()=>({items:[],hasMore:false}),endCirclePost:async id=>calls.push(['end',id]),submitCircleIntent:async(...args)=>{sent.push(args)},saveCirclePost:async(...args)=>{saved.push(args);return {...post(),isOwner:true}},uploadCircleImage:async(...args)=>{uploaded.push(args);return {id:'image-a'}},...overrides.api}
+  const api={recordCircleView:async(...args)=>calls.push(['view',...args]),circleReaders:async()=>({items:[],total:0,hasMore:false}),circlePost:async()=>post(),circlePosts:async()=>({items:[],hasMore:false}),circleIntents:async()=>({items:[],hasMore:false}),endCirclePost:async id=>calls.push(['end',id]),submitCircleIntent:async(...args)=>{sent.push(args)},saveCirclePost:async(...args)=>{saved.push(args);return {...post(),isOwner:true}},uploadCircleImage:async(...args)=>{uploaded.push(args);return {id:'image-a'}},...overrides.api}
   const navigation={routes,navigate:(...args)=>calls.push(['navigate',...args]),loginPage:url=>calls.push(['login',url]),requireProfile:overrides.requireProfile||async function(){return session.member.profileComplete}}
   const deps={'@/stores/session':{useSessionStore:()=>session},'@/services/api':{api,errorMessage:e=>e.message,refreshMember:async()=>session.member},'@/services/wechat':{bootstrapIdentity:overrides.bootstrapIdentity||(async()=>{})},'@/services/api/environment':{mediaUrl:x=>x},'@/services/navigation':navigation,'@/services/circle-images':{chooseCircleImages:overrides.chooseCircleImages||(async()=>overrides.pictures||[])},'@dcloudio/uni-app':Object.fromEntries(['onLoad','onShow','onHide','onUnload','onShareAppMessage','onShareTimeline','onReachBottom','onPullDownRefresh'].map(name=>[name,fn=>hooks[name]=fn]))}
   deps['@/services/wechat/page-share']=loadPageShare(deps,uni)
   deps['@/services/circle']=evaluate(source('services/circle.ts'),deps,{uni})
-  const text=source('pages/circle/'+page+'.vue').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const expose={detail:'id,post,sheet,phone,sending,error,actionError,confirmIntent,submit,load,closeSheet',editor:'id,post,title,body,category,storeName,images,pendingWrite,readyToken,busy,picking,error,actionError,save,pick,load',mine:'items,loading,preparing,error,actionError,end,load',intents:'id,post,items,loading,preparing,error,thumbnail,thumbnailError,load'}[page]
-  const result=evaluate(text+'\nexport {'+expose+'};\nexport function activate(){visible=true;return load()}',deps,{uni})
-  hooks.onLoad?.({id:['detail','intents'].includes(page)?'post-a':''})
+  const text=source(page==='readers'?'pages/post-readers/index.vue':'pages/circle/'+page+'.vue').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
+  const expose={readers:'id,list,items,error',detail:'id,post,sheet,phone,sending,error,actionError,confirmIntent,submit,load,closeSheet,retryVisit',editor:'id,post,title,body,category,storeName,images,pendingWrite,readyToken,busy,picking,error,actionError,save,pick,load',mine:'items,loading,preparing,error,actionError,end,load',intents:'id,post,items,loading,preparing,error,thumbnail,thumbnailError,load'}[page]
+  const result=evaluate(text+'\nexport {'+expose+ '};\nexport function activate(){visible=true;return '+(page==='readers'?'list.load()':'load()')+'}',deps,{uni})
+  hooks.onLoad?.({id:['detail','intents','readers'].includes(page)?'post-a':''})
   return {page:result,session,hooks,calls,sent,saved,uploaded,api,circle:deps['@/services/circle']}
 }
 test('confirmation reads contact but never submits until explicit confirmation',async()=>{
@@ -119,9 +119,9 @@ test('navigation restores original circle detail, respects post id and circle ta
   nav.finishProfile('/pages/circle/detail?id=a&intent=1');assert.equal(calls.pop()[0],'navigateBack');nav.finishProfile('/pages/circle/detail?id=b&intent=1');assert.equal(calls.pop()[1],'/pages/circle/detail?id=b&intent=1');previous={route:'pages/other'};nav.finishProfile('/pages/circle/index');assert.deepEqual(calls.pop(),['switchTab','/pages/circle/index'])
   previous={route:'pages/circle/editor',options:{id:'a'}};nav.finishProfile('/pages/circle/editor?id=a');assert.equal(calls.pop()[0],'navigateBack')
 })
-test('all five routes and four tabs have real page and image files',()=>{
+test('all circle routes and four tabs have real page and image files',()=>{
   const config=JSON.parse(source('pages.json'));assert.deepEqual(config.tabBar.list.map(x=>x.text),['商友圈','友聚会','i 助手','我世界'])
-  for(const path of Object.values(routes)){assert.ok(config.pages.some(x=>'/'+x.path===path));assert.ok(existsSync(new URL('../src'+path+'.vue',import.meta.url)))}
+  for(const path of Object.values(routes)){assert.ok([...config.pages,...config.subPackages.flatMap(pkg=>pkg.pages.map(p=>({path:pkg.root+'/'+p.path})))].some(x=>'/'+x.path===path));assert.ok(existsSync(new URL('../src'+path+'.vue',import.meta.url)))}
   for(const tab of config.tabBar.list){for(const path of [tab.iconPath,tab.selectedIconPath])assert.ok(existsSync(new URL('../src/'+path,import.meta.url)))}
 })
 
@@ -286,4 +286,42 @@ test('pull refresh during intent submission preserves the confirmation and compl
   const before=reads;await h.hooks.onPullDownRefresh()
   assert.equal(reads,before);assert.equal(stopped,1);assert.equal(h.page.sending.value,true)
   pending.resolve();await submitting;assert.equal(h.page.sending.value,false);assert.equal(h.page.sheet.value,false)
+})
+
+
+test('one detail visit records once across refresh and return; anonymous, incomplete, removed and owner are skipped', async () => {
+  for (const role of ['guest','partial','owner','removed','reader']) {
+    const h = harness('detail', {api:{circlePost:async()=>({...post(),state:role==='removed'?'removed':'open',isOwner:role==='owner'})}})
+    if (role==='guest') h.session.token=''
+    if (role==='partial') h.session.member.profileComplete=false
+    await h.page.activate(); await tick()
+    h.hooks.onHide(); h.hooks.onShow(); await tick(); await h.page.load(); await tick()
+    assert.equal(h.calls.filter(row=>row[0]==='view').length, role==='reader'?1:0)
+  }
+})
+test('a failed detail view retries the same event and refreshes the reader preview', async () => {
+  const ids=[]
+  const h=harness('detail',{api:{recordCircleView:async(_id,eventId)=>{ids.push(eventId);if(ids.length===1)throw new Error('网络错误')},
+    circleReaders:async()=>({total:1,items:[{memberId:'m',displayName:'李',avatarUrl:null}],hasMore:false})}})
+  await h.page.activate(); await tick()
+  h.page.retryVisit(); await tick()
+  assert.equal(ids.length,2); assert.equal(ids[0],ids[1]);assert.equal(h.page.post.value.readSummary.total,1)
+})
+
+
+test('reader list never records a view and discards owner statistics immediately after logout',async()=>{
+  const oldPage=deferred()
+  const h=harness('readers',{api:{circleReaders:async(_id,offset)=>{
+    if(offset)return oldPage.promise
+    return {items:[{memberId:'a',displayName:'甲',...(h.session.token?{readCount:3,lastReadAt:'2026-11-14T01:00:00Z'}:{})}],total:2,hasMore:true}
+  }}})
+  h.hooks.onShow();await tick()
+  assert.equal(h.page.items.value[0].readCount,3)
+  const append=h.page.list.load(true)
+  h.session.token=''
+  assert.deepEqual(h.page.items.value,[])
+  oldPage.resolve({items:[{memberId:'old',readCount:2}],total:2,hasMore:false})
+  await append;await tick()
+  assert.deepEqual(h.page.items.value.map(r=>[r.id,r.readCount]),[['a',undefined]])
+  assert.equal(h.calls.filter(r=>r[0]==='view').length,0)
 })

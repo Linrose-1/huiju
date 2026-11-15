@@ -9,16 +9,37 @@ import { useSessionStore } from '@/stores/session'
 import { routes, navigate, requireProfile } from '@/services/navigation'
 import { mediaUrl } from '@/services/api/environment'
 import { categoryLabel, subtypeLabel, stateLabel, circleTime, newRequestId } from '@/services/circle'
+import CircleReadersEntry from '@/components/business/CircleReadersEntry.vue'
 import RequestState from '@/components/base/RequestState.vue'
 const session = useSessionStore(), post = ref<CirclePost | null>(null), id = ref('')
 const loading = ref(false), error = ref(''), actionError = ref(''), sheet = ref(false), phone = ref(''), sending = ref(false)
-const galleryIndex = ref(0)
+const galleryIndex = ref(0), readingError = ref(false)
+let visit = { eventId: newRequestId(), busy: false, saved: false }
+function resetVisit() { visit = { eventId: newRequestId(), busy: false, saved: false }; readingError.value = false }
+async function recordVisit() {
+  const opened = post.value, member = session.member, current = visit
+  if (!visible || !opened || opened.state === 'removed' || opened.isOwner || !session.token || !member?.profileComplete || current.busy || current.saved) return
+  current.busy = true
+  readingError.value = false
+  try {
+    await api.recordCircleView(opened.id, current.eventId)
+    current.saved = true
+    if (visit !== current || !visible || post.value?.id !== opened.id) return
+    const summary = await api.circleReaders(opened.id, 0, 2)
+    if (visit === current && visible && post.value?.id === opened.id && post.value.state !== 'removed') {
+      post.value.readSummary = { total: summary.total, recentReaders: summary.items }
+    }
+  } catch { if (current === visit && visible && !current.saved) readingError.value = true }
+  finally { current.busy = false }
+}
+function retryVisit() { void recordVisit() }
+watch(() => session.member?.profileComplete, complete => { if (complete) void recordVisit() })
 let version = 0, pendingIntent = false, visible = false, confirming = false
 let intentRequest: { phone: string; requestId: string } | null = null
 function clear() { version++; post.value = null; loading.value = false; error.value = ''; sheet.value = false; phone.value = ''; actionError.value = ''; sending.value = false; intentRequest = null }
 watch(() => [session.token, session.epoch], (_, old) => {
   if (old?.[0] && !confirming) pendingIntent = false
-  clear()
+  resetVisit(); clear()
   if (visible) void load()
 }, { flush: 'sync' })
 async function load(background = false) {
@@ -31,6 +52,7 @@ async function load(background = false) {
     const result = await api.circlePost(id.value)
     if (!valid()) return
     post.value = result
+    if (!readingError.value) void recordVisit()
     galleryIndex.value = retain ? Math.min(galleryIndex.value, Math.max(0, result.images.length - 1)) : 0
     if (pendingIntent && result.state === 'open' && !result.isOwner && session.member?.profileComplete) {
       pendingIntent = false; phone.value = session.member.boundPhone || ''; sheet.value = true
@@ -170,6 +192,8 @@ onShareTimeline(shareTimeline)
           </view>
           <view class="detail-facts"><view v-if="post.location">位置 <text>{{ post.location }}</text></view><view v-if="post.area">面积 <text>{{ post.area }}</text></view><view v-if="post.price">价格 / 预算 <text>{{ post.price }}</text></view><view v-if="post.validUntil">有效期 <text>{{ post.validUntil }}</text></view><view v-if="post.storeName">门店名称 <text>{{ post.storeName }}</text></view></view>
           <view class="circle-copy detail-body">{{ post.body }}</view>
+          <CircleReadersEntry :post="post" />
+          <button v-if="readingError" class="text-button" @click="retryVisit">阅读记录未同步，重试</button>
           <button
             v-if="post.isOwner && post.state==='open'"
             class="btn-secondary detail-edit"

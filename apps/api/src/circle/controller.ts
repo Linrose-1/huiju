@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiResponse, ApiTags } from
 import { AvatarInput, ErrorDto, OkDto } from '../flow/dto.js'
 import { PageQuery } from '../flow/pagination.js'
 import { CircleService } from './service.js'
-import { CircleImageDto, CircleIntentInput, CircleIntentListDto, CircleListDto, CirclePostDto, CircleQuery, CircleWriteInput } from './dto.js'
+import { CircleRecordViewInput, CircleReadersListDto, CircleImageDto, CircleIntentInput, CircleIntentListDto, CircleListDto, CirclePostDto, CircleQuery, CircleWriteInput } from './dto.js'
 @ApiTags('circle') @ApiBearerAuth()
 @ApiResponse({ status: 400, type: ErrorDto }) @ApiResponse({ status: 401, type: ErrorDto })
 @ApiResponse({ status: 403, type: ErrorDto }) @ApiResponse({ status: 404, type: ErrorDto }) @ApiResponse({ status: 409, type: ErrorDto })
@@ -18,6 +18,10 @@ export class CircleController {
   create(@Body() body: CircleWriteInput, @Headers('authorization') h?: string) { return this.circle.save(body, h) }
   @Get('posts/:id') @Header('Cache-Control', 'no-store') @ApiOperation({ security: [] }) @ApiOkResponse({ type: CirclePostDto })
   detail(@Param('id', ParseUUIDPipe) id: string, @Headers('authorization') h?: string) { return this.circle.detail(id, h) }
+  @Post('posts/:id/views') @Header('Cache-Control', 'no-store') @HttpCode(200) @ApiOperation({ security: [{}, { bearer: [] }] }) @ApiOkResponse({ type: OkDto })
+  recordView(@Param('id', ParseUUIDPipe) id: string, @Body() body: CircleRecordViewInput, @Headers('authorization') h?: string) { return this.circle.recordView(id, body, h) }
+  @Get('posts/:id/readers') @Header('Cache-Control', 'no-store') @ApiOperation({ security: [{}, { bearer: [] }] }) @ApiOkResponse({ type: CircleReadersListDto })
+  readers(@Param('id', ParseUUIDPipe) id: string, @Query() q: PageQuery, @Headers('authorization') h?: string) { return this.circle.readers(id, q, h) }
   @Get('posts/:id/manage') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: CirclePostDto })
   manage(@Param('id', ParseUUIDPipe) id: string, @Headers('authorization') h?: string) { return this.circle.detail(id, h, true) }
   @Post('posts/:id/edit') @Header('Cache-Control', 'no-store') @HttpCode(200) @ApiOkResponse({ type: CirclePostDto })

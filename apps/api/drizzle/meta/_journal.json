@@ -169,6 +169,13 @@
       "when": 1794667581260,
       "tag": "0023_community_user_numbers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1794672861477,
+      "tag": "0024_circle_post_read_events",
+      "breakpoints": true
     }
   ]
 }

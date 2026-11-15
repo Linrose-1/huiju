@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common'
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, count, countDistinct, desc, eq, inArray, lte, max, sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { FlowDatabase, fail } from '../flow/common.js'
 import { complete, IdentityService, validAvatar } from '../flow/identity.js'
 import { members, adminAccounts } from '../database/schema/members.js'
-import { circlePosts, circleImages, circlePostImages, circleIntents, circleOperations } from '../database/schema/circle.js'
+import { circlePosts, circleImages, circlePostImages, circleIntents, circleOperations, circlePostReadEvents as reads } from '../database/schema/circle.js'
 import { AvatarInput } from '../flow/dto.js'
-import { CircleIntentInput, CirclePostDto, CircleQuery, CircleWriteInput, subtypes } from './dto.js'
+import { CircleIntentInput, CirclePostDto, CircleReadSummaryDto, CircleRecordViewInput, CircleReadersListDto, CircleQuery, CircleWriteInput, subtypes } from './dto.js'
 import { PageQuery } from '../flow/pagination.js'
 export type CircleTx = Parameters<Parameters<FlowDatabase['db']['transaction']>[0]>[0]
 type Post = typeof circlePosts.$inferSelect
@@ -39,14 +39,33 @@ export class CircleService {
     const [member] = await tx.select().from(members).where(eq(members.id, memberId)).for('update')
     if (!member || !complete(member)) fail('PROFILE_INCOMPLETE', '请先绑定手机号并设置头像、名称', 403)
   }
-  private async present(db: CircleTx | FlowDatabase['db'], row: Post, ownerId?: string): Promise<CirclePostDto> {
+  private async summaries(tx: CircleTx, posts: Post[]) {
+    const result = new Map<string, CircleReadSummaryDto>()
+    const ids = posts.filter(post => post.moderation === 'normal').map(post => post.id)
+    if (!ids.length) return result
+    const ranked = tx.select({
+      postId: reads.postId, memberId: reads.memberId,
+      total: sql<number>`count(*) over (partition by ${reads.postId})`.mapWith(Number).as('reader_total'),
+      position: sql<number>`row_number() over (partition by ${reads.postId} order by max(${reads.recordedAt}) desc, ${reads.memberId} desc)`.as('reader_position'),
+    }).from(reads).where(inArray(reads.postId, ids)).groupBy(reads.postId, reads.memberId).as('ranked')
+    const rows = await tx.select({ postId: ranked.postId, memberId: ranked.memberId, total: ranked.total,
+      displayName: members.displayName, avatarUrl: members.avatarUrl }).from(ranked)
+      .innerJoin(members, eq(members.id, ranked.memberId)).where(lte(ranked.position, 2)).orderBy(ranked.postId, ranked.position)
+    for (const { postId, memberId, total, displayName, avatarUrl } of rows) {
+      const summary = result.get(postId) ?? { total, recentReaders: [] }
+      summary.recentReaders.push({ memberId, displayName: displayName ?? '', avatarUrl })
+      result.set(postId, summary)
+    }
+    return result
+  }
+  private async present(db: CircleTx | FlowDatabase['db'], row: Post, ownerId?: string, readSummary: CircleReadSummaryDto = { total: 0, recentReaders: [] }): Promise<CirclePostDto> {
     const isOwner = ownerId === row.authorId, state = postState(row)
-    if (state === 'removed' && !isOwner) return { id: row.id, category: row.category, subtype: null, title: '内容已下架', body: '',
+    if (state === 'removed' && !isOwner) return { readSummary, id: row.id, category: row.category, subtype: null, title: '内容已下架', body: '',
       location: null, area: null, price: null, validUntil: null, storeName: null, state, isOwner: false, author: null, images: [], removalReason: null, createdAt: row.createdAt.toISOString() }
     const [author] = await db.select({ id: members.id, displayName: members.displayName, avatarUrl: members.avatarUrl }).from(members).where(eq(members.id, row.authorId))
     const images = await db.select({ id: circleImages.id }).from(circlePostImages).innerJoin(circleImages, eq(circleImages.id, circlePostImages.imageId))
       .where(eq(circlePostImages.postId, row.id)).orderBy(asc(circlePostImages.position))
-    return { id: row.id, category: row.category, subtype: row.subtype, title: row.title, body: row.body, location: row.location, area: row.area,
+    return { readSummary, id: row.id, category: row.category, subtype: row.subtype, title: row.title, body: row.body, location: row.location, area: row.area,
       price: row.price, validUntil: row.validUntil, storeName: row.storeName, state, isOwner, author: author ?? null,
       images: images.map(image => ({ id: image.id, url: '/api/v1/circle/images/' + image.id })), removalReason: isOwner ? row.removalReason : null, createdAt: row.createdAt.toISOString() }
   }
@@ -56,7 +75,8 @@ export class CircleService {
       query.category === 'all' ? undefined : eq(circlePosts.category, query.category as CircleWriteInput['category']))
     return this.database.db.transaction(async tx => {
       const rows = await tx.select().from(circlePosts).where(where).orderBy(desc(circlePosts.createdAt), desc(circlePosts.id)).limit(query.limit + 1).offset(query.offset)
-      return { items: await Promise.all(rows.slice(0, query.limit).map(row => this.present(tx, row, member?.id))), hasMore: rows.length > query.limit }
+      const page = rows.slice(0, query.limit), summaries = await this.summaries(tx, page)
+      return { items: await Promise.all(page.map(row => this.present(tx, row, member?.id, summaries.get(row.id)))), hasMore: rows.length > query.limit }
     })
   }
   async detail(id: string, header?: string, manage = false) {
@@ -65,7 +85,41 @@ export class CircleService {
       const [row] = await tx.select().from(circlePosts).where(eq(circlePosts.id, id))
       if (!row) fail('NOT_FOUND', '帖子不存在', 404)
       if (manage) requireAuthor(row, member!.id)
-      return this.present(tx, row, member?.id)
+      const summaries = await this.summaries(tx, [row])
+      return this.present(tx, row, member?.id, summaries.get(row.id))
+    })
+  }
+  async recordView(id: string, input: CircleRecordViewInput, header?: string) {
+    const member = await this.identity.require(header, true)
+    await this.database.db.transaction(async tx => {
+      const [post] = await tx.select({ id: circlePosts.id, authorId: circlePosts.authorId, moderation: circlePosts.moderation })
+        .from(circlePosts).where(eq(circlePosts.id, id)).for('share')
+      if (!post) fail('NOT_FOUND', '帖子不存在', 404)
+      if (post.moderation === 'removed' || !member || !complete(member) || member.id === post.authorId) return
+      const eventId = input.eventId.toLowerCase()
+      await tx.insert(reads).values({ id: eventId, postId: post.id, memberId: member.id })
+        .onDuplicateKeyUpdate({ set: { id: sql`${reads.id}` } })
+      const [event] = await tx.select({ postId: reads.postId, memberId: reads.memberId }).from(reads).where(eq(reads.id, eventId)).for('update')
+      if (event.postId !== post.id || event.memberId !== member.id) fail('READING_EVENT_CONFLICT', '浏览记录标识已使用，请重新打开帖子', 409)
+    })
+    return { ok: true }
+  }
+  async readers(id: string, query: PageQuery, header?: string): Promise<CircleReadersListDto> {
+    const member = await this.identity.require(header, true)
+    return this.database.db.transaction(async tx => {
+      const [post] = await tx.select({ authorId: circlePosts.authorId, moderation: circlePosts.moderation }).from(circlePosts).where(eq(circlePosts.id, id))
+      if (!post) fail('NOT_FOUND', '帖子不存在', 404)
+      if (post.moderation === 'removed') return { items: [], total: 0, hasMore: false }
+      const [{ total }] = await tx.select({ total: countDistinct(reads.memberId) }).from(reads).where(eq(reads.postId, id))
+      const rows = await tx.select({ memberId: members.id, displayName: members.displayName, avatarUrl: members.avatarUrl,
+        readCount: count(), lastRead: max(reads.recordedAt) }).from(reads).innerJoin(members, eq(reads.memberId, members.id))
+        .where(eq(reads.postId, id)).groupBy(members.id, members.displayName, members.avatarUrl)
+        .orderBy(desc(max(reads.recordedAt)), desc(members.id)).limit(query.limit).offset(query.offset)
+      const items = rows.map(({ memberId, displayName, avatarUrl, readCount, lastRead }) => ({
+        memberId, displayName: displayName ?? '', avatarUrl,
+        ...(member?.id === post.authorId ? { readCount, lastReadAt: lastRead!.toISOString() } : {}),
+      }))
+      return { items, total, hasMore: query.offset + items.length < total }
     })
   }
   private async attach(tx: CircleTx, postId: string, imageIds: string[], memberId: string) {
@@ -157,7 +211,8 @@ export class CircleService {
   async adminList(tx: CircleTx, query: CircleQuery) {
     const rows = await tx.select().from(circlePosts).where(query.category === 'all' ? undefined : eq(circlePosts.category, query.category as CircleWriteInput['category']))
       .orderBy(desc(circlePosts.createdAt), desc(circlePosts.id)).limit(query.limit + 1).offset(query.offset)
-    return { hasMore: rows.length > query.limit, items: await Promise.all(rows.slice(0, query.limit).map(row => this.present(tx, row, row.authorId))) }
+    const page = rows.slice(0, query.limit), summaries = await this.summaries(tx, page)
+    return { hasMore: rows.length > query.limit, items: await Promise.all(page.map(row => this.present(tx, row, row.authorId, summaries.get(row.id)))) }
   }
   async moderate(tx: CircleTx, id: string, action: 'remove' | 'restore', reason: string, adminId: string) {
     if (!reason?.trim() || reason.trim().length > 1000) fail('INVALID_REASON', '请填写 1–1000 字操作原因')

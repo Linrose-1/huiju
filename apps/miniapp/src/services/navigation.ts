@@ -6,6 +6,7 @@ export const routes = {
   advertisingIntroduction: '/pages/advertising/introduction',
   activityPeople: '/pages/activity/people',
   terms: '/pages/legal/terms', privacy: '/pages/legal/privacy', contentSettings: '/pages/platform/content',
+  circleReaders: '/pages/post-readers/index',
   circle: '/pages/circle/index', circleDetail: '/pages/circle/detail', circleEditor: '/pages/circle/editor', circleMine: '/pages/circle/mine', circleIntents: '/pages/circle/intents',
   feedback: '/pages/activity/feedback',
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',

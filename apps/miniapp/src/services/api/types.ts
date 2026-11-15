@@ -53,6 +53,7 @@ export type OrganizerRoster = components['schemas']['OrganizerRosterDto']
 export type NotificationList = components['schemas']['NotificationListDto']
 
 export type CirclePost = components['schemas']['CirclePostDto']
+export type CircleReadersList = components['schemas']['CircleReadersListDto']
 export type CircleList = components['schemas']['CircleListDto']
 export type CircleWriteInput = components['schemas']['CircleWriteInput']
 export type CircleIntentList = components['schemas']['CircleIntentListDto']

@@ -23,6 +23,12 @@ export const circleImages = mysqlTable('circle_images', {
   ownerId: char('owner_id', { length: 36 }).notNull().references(() => members.id, { onDelete: 'restrict' }),
   filename: varchar('filename', { length: 50 }).notNull(), createdAt: created(),
 })
+export const circlePostReadEvents = mysqlTable('circle_post_read_events', {
+  id: char('id', { length: 36 }).primaryKey(),
+  postId: char('post_id', { length: 36 }).notNull().references(() => circlePosts.id, { onDelete: 'cascade' }),
+  memberId: char('member_id', { length: 36 }).notNull().references(() => members.id, { onDelete: 'restrict' }),
+  recordedAt: datetime('recorded_at', { mode: 'date', fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`),
+}, table => [index('circle_post_reads_post_member_time_idx').on(table.postId, table.memberId, table.recordedAt)])
 export const circlePostImages = mysqlTable('circle_post_images', {
   id: char('id', { length: 36 }).primaryKey(),
   postId: char('post_id', { length: 36 }).notNull().references(() => circlePosts.id, { onDelete: 'cascade' }),

@@ -60,6 +60,19 @@ describe.skipIf(!enabled)('circle isolated real MySQL and HTTP', () => {
       const pair = await Promise.all([service.save(input, headers[0]), service.save(input, headers[0])])
       const id = pair[0]!.id; expect(id).toBe(pair[1]!.id)
       expect((await service.detail(id)).images).toHaveLength(1)
+      const query = { offset: 0, limit: 1 }
+      for (const actor of [undefined, headers[0], headers[2]]) await service.recordView(id, { eventId: randomUUID() }, actor)
+      expect((await service.detail(id)).readSummary).toEqual({ total: 0, recentReaders: [] })
+      const read = { eventId: randomUUID() }
+      await Promise.all([service.recordView(id, read, headers[1]), service.recordView(id, read, headers[1])])
+      await service.recordView(id, { eventId: randomUUID() }, headers[1])
+      const publicReader = { memberId: ids[1], avatarUrl: '/fixture.png', displayName: '隔离学友1' }
+      expect((await service.detail(id)).readSummary).toEqual({ total: 1, recentReaders: [publicReader] })
+      expect((await service.list(new CircleQuery(), headers[0], true)).items.find(post => post.id === id)?.readSummary)
+        .toEqual({ total: 1, recentReaders: [publicReader] })
+      expect(await service.readers(id, query, headers[1])).toEqual({ total: 1, hasMore: false, items: [publicReader] })
+      expect((await service.readers(id, query, headers[0])).items[0]).toEqual({ ...publicReader, readCount: 2, lastReadAt: expect.any(String) })
+      expect(await service.readers(id, { offset: 1, limit: 1 })).toEqual({ total: 1, hasMore: false, items: [] })
       expect((await service.image(own.id)).bytes.length).toBeGreaterThan(0)
       await expect(service.detail(id, headers[1], true)).rejects.toThrow('仅发布者')
       const interest = { requestId: randomUUID(), phone: '13800000000' }
@@ -71,6 +84,8 @@ describe.skipIf(!enabled)('circle isolated real MySQL and HTTP', () => {
       const [bound] = await db.select({ phone: members.boundPhone }).from(members).where(eq(members.id, ids[1]!)); expect(bound!.phone).toBe('19900000001')
       await db.transaction(tx => service.moderate(tx, id, 'remove', '下架原因', adminId))
       expect(await service.detail(id)).toMatchObject({ state: 'removed', body: '', images: [], author: null, removalReason: null })
+      await service.recordView(id, { eventId: randomUUID() }, headers[1])
+      expect(await service.readers(id, query, headers[0])).toEqual({ items: [], total: 0, hasMore: false })
       await expect(service.image(own.id)).rejects.toThrow('图片不存在')
       await service.save({ ...input, body: '作者编辑下架内容' }, headers[0], id)
       expect((await service.detail(id)).state).toBe('removed')
@@ -80,6 +95,9 @@ describe.skipIf(!enabled)('circle isolated real MySQL and HTTP', () => {
       expect((await service.detail(id)).body).toBe('作者编辑下架内容')
       await service.end(id, headers[0]); await service.end(id, headers[0])
       expect((await service.detail(id)).state).toBe('ended')
+      await service.recordView(id, { eventId: randomUUID() }, headers[1])
+      expect((await service.readers(id, query, headers[0])).items[0]?.readCount).toBe(3)
+
       await expect(service.intent(id, { ...interest, requestId: randomUUID() }, headers[1])).rejects.toThrow('不再接收')
       await expect(service.save(input, headers[0], id)).rejects.toThrow('已结束')
       const history = await db.transaction(tx => service.history(tx, id, { offset: 0, limit: 1 }))
@@ -87,6 +105,8 @@ describe.skipIf(!enabled)('circle isolated real MySQL and HTTP', () => {
       const [baseline] = await db.select({ value: count() }).from(circlePosts).where(and(eq(circlePosts.category, 'service'), eq(circlePosts.moderation, 'normal')))
       const fixtureIds: string[] = []
       for (let i = 0; i < 5; i++) fixtureIds.push((await service.save({ ...write(), category: 'service' }, headers[0])).id)
+      await expect(service.recordView(fixtureIds[0]!, read, headers[1])).rejects.toThrow('浏览记录标识已使用')
+      expect((await service.detail(fixtureIds[0]!)).readSummary.total).toBe(0)
       const q = Object.assign(new CircleQuery(), { limit: 2, category: 'service' })
       const expectedTotal = Number(baseline!.value) + fixtureIds.length, listedIds: string[] = []
       for (let offset = 0; offset < expectedTotal; offset += q.limit) {

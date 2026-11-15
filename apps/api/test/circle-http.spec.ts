@@ -11,7 +11,7 @@ import { AdminService } from '../src/admin/service.js'
 import { FlowDatabase, SafeExceptionFilter } from '../src/flow/common.js'
 describe('circle HTTP DTOs and administrator authorization without a database', () => {
   let app: INestApplication, base: string
-  const circle = { list: vi.fn(async () => ({ items: [], hasMore: false })), save: vi.fn(async () => ({ id: randomUUID() })), intent: vi.fn(async () => ({ ok: true })) }
+  const circle = { recordView: vi.fn(async () => ({ ok: true })), readers: vi.fn(async () => ({ items: [], total: 0, hasMore: false })), list: vi.fn(async () => ({ items: [], hasMore: false })), save: vi.fn(async () => ({ id: randomUUID() })), intent: vi.fn(async () => ({ ok: true })) }
   const accessed = vi.fn(() => { throw new Error('Database access forbidden in this test') })
   beforeAll(async () => {
     const module = await Test.createTestingModule({ controllers: [CircleController, AdminCircleController], providers: [AdminService,
@@ -36,6 +36,16 @@ describe('circle HTTP DTOs and administrator authorization without a database', 
       expect(response.status).toBe(400)
     }
     expect(circle.save).not.toHaveBeenCalled()
+  })
+  it('accepts a view UUID only and forwards reader identity and pagination', async () => {
+    const path = base + '/circle/posts/' + randomUUID(), eventId = randomUUID()
+    const submit = (body: object) => fetch(path + '/views', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    expect((await submit({ eventId: 'bad' })).status).toBe(400)
+    expect((await submit({ eventId, memberId: randomUUID() })).status).toBe(400)
+    expect(circle.recordView).not.toHaveBeenCalled()
+    expect((await submit({ eventId })).status).toBe(200)
+    expect((await fetch(path + '/readers?offset=2&limit=1', { headers: { authorization: 'Bearer session' } })).status).toBe(200)
+    expect(circle.readers).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ offset: 2, limit: 1 }), 'Bearer session')
   })
   it('requires explicit phone and request identifier for intent submission', async () => {
     const response = await fetch(base + '/circle/posts/' + randomUUID() + '/intents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })

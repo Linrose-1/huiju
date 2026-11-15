@@ -10,6 +10,7 @@ import type { CirclePost } from '@/services/api/types'
 import { routes, navigate } from '@/services/navigation'
 import { mediaUrl } from '@/services/api/environment'
 import { useCircleList, circleCategories, categoryLabel, subtypeLabel, stateLabel } from '@/services/circle'
+import CircleReadersEntry from '@/components/business/CircleReadersEntry.vue'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
 const adActive = ref(false), adRefresh = ref(0)
@@ -130,6 +131,7 @@ onShareTimeline(shareTimeline)
             </view>
           </view>
         </view>
+        <CircleReadersEntry :post="post" />
       </view>
       <ListMore
         :loading="loadingMore"

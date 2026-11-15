@@ -1316,6 +1316,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/circle/posts/{id}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CircleController_recordView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/circle/posts/{id}/readers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CircleController_readers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/circle/posts/{id}/manage": {
         parameters: {
             query?: never;
@@ -2605,6 +2637,10 @@ export interface components {
         ActivityModerationInput: {
             reason: string;
         };
+        CircleReadSummaryDto: {
+            total: number;
+            recentReaders: components["schemas"]["ReaderDto"][];
+        };
         CircleAuthorDto: {
             id: string;
             displayName: string | null;
@@ -2615,6 +2651,7 @@ export interface components {
             url: string;
         };
         CirclePostDto: {
+            readSummary: components["schemas"]["CircleReadSummaryDto"];
             id: string;
             /** @enum {string} */
             category: "park" | "operation" | "service" | "store";
@@ -2721,6 +2758,24 @@ export interface components {
             validUntil?: string | null;
             storeName?: string | null;
             imageIds: string[];
+        };
+        CircleRecordViewInput: {
+            /** Format: uuid */
+            eventId: string;
+        };
+        CircleReaderDto: {
+            /** Format: uuid */
+            memberId: string;
+            avatarUrl: string | null;
+            displayName: string;
+            readCount?: number;
+            /** Format: date-time */
+            lastReadAt?: string;
+        };
+        CircleReadersListDto: {
+            items: components["schemas"]["CircleReaderDto"][];
+            total: number;
+            hasMore: boolean;
         };
         CircleIntentInput: {
             requestId: string;
@@ -8606,6 +8661,139 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CirclePostDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    CircleController_recordView: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CircleRecordViewInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    CircleController_readers: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CircleReadersListDto"];
                 };
             };
             400: {

@@ -97,6 +97,8 @@ export const api = {
   searchView: (id: string, activityId: string) => request<{ sourceToken: string | null }>(`/ai/activity-searches/${encodeURIComponent(id)}/views`, 'POST', { activityId }, true),
   circlePosts: (query: { offset?: number; category?: string } = {}, mine = false) => request<CircleList>(`/circle/${mine ? 'mine' : 'posts'}?offset=${query.offset ?? 0}&limit=20&category=${encodeURIComponent(query.category || 'all')}`, 'GET', undefined, mine ? true : 'none'),
   circlePost: (id: string, manage = false) => request<CirclePost>(`/circle/posts/${encodeURIComponent(id)}${manage ? '/manage' : ''}`, 'GET', undefined, manage ? true : false),
+  recordCircleView: (id: string, eventId: string) => request<{ ok: boolean }>(`/circle/posts/${encodeURIComponent(id)}/views`, 'POST', { eventId }, true),
+  circleReaders: (id: string, offset = 0, limit = 20) => request<import('./types').CircleReadersList>(`/circle/posts/${encodeURIComponent(id)}/readers?offset=${offset}&limit=${limit}`),
   saveCirclePost: (input: CircleWriteInput, id = '') => request<CirclePost>(`/circle/posts${id ? '/' + encodeURIComponent(id) + '/edit' : ''}`, 'POST', input, true),
   endCirclePost: (id: string) => request<{ ok: boolean }>(`/circle/posts/${encodeURIComponent(id)}/end`, 'POST', {}, true),
   circleIntents: (id: string, offset = 0) => request<CircleIntentList>(`/circle/posts/${encodeURIComponent(id)}/intents?offset=${offset}&limit=20`, 'GET', undefined, true),

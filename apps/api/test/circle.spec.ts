@@ -22,7 +22,7 @@ function fixture(results: unknown[][] = [], user: typeof author | undefined | nu
   const tx = {
     select: vi.fn(() => {
       const query: Record<string, unknown> = {}
-      for (const method of ['from', 'innerJoin', 'leftJoin', 'orderBy', 'limit', 'offset', 'for']) query[method] = (...args: unknown[]) => { calls.push({ method, args }); return query }
+      for (const method of ['from', 'innerJoin', 'leftJoin', 'groupBy', 'as', 'orderBy', 'limit', 'offset', 'for']) query[method] = (...args: unknown[]) => { calls.push({ method, args }); return query }
       query.where = (filter: SQL) => { filters.push(filter); return query }
       query.then = (resolve: (rows: unknown[]) => unknown) => { if (!results.length) throw new Error('Unexpected query'); return Promise.resolve(results.shift()!).then(resolve) }
       return query
@@ -81,8 +81,25 @@ describe('circle service with query-result substitute', () => {
     }
   })
   it('does not expose phone fields in public details', async () => {
-    const p = post(), f = fixture([[p], [{ id: author.id, displayName: author.displayName, avatarUrl: author.avatarUrl }], []], viewer)
+    const p = post(), f = fixture([[p], [], [{ id: author.id, displayName: author.displayName, avatarUrl: author.avatarUrl }], []], viewer)
     expect(JSON.stringify(await f.service.detail(p.id, 'token'))).not.toMatch(/phone|boundPhone|19900000001/)
+  })
+  it('skips reads from the author, an anonymous visitor, an incomplete profile, and a removed post', async () => {
+    const p = post()
+    for (const [state, user] of [[p, null], [p, author], [p, { ...viewer, avatarSetByUser: false }], [{ ...p, moderation: 'removed' }, viewer]] as const) {
+      const f = fixture([[state]], user)
+      expect(await f.service.recordView(p.id, { eventId: randomUUID() })).toEqual({ ok: true })
+      expect(f.tx.insert).not.toHaveBeenCalled()
+    }
+  })
+  it('discloses read frequency and latest read time only to the author', async () => {
+    const p = post(), lastRead = new Date('2026-11-14T04:00:00Z')
+    const reader = { memberId: viewer.id, avatarUrl: viewer.avatarUrl, displayName: viewer.displayName }
+    for (const user of [null, viewer, author]) {
+      const f = fixture([[p], [{ total: 1 }], [{ ...reader, readCount: 3, lastRead }]], user)
+      const expected = user === author ? { ...reader, readCount: 3, lastReadAt: lastRead.toISOString() } : reader
+      expect(await f.service.readers(p.id, { offset: 0, limit: 20 })).toEqual({ items: [expected], total: 1, hasMore: false })
+    }
   })
   it('rejects incomplete profiles before writes', async () => {
     const f = fixture([[{ ...author, avatarSetByUser: false }]])
@@ -133,7 +150,7 @@ describe('circle service with query-result substitute', () => {
     expect(anonymous.tx.select).not.toHaveBeenCalled()
   })
   it('acknowledges a create retry without overwriting the existing post or its images', async () => {
-    const p = post(), f = fixture([[author], [p], [p], [{ id: author.id, displayName: '作者', avatarUrl: null }], []])
+    const p = post(), f = fixture([[author], [p], [p], [], [{ id: author.id, displayName: '作者', avatarUrl: null }], []])
     const result = await f.service.save({ ...input(), requestId: p.requestId, title: '重试时已更改的标题', imageIds: [randomUUID()] }, 'token')
     expect(result).toMatchObject({ id: p.id, title: p.title })
     expect(f.writes).toEqual([])

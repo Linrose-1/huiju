@@ -154,6 +154,14 @@
 
 ## 阅读留痕与统计
 
+商友圈帖子（0024）：
+
+- 帖子列表和详情的 `readSummary` 包含去重人数 `total` 和最近两位读者 `recentReaders`，供卡片直接渲染。
+- `POST /circle/posts/:id/views` 接收本次详情打开的 `eventId`。同次打开重试复用该 ID，重新进入生成新 ID。
+- `GET /circle/posts/:id/readers?offset=0&limit=20` 返回 `items,total,hasMore`。名单按最近阅读排序，公开展示当前头像、名称；仅作者响应含个人 `readCount`、`lastReadAt`。
+
+活动：
+
 - `POST /activities/:id/views`：可选会话；UUID v4 `eventId`、`visitorId`。只在详情成功打开后调用，重试与身份就绪沿用 eventId。同事件幂等；已绑定其他身份时返回 `VISITOR_CHANGED`，换新访客/事件后重试一次。
 - `GET /activities/:id/readers?offset=0`：公开，40条分页 `{items,total,hasMore}`；items 仅 `memberId`、当前 `avatarUrl` 与 `displayName`，同会员一次、最近阅读优先，不包含阅读时间或联系方式。
 - `GET /activities/:id/view-stats`：发起人专属 `{views,visitors,conversionRate}`，转化率为百分数，无浏览时 null。

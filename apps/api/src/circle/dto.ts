@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { ArrayMaxSize, ArrayUnique, IsArray, IsIn, IsOptional, IsString, IsUUID, Length, Matches } from 'class-validator'
+import { ReaderDto } from '../flow/reading-dto.js'
 import { PageQuery } from '../flow/pagination.js'
 export const categories = ['park', 'operation', 'service', 'store'] as const
 export const subtypes = ['rent', 'sale', 'transfer', 'seek_rent', 'buy'] as const
@@ -32,7 +33,24 @@ export class CircleAuthorDto {
   @ApiProperty({ type: String, nullable: true }) avatarUrl!: string | null
 }
 export class CircleImageDto { @ApiProperty() id!: string; @ApiProperty() url!: string }
+export class CircleRecordViewInput {
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') eventId!: string
+}
+export class CircleReadSummaryDto {
+  @ApiProperty() total!: number
+  @ApiProperty({ type: [ReaderDto], maxItems: 2 }) recentReaders!: ReaderDto[]
+}
+export class CircleReaderDto extends ReaderDto {
+  @ApiPropertyOptional() readCount?: number
+  @ApiPropertyOptional({ type: String, format: 'date-time' }) lastReadAt?: string
+}
+export class CircleReadersListDto {
+  @ApiProperty({ type: [CircleReaderDto] }) items!: CircleReaderDto[]
+  @ApiProperty() total!: number
+  @ApiProperty() hasMore!: boolean
+}
 export class CirclePostDto {
+  @ApiProperty({ type: CircleReadSummaryDto }) readSummary!: CircleReadSummaryDto
   @ApiProperty() id!: string
   @ApiProperty({ enum: categories }) category!: string
   @ApiProperty({ type: String, nullable: true }) subtype!: string | null

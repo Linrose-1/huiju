@@ -206,6 +206,7 @@
     }
   ],
   "subPackages": [
+    { "root": "pages/post-readers", "pages": [{ "path": "index", "style": { "navigationBarTitleText": "阅读留痕", "enablePullDownRefresh": true } }] },
     {
       "root": "pages/leaderboard",
       "pages": [

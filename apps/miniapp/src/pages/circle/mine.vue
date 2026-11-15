@@ -8,6 +8,7 @@ import { useSessionStore } from '@/stores/session'
 import { bootstrapIdentity } from '@/services/wechat'
 import { routes, navigate, loginPage } from '@/services/navigation'
 import { useCircleList, categoryLabel, subtypeLabel, stateLabel, circleTime, circleImagePreview } from '@/services/circle'
+import CircleReadersEntry from '@/components/business/CircleReadersEntry.vue'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
 const session = useSessionStore(), actionError = ref(''), ending = ref(''), preparing = ref(false)
@@ -103,6 +104,7 @@ onShow(()=>{visible=true;void load(true)});onHide(()=>{visible=false;generation+
       >
         下架原因：{{ post.removalReason || '请联系平台了解详情' }}
       </view>
+      <CircleReadersEntry :post="post" />
       <view class="circle-actions">
         <button
           :class="post.state==='open'?'btn-primary':'mine-outline'"
