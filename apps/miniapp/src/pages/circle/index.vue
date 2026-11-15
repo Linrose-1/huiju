@@ -101,37 +101,27 @@ onShareTimeline(shareTimeline)
         class="circle-card"
         @click="navigate(routes.circleDetail+'?id='+post.id)"
       >
-        <view class="row">
-          <view class="grow">
-            <view class="circle-tag">{{ categoryLabel(post.category) }}{{ post.subtype ? ' · '+subtypeLabel(post.subtype) : '' }}</view><view class="circle-title home-title">{{ post.title }}</view><view class="circle-copy home-summary">{{ post.body }}</view><view
-              v-if="post.location"
-              class="circle-muted"
-            >
-              ⌖ {{ post.location }}
-            </view>
-          </view><image
-            v-if="post.images[0]"
-            class="circle-photo"
-            :src="mediaUrl(post.images[0].url)"
-            mode="aspectFill"
-          />
-        </view>
-        <view class="circle-author">
-          <image
-            v-if="post.author?.avatarUrl"
-            class="circle-avatar"
-            :src="mediaUrl(post.author.avatarUrl)"
-            mode="aspectFill"
-          /><view>
-            <view>{{ post.author?.displayName || '学友' }}</view><view
-              v-if="post.state==='ended'"
-              class="circle-muted"
-            >
-              {{ stateLabel(post.state) }}
+        <view class="circle-tag">{{ categoryLabel(post.category) }}{{ post.subtype ? ' · '+subtypeLabel(post.subtype) : '' }}</view>
+        <view class="circle-title home-title">{{ post.title }}</view>
+        <view class="post-preview">
+          <view class="post-text">
+            <view class="circle-copy home-summary">{{ post.body }}</view>
+            <view v-if="post.location" class="post-location">
+              <uni-icons type="location" size="26rpx" color="#77857c" />
+              <text>{{ post.location }}</text>
             </view>
           </view>
+          <image v-if="post.images[0]" class="post-thumbnail" :src="mediaUrl(post.images[0].url)" mode="aspectFill" />
         </view>
-        <CircleReadersEntry :post="post" />
+        <view class="post-footer">
+          <view class="post-byline">
+            <image v-if="post.author?.avatarUrl" class="circle-avatar" :src="mediaUrl(post.author.avatarUrl)" mode="aspectFill" />
+            <text v-else class="circle-avatar avatar-initial">{{ post.author?.displayName?.slice(0, 1) || '友' }}</text>
+            <text class="post-name">{{ post.author?.displayName || '学友' }}</text>
+            <text v-if="post.state==='ended'" class="ended-label">{{ stateLabel(post.state) }}</text>
+          </view>
+          <CircleReadersEntry :post="post" />
+        </view>
       </view>
       <ListMore
         :loading="loadingMore"
@@ -146,5 +136,18 @@ onShareTimeline(shareTimeline)
 <style lang="scss">@import './circle.scss';</style>
 <style scoped>
 .circle-home-entry{line-height:1.45;text-align:left;font-weight:400}.circle-home-entry>view,.circle-home-entry>text{pointer-events:none}
-.circle-home-hero{position:relative;height:250rpx;overflow:hidden;background:#eaf4ed}.circle-home-hero-image{position:absolute;right:0;top:0;width:65%;height:100%}.circle-home-hero-fade{position:absolute;inset:0;background:linear-gradient(90deg,#f2f8f3 15%,#f2f8f3dd 45%,#f2f8f300 80%)}.circle-home-hero-copy{position:relative;font-size:40rpx;line-height:1.5;padding:24rpx 40rpx;color:#124b35;letter-spacing:2rpx}.circle-home-hero-copy text{font-family:sans-serif;font-weight:400;font-size:23rpx;color:#7a8980;letter-spacing:0}.circle-home-line{height:4rpx;width:64rpx;background:#cba260;margin:16rpx 0 12rpx}.circle-home-entries{display:flex;gap:16rpx;margin-bottom:24rpx}.circle-home-entry{flex:1;min-width:0;background:#fff;border-radius:18rpx;padding:19rpx 16rpx;display:flex;align-items:center;gap:14rpx}.circle-home-entry .circle-title{font-size:30rpx}.circle-home-symbol{width:64rpx;height:64rpx;flex-shrink:0;border-radius:50%;background:#18573f;color:#fff;font-size:49rpx;text-align:center;line-height:59rpx}.circle-home-symbol.gold{background:#d5b268;font-size:40rpx}.home-title{margin:14rpx 0 10rpx}.home-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.circle-home .circle-avatar{width:54rpx;height:54rpx}
+.circle-home-hero{position:relative;height:250rpx;overflow:hidden;background:#eaf4ed}.circle-home-hero-image{position:absolute;right:0;top:0;width:65%;height:100%}.circle-home-hero-fade{position:absolute;inset:0;background:linear-gradient(90deg,#f2f8f3 15%,#f2f8f3dd 45%,#f2f8f300 80%)}.circle-home-hero-copy{position:relative;font-size:40rpx;line-height:1.5;padding:24rpx 40rpx;color:#124b35;letter-spacing:2rpx}.circle-home-hero-copy text{font-family:sans-serif;font-weight:400;font-size:23rpx;color:#7a8980;letter-spacing:0}.circle-home-line{height:4rpx;width:64rpx;background:#cba260;margin:16rpx 0 12rpx}.circle-home-entries{display:flex;gap:16rpx;margin-bottom:24rpx}.circle-home-entry{flex:1;min-width:0;background:#fff;border-radius:18rpx;padding:19rpx 16rpx;display:flex;align-items:center;gap:14rpx}.circle-home-entry .circle-title{font-size:30rpx}.circle-home-symbol{width:64rpx;height:64rpx;flex-shrink:0;border-radius:50%;background:#18573f;color:#fff;font-size:49rpx;text-align:center;line-height:59rpx}.circle-home-symbol.gold{background:#d5b268;font-size:40rpx}
+.home-title { margin: 10rpx 0 14rpx; font-size: 36rpx; line-height: 1.38; }
+.post-preview, .post-footer, .post-byline, .post-location { display: flex; align-items: center; }
+.post-preview { align-items: flex-start; gap: 18rpx; }
+.post-text { flex: 1; min-width: 0; }
+.home-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; line-height: 1.55; color: #435249; }
+.post-thumbnail { width: 32%; max-width: 216rpx; height: 148rpx; flex: none; border-radius: 14rpx; }
+.post-location { margin-top: 10rpx; gap: 6rpx; color: #69776e; font-size: 25rpx; }
+.post-location text, .post-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-footer { justify-content: space-between; gap: 10rpx; margin-top: 18rpx; padding-top: 8rpx; border-top: 1rpx solid #dfe7e1; min-height: 68rpx; }
+.post-byline { flex: 1; min-width: 0; gap: 10rpx; font-size: 27rpx; font-weight: 600; }
+.post-byline .circle-avatar { width: 48rpx; height: 48rpx; }
+.avatar-initial { text-align: center; line-height: 48rpx; color: #305e48; }
+.ended-label { flex: none; color: #69776e; font-weight: 400; font-size: 23rpx; }
 </style>
