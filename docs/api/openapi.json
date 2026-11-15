@@ -4595,6 +4595,151 @@
         ]
       }
     },
+    "/api/v1/communities/xuejia/me": {
+      "get": {
+        "operationId": "CommunityRosterController_me",
+        "parameters": [
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityAccessDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "communities"
+        ]
+      }
+    },
+    "/api/v1/communities/xuejia/members": {
+      "get": {
+        "operationId": "CommunityRosterController_list",
+        "parameters": [
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityRosterDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "communities"
+        ]
+      }
+    },
+    "/api/v1/communities/xuejia/members/{memberId}": {
+      "put": {
+        "operationId": "CommunityRosterController_recognize",
+        "parameters": [
+          {
+            "name": "memberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityRecognitionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityRosterMemberDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "communities"
+        ]
+      }
+    },
     "/api/v1/members/me/notifications": {
       "get": {
         "operationId": "NotificationController_list",
@@ -14922,6 +15067,79 @@
           "nodes",
           "edges",
           "nextCursor"
+        ]
+      },
+      "CommunityAccessDto": {
+        "type": "object",
+        "properties": {
+          "isAdmin": {
+            "type": "boolean"
+          },
+          "isRegistered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "isAdmin",
+          "isRegistered"
+        ]
+      },
+      "CommunityRosterMemberDto": {
+        "type": "object",
+        "properties": {
+          "memberId": {
+            "type": "string"
+          },
+          "userNumber": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "isRegistered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "memberId",
+          "userNumber",
+          "displayName",
+          "avatarUrl",
+          "isRegistered"
+        ]
+      },
+      "CommunityRosterDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommunityRosterMemberDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "CommunityRecognitionInput": {
+        "type": "object",
+        "properties": {
+          "isRegistered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "isRegistered"
         ]
       },
       "NotificationDto": {

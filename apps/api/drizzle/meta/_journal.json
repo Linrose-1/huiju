@@ -183,6 +183,13 @@
       "when": 1794717302744,
       "tag": "0025_activity_audience",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "5",
+      "when": 1794720283832,
+      "tag": "0026_community_membership",
+      "breakpoints": true
     }
   ]
 }

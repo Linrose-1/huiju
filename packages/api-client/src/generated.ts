@@ -708,6 +708,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/communities/xuejia/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CommunityRosterController_me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/communities/xuejia/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CommunityRosterController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/communities/xuejia/members/{memberId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["CommunityRosterController_recognize"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/members/me/notifications": {
         parameters: {
             query?: never;
@@ -2481,6 +2529,24 @@ export interface components {
             nodes: components["schemas"]["ConnectionNodeDto"][];
             edges: components["schemas"]["ConnectionEdgeDto"][];
             nextCursor: number | null;
+        };
+        CommunityAccessDto: {
+            isAdmin: boolean;
+            isRegistered: boolean;
+        };
+        CommunityRosterMemberDto: {
+            memberId: string;
+            userNumber: string;
+            displayName: string | null;
+            avatarUrl: string | null;
+            isRegistered: boolean;
+        };
+        CommunityRosterDto: {
+            items: components["schemas"]["CommunityRosterMemberDto"][];
+            total: number;
+        };
+        CommunityRecognitionInput: {
+            isRegistered: boolean;
         };
         NotificationDto: {
             id: string;
@@ -6157,6 +6223,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConnectionPathDto"];
+                };
+            };
+        };
+    };
+    CommunityRosterController_me: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityAccessDto"];
+                };
+            };
+        };
+    };
+    CommunityRosterController_list: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityRosterDto"];
+                };
+            };
+        };
+    };
+    CommunityRosterController_recognize: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityRecognitionInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityRosterMemberDto"];
                 };
             };
         };

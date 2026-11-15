@@ -1,4 +1,4 @@
-import { char, datetime, int, mysqlTable, primaryKey, uniqueIndex, varchar } from 'drizzle-orm/mysql-core'
+import { boolean, char, datetime, int, mysqlTable, primaryKey, uniqueIndex, varchar } from 'drizzle-orm/mysql-core'
 import { members } from './members.js'
 
 export const communities = mysqlTable('communities', {
@@ -11,6 +11,8 @@ export const communities = mysqlTable('communities', {
 export const communityMembers = mysqlTable('community_members', {
   communityId: varchar('community_id', { length: 32 }).notNull().references(() => communities.id),
   memberId: char('member_id', { length: 36 }).notNull().references(() => members.id, { onDelete: 'cascade' }),
+  isAdmin: boolean('is_admin').notNull().default(false),
+  isRegistered: boolean('is_registered').notNull().default(false),
   sequenceNo: int('sequence_no', { unsigned: true }).notNull(),
   userNumber: varchar('user_number', { length: 32 }).notNull(),
   joinedAt: datetime('joined_at', { mode: 'date', fsp: 3 }).notNull(),

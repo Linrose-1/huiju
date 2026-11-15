@@ -6,8 +6,10 @@ import { MemberCardController } from './member-card-controller.js'
 import { MemberCardService } from './member-card.js'
 import { IdentityController } from './identity-controller.js'
 import { FellowsController } from './fellows-controller.js'
+import { CommunityRosterController } from './community-roster-controller.js'
+import { CommunityRosterService } from './community-roster.js'
 import { FellowsService } from './fellows.js'
 
-@Module({ imports: [DatabaseModule], controllers: [IdentityController, MemberCardController, FellowsController],
-  providers: [IdentityService, WechatAdapter, MemberCardService, FellowsService], exports: [IdentityService, WechatAdapter] })
+@Module({ imports: [DatabaseModule], controllers: [IdentityController, MemberCardController, FellowsController, CommunityRosterController],
+  providers: [IdentityService, WechatAdapter, MemberCardService, FellowsService, CommunityRosterService], exports: [IdentityService, WechatAdapter] })
 export class IdentityModule {}

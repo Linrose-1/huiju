@@ -17,6 +17,7 @@ const startLabel = computed(() => {
 })
 const unreadCount = ref(0)
 const canEditContent = ref(false)
+const canManageMembers = ref(false)
 const backgroundUrl = ref(''), backgroundError = ref(''), backgroundFailed = ref(false)
 let backgroundGeneration = 0
 async function loadBackground() {
@@ -62,12 +63,16 @@ async function load() {
   const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
   summary.value = null; unreadCount.value = 0; error.value = ''; loading.value = false
   canEditContent.value = false
+  canManageMembers.value = false
   loading.value = true
   try {
     await bootstrapIdentity()
     if (current !== generation) return
     token = session.token; epoch = session.epoch
     if (!session.member?.profileComplete) return
+    void Promise.resolve().then(() => api.communityAccess()).then(access => {
+      if (isCurrent()) canManageMembers.value = access.isAdmin
+    }).catch(() => undefined)
     void Promise.resolve().then(() => api.platformContent()).then(content => { if (isCurrent()) canEditContent.value = content.canEdit }).catch(() => undefined)
     const [activities, notifications] = await Promise.all([api.myActivitySummary(), api.notifications()])
     if (!isCurrent()) return
@@ -94,7 +99,7 @@ finally {
     session.clear()
     summary.value = null
 } }
-watch(() => [session.token, session.epoch], () => { summary.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false }, { flush: 'sync' })
+watch(() => [session.token, session.epoch], () => { summary.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false; canManageMembers.value = false }, { flush: 'sync' })
 onShow(() => { active = true; void load() })
 onHide(() => { active = false; generation++ })
 onUnload(() => { active = false; generation++ })
@@ -328,6 +333,16 @@ onUnload(() => { active = false; generation++ })
           >
             {{ '>' }}
           </text>
+        </view>
+        <view
+          v-if="canManageMembers"
+          class="menu-row row"
+          hover-class="menu-pressed"
+          @click="openMemberPage(routes.communityMembers)"
+        >
+          <view class="menu-icon"><uni-icons type="staff" size="48rpx" color="#17543d" /></view>
+          <view class="grow"><view class="tile-title">社群成员管理</view><view class="muted small">认定学加社群在册会员</view></view>
+          <text class="entry-arrow" aria-hidden="true">›</text>
         </view>
         <view
           v-if="canEditContent"

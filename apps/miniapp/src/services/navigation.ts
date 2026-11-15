@@ -12,6 +12,7 @@ export const routes = {
   profile: '/pages/member/profile', cardSettings: '/pages/member/card-settings', memberCard: '/pages/member/card',
   fellows: '/pages/member/fellows', connection: '/pages/member/connection',
   leaderboard: '/pages/leaderboard/index',
+  communityMembers: '/pages/community/members',
   invitation: '/pages/invitation/index',
   activityDraft: '/pages/assistant/activity-draft',
   activitySearch: '/pages/assistant/activity-search',

@@ -2,6 +2,7 @@ import { useSessionStore } from '@/stores/session'
 import { API_BASE_URL, NETWORK_DEBUG } from './environment'
 import type { SpecialInviteCode, SpecialInviteList, SpecialInviteVerified } from './types'
 import type { FellowList, ConnectionPath } from './types'
+import type { CommunityAccess, CommunityRoster, CommunityRosterMember } from './types'
 import type { Leaderboard, LeaderboardPeriod, LeaderboardKind } from './types'
 import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
 import type { ActivityList, ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
@@ -74,6 +75,9 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  communityAccess: () => request<CommunityAccess>('/communities/xuejia/me', 'GET', undefined, true),
+  communityMembers: (offset: number) => request<CommunityRoster>(`/communities/xuejia/members?offset=${offset}&limit=20`, 'GET', undefined, true),
+  setCommunityMembership: (memberId: string, isRegistered: boolean) => request<CommunityRosterMember>(`/communities/xuejia/members/${encodeURIComponent(memberId)}`, 'PUT', { isRegistered }, true),
   myActivitySummary: () => request<import('./types').MyActivitySummary>('/members/me/activity-summary', 'GET', undefined, true),
   activityPoster: (id: string) => request<import('./types').ActivityPoster>(`/activities/${encodeURIComponent(id)}/poster`, 'GET', undefined, true),
   generatePosterCopy: (id: string) => request<import('./types').PosterDraft>(`/organizer/activities/${encodeURIComponent(id)}/poster-draft`, 'POST', {}, true, 100000),
