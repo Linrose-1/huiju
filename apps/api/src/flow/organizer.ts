@@ -26,6 +26,9 @@ const coverName = /^[a-f0-9-]{36}_[a-f0-9-]{36}\.(png|jpg)$/
 const coverPrefix = '/api/v1/media/covers/'
 
 export function activityValues(input: ActivityWriteInput) {
+  const audienceTypes = input.audienceTypes?.length ? input.audienceTypes : null
+  const audienceOther = audienceTypes?.includes('other') ? input.audienceOther?.trim() || null : null
+  if (audienceTypes?.includes('other') && !audienceOther) fail('INVALID_ACTIVITY_AUDIENCE', '请填写其他聚会人员')
   const latitude = input.locationLatitude ?? null, longitude = input.locationLongitude ?? null
   if ((latitude === null) !== (longitude === null)
     || (latitude !== null && (typeof latitude !== 'number' || !Number.isFinite(latitude) || latitude < -90 || latitude > 90))
@@ -56,6 +59,7 @@ export function activityValues(input: ActivityWriteInput) {
     }
   }
   return {
+    audienceTypes, audienceOther,
     hostOrganization: input.hostOrganization?.trim() || null,
     organizingOrganization: input.organizingOrganization?.trim() || null,
     sponsorOrganization: input.sponsorOrganization?.trim() || null,
@@ -76,6 +80,8 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
   const preserveCoordinates = input.locationLatitude === undefined && input.locationLongitude === undefined && input.location.trim() === activity.location
   const nextCover = input.imageUrls !== undefined ? input.imageUrls[0] ?? null : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl
   const values = activityValues({ ...input,
+    audienceTypes: input.audienceTypes === undefined ? activity.audienceTypes ?? [] : input.audienceTypes,
+    audienceOther: input.audienceOther === undefined ? activity.audienceOther : input.audienceOther,
     hostOrganization: input.hostOrganization === undefined ? activity.hostOrganization : input.hostOrganization,
     organizingOrganization: input.organizingOrganization === undefined ? activity.organizingOrganization : input.organizingOrganization,
     sponsorOrganization: input.sponsorOrganization === undefined ? activity.sponsorOrganization : input.sponsorOrganization,
@@ -111,6 +117,8 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
     const changed = Object.entries(values).some(([key, value]) => {
       if (key === 'consultationContact') return false
       const original = activity[key as keyof typeof values]
+      if (key === 'audienceTypes') return JSON.stringify(value) !== JSON.stringify(original ?? null)
+      if (key === 'audienceOther') return value !== (original ?? null)
       if (key === 'descriptionDelta') return JSON.stringify(value) !== JSON.stringify(original == null ? null : activityDescription(activity.description, activity.descriptionDelta).descriptionDelta)
       if (key === 'imageUrls') return JSON.stringify(value) !== JSON.stringify({ urls: activityImages(activity), coverSourceUrl: activityCoverSource(activity) })
       if (key === 'registrationNotice') return value !== (original ?? null)
@@ -197,6 +205,7 @@ export class OrganizerService {
     const [organizer] = await db.select({ memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     return {
       id: activity.id, title: activity.title, description: activity.description, coverUrl: activity.coverUrl,
+      audienceTypes: activity.audienceTypes ?? [], audienceOther: activity.audienceOther ?? null,
       hostOrganization: activity.hostOrganization ?? null, organizingOrganization: activity.organizingOrganization ?? null,
       sponsorOrganization: activity.sponsorOrganization ?? null,
       imageUrls: activityImages(activity),
@@ -322,7 +331,7 @@ export class OrganizerService {
       if (activity.lifecycle === 'published') return
       await this.profile(tx, member.id)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
-      activityValues({ ...activity, imageUrls: activityImages(activity), coverSourceUrl: activityCoverSource(activity), startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), registrationDeadline: activity.registrationDeadline?.toISOString() ?? null, questions })
+      activityValues({ ...activity, audienceTypes: activity.audienceTypes ?? [], imageUrls: activityImages(activity), coverSourceUrl: activityCoverSource(activity), startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), registrationDeadline: activity.registrationDeadline?.toISOString() ?? null, questions })
       if (activity.startsAt <= new Date()) fail('INVALID_ACTIVITY_TIME', '开始时间已过，请先修改活动时间')
       await tx.update(activities).set({ lifecycle: 'published', publishedAt: new Date() }).where(eq(activities.id, id))
       await tx.insert(activityOperations).values({ id: randomUUID(), activityId: id, actorType: 'member', actorMemberId: member.id, action: 'publish' })

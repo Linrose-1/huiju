@@ -9,6 +9,9 @@ import { reactive } from 'vue'
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
+const presentation = {}
+const presentationSource = readFileSync(new URL('../src/services/presentation.ts', import.meta.url), 'utf8')
+new Function('exports', ts.transpileModule(presentationSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(presentation)
 class ApiError extends Error {
   constructor(code, message, status = 0) { super(message); this.code = code; this.status = status }
 }
@@ -43,7 +46,7 @@ function harness({ storage = new Map(), showModal = options => options.success({
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
     '@/services/activity-images': activityImages,
     '@/services/ai-draft': { takeActivityDraft: () => null },
-    '@/services/presentation': { feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
+    '@/services/presentation': { ...presentation, feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
     '@/services/wechat': { chooseActivityImagePath: chooseCover, chooseActivityImagePaths: chooseImages, readActivityImage: async image => image, chooseActivityLocation },
     '@/services/api/environment': { mediaUrl: value => value },
     '@/services/navigation': {
@@ -52,7 +55,7 @@ function harness({ storage = new Map(), showModal = options => options.success({
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { optionRows, writeOption, addOption, addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { toggleAudience, previewAudience, optionRows, writeOption, addOption, addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -246,6 +249,35 @@ test('moving between basic information and registration preserves unsaved input 
   assert.equal(h.creates.length, 0)
   assert.equal(h.publishes.length, 0)
   h.unload()
+})
+
+test('audience selections persist in drafts, preview custom text, and can be cleared on edit', async () => {
+  const draft = harness()
+  await draft.page.load()
+  draft.fill()
+  assert.equal(draft.page.previewAudience.value, '')
+  draft.page.toggleAudience('other')
+  assert.throws(() => draft.page.payload(), /请填写其他聚会人员/)
+  draft.page.form.audienceOther = '  园区创业者  '
+  draft.page.toggleAudience('member')
+  assert.equal(draft.page.previewAudience.value, '会员用户、园区创业者')
+  await draft.page.submit(false)
+  const saved = draft.creates[0]
+  assert.deepEqual(saved.audienceTypes, ['other', 'member'])
+  assert.equal(saved.audienceOther, '园区创业者')
+  draft.unload()
+
+  const editor = harness({ record: activity({ ...saved, registrationDeadline: saved.startsAt }) })
+  editor.page.id.value = 'activity-a'
+  await editor.page.load()
+  assert.equal(editor.page.previewAudience.value, '会员用户、园区创业者')
+  editor.page.toggleAudience('member')
+  editor.page.toggleAudience('other')
+  await editor.page.submit(false)
+  assert.deepEqual(editor.updates[0][1].audienceTypes, [])
+  assert.equal(editor.updates[0][1].audienceOther, null)
+  assert.equal(editor.page.previewAudience.value, '')
+  editor.unload()
 })
 
 test('optional poster organizations survive draft save, reopening and confirmed publication', async () => {

@@ -1936,6 +1936,8 @@ export interface components {
         };
         ActivityListItemDto: {
             hostOrganization: string | null;
+            audienceTypes: ("member" | "friend" | "all" | "other")[];
+            audienceOther: string | null;
             organizingOrganization: string | null;
             sponsorOrganization: string | null;
             organizer: components["schemas"]["PublicMemberDto"] | null;
@@ -1975,6 +1977,8 @@ export interface components {
         };
         ActivityDto: {
             hostOrganization: string | null;
+            audienceTypes: ("member" | "friend" | "all" | "other")[];
+            audienceOther: string | null;
             organizingOrganization: string | null;
             sponsorOrganization: string | null;
             organizer: components["schemas"]["PublicMemberDto"] | null;
@@ -2129,6 +2133,10 @@ export interface components {
             options?: string[] | null;
         };
         ActivityWriteInput: {
+            /** @description 聚会面向的人员，仅作说明，空数组清空 */
+            audienceTypes?: ("member" | "friend" | "all" | "other")[];
+            /** @description 选择其他时填写的聚会对象 */
+            audienceOther?: string | null;
             /** @description 主办单位 */
             hostOrganization?: string | null;
             /** @description 承办单位 */
@@ -2161,6 +2169,8 @@ export interface components {
         };
         ManagedActivityDto: {
             hostOrganization: string | null;
+            audienceTypes: ("member" | "friend" | "all" | "other")[];
+            audienceOther: string | null;
             organizingOrganization: string | null;
             sponsorOrganization: string | null;
             organizer: components["schemas"]["PublicMemberDto"] | null;

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform, Type } from 'class-transformer'
 import type { DescriptionDelta } from './activity-description.js'
 import { DescriptionDeltaDto } from './activity-description-dto.js'
+import { audienceTypes, type ActivityAudienceType } from '../database/schema/activities.js'
 import {
   Allow,
   ArrayMaxSize,
@@ -188,6 +189,8 @@ export class PublicMemberDto {
 
 export class ActivityDto {
   @ApiProperty({ type: String, nullable: true }) hostOrganization!: string | null
+  @ApiProperty({ enum: [...audienceTypes], isArray: true }) audienceTypes!: ActivityAudienceType[]
+  @ApiProperty({ type: String, nullable: true }) audienceOther!: string | null
   @ApiProperty({ type: String, nullable: true }) organizingOrganization!: string | null
   @ApiProperty({ type: String, nullable: true }) sponsorOrganization!: string | null
   @ApiProperty({

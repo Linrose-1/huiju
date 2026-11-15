@@ -5,7 +5,7 @@ import { api, ApiError, errorMessage } from '@/services/api'
 import type { ActivityWriteInput, ManagedActivity, ActivityQuestionHistoryItem } from '@/services/api/types'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
 import { API_BASE_URL, mediaUrl } from '@/services/api/environment'
-import { feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
+import { feeDisclaimer, activityTimeRangeWeekday, audienceOptions, audienceText, type AudienceType } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
 import { chooseActivityImagePath, chooseActivityImagePaths, readActivityImage, chooseActivityLocation } from '@/services/wechat'
 import ActivityCoverCropper from '@/components/business/ActivityCoverCropper.vue'
@@ -43,7 +43,17 @@ const organizationFields = [
   { key: 'organizingOrganization', label: '承办单位' },
   { key: 'sponsorOrganization', label: '赞助单位' },
 ] as const
-const form = reactive({ title: '', description: '', location: '', consultationContact: '', hostOrganization: '', organizingOrganization: '', sponsorOrganization: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+const form = reactive({ audienceTypes: [] as AudienceType[], audienceOther: '', title: '', description: '', location: '', consultationContact: '', hostOrganization: '', organizingOrganization: '', sponsorOrganization: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+const previewAudience = computed(() => audienceText(form.audienceTypes, form.audienceOther))
+function toggleAudience(type: AudienceType) {
+  if (busy.value || !editable.value || started.value) return
+  if (form.audienceTypes.includes(type)) {
+    form.audienceTypes = form.audienceTypes.filter(item => item !== type)
+    if (type === 'other') form.audienceOther = ''
+  } else {
+    form.audienceTypes.push(type)
+  }
+}
 const previewOrganizations = computed(() => organizationFields.filter(field => form[field.key].trim()))
 watch(() => form.location, () => { locationCoordinates.value = null }, { flush: 'sync' })
 const customDeadline = ref(false), questions = ref<DraftQuestion[]>([])
@@ -220,7 +230,7 @@ function reset() {
   dragIndex.value = -1
   dragOffset.value = 0
   capacityLimited.value = false
-  Object.assign(form, { title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+  Object.assign(form, { audienceTypes: [], audienceOther: '', title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
   for (const { key } of organizationFields) form[key] = ''
   questions.value = []
   customDeadline.value = false
@@ -275,6 +285,8 @@ async function load() {
         extraImages.value = Array.from({ length: 8 }, (_, index) => images[index + 1] || '')
         const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
+        form.audienceTypes = [...(activity.audienceTypes ?? [])]
+        form.audienceOther = activity.audienceOther ?? ''
         for (const { key } of organizationFields) form[key] = activity[key] ?? ''
         locationCoordinates.value = activity.locationLatitude != null && activity.locationLongitude != null ? { latitude: activity.locationLatitude, longitude: activity.locationLongitude } : null
         customDeadline.value = activity.registrationDeadline !== activity.startsAt
@@ -330,6 +342,9 @@ function payload(): ActivityWriteInput {
     return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, coverSourceUrl: activity.coverSourceUrl || null, imageUrls: activityImages(activity), location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType, publicToParticipants: !!questions.value.find(item => item.id === question.id)?.publicToParticipants })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
+  const audienceOther = form.audienceTypes.includes('other') ? form.audienceOther.trim() : null
+  if (audienceOther === '') throw new Error('请填写其他聚会人员，或取消选择「其他」')
+  if (audienceOther && [...audienceOther].length > 60) throw new Error('其他聚会人员最多 60 字')
   if (!richValid.value || form.description.length > 10000) throw new Error('活动介绍格式无效或超过 10000 字，请调整后保存')
   if (registrationNotice.value.length > 500) throw new Error('报名须知最多 500 字')
   for (const { key, label } of organizationFields) {
@@ -357,6 +372,7 @@ function payload(): ActivityWriteInput {
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options, publicToParticipants: !!question.publicToParticipants && !privateContactQuestion(prompt) }
   })
   return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(),
+    audienceTypes: [...form.audienceTypes], audienceOther,
     hostOrganization: form.hostOrganization.trim() || null,
     organizingOrganization: form.organizingOrganization.trim() || null,
     sponsorOrganization: form.sponsorOrganization.trim() || null,
@@ -934,6 +950,32 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             {{ locationError }}
           </view>
         </view>
+        <view class="form-card">
+          <view class="card-heading"><text>聚会人员</text><text class="helper">选填 · 可多选</text></view>
+          <view class="audience-options">
+            <button
+              v-for="option in audienceOptions"
+              :key="option.key"
+              class="audience-option"
+              :class="{ chosen: form.audienceTypes.includes(option.key) }"
+              :disabled="busy || !editable || started"
+              @click="toggleAudience(option.key)"
+            >
+              <text class="audience-check">{{ form.audienceTypes.includes(option.key) ? '✓' : '' }}</text>{{ option.label }}
+            </button>
+          </view>
+          <input
+            v-if="form.audienceTypes.includes('other')"
+            v-model="form.audienceOther"
+            class="field audience-other"
+            aria-label="其他聚会人员"
+            placeholder="填写参加对象，如园区创业者"
+            :maxlength="120"
+            :disabled="busy || !editable || started"
+            :cursor-spacing="130"
+          >
+          <view class="field-note">仅用于说明活动面向谁，不限制报名。</view>
+        </view>
         <view class="two-column">
           <view class="form-card capacity-card">
             <view class="card-heading"><text>活动人数</text></view><view class="field icon-field">
@@ -1281,6 +1323,12 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
               size="32rpx"
               color="#164f41"
             /><text>{{ form.capacity ? '限额 ' + form.capacity + ' 人' : '不限人数' }} | 已报名 {{ source?.activeRegistrationCount || 0 }} 人</text>
+          </view>
+          <view
+            v-if="previewAudience"
+            class="preview-meta"
+          >
+            <text>聚会人员：{{ previewAudience }}</text>
           </view>
           <view class="preview-organizer">
             <image
@@ -1717,4 +1765,10 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
 .organization-field + .organization-field{margin-top:12rpx}
 .choice-row{display:flex;align-items:center;gap:16rpx;margin-bottom:12rpx;font-size:26rpx}
 .choice-row .field{flex:1;min-width:0;margin:0}
+.audience-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
+.audience-option { display: flex; align-items: center; gap: 12rpx; width: 100%; min-height: 80rpx; padding: 12rpx 18rpx; border: 1rpx solid #dee8e2; border-radius: 12rpx; background: #fafcfb; color: #42594e; font-size: 27rpx; line-height: 1.4; }
+.audience-option.chosen { border-color: #6a9d88; background: #eef6f1; color: #175f46; }
+.audience-check { width: 28rpx; height: 28rpx; line-height: 28rpx; text-align: center; border: 1rpx solid #aabbb2; border-radius: 6rpx; background: #fff; font-size: 22rpx; }
+.chosen .audience-check { background: #24785a; border-color: #24785a; color: #fff; }
+.audience-other { margin-top: 14rpx; }
 </style>

@@ -1,4 +1,17 @@
 import type { Activity, Registration } from './api/types'
+export const audienceOptions = [
+  { key: 'member', label: '会员用户' },
+  { key: 'friend', label: '非会用户' },
+  { key: 'all', label: '所有人员' },
+  { key: 'other', label: '其他' },
+] as const
+export type AudienceType = typeof audienceOptions[number]['key']
+
+export function audienceText(types?: readonly string[] | null, other?: string | null) {
+  return audienceOptions.filter(option => types?.includes(option.key))
+    .map(option => option.key === 'other' ? other?.trim() : option.label).filter(Boolean).join('、')
+}
+
 export function dateTime(value: string): string {
   const date = new Date(Date.parse(value) + 8 * 60 * 60 * 1000)
   if (!Number.isFinite(date.getTime())) return '时间待更新'

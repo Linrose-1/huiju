@@ -2,12 +2,12 @@
 import { resolvePosterEntry, releasePosterEntry } from '@/services/wechat/poster-entry'
 import PageReturn from '@/components/base/PageReturn.vue'
 import { usePageShare } from '@/services/wechat/page-share'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onShareAppMessage, onShareTimeline, onLoad, onShow, onHide, onUnload, onPullDownRefresh } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, PublicMember, Registration, ReadingList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
-import { dateTime, fee, stateText, feeNotice, feeDisclaimer, activityTimeRangeWeekday } from '@/services/presentation'
+import { dateTime, fee, stateText, feeNotice, feeDisclaimer, activityTimeRangeWeekday, audienceText } from '@/services/presentation'
 import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { createReadingVisit } from '@/services/reading'
@@ -17,6 +17,7 @@ import { activityImages } from '@/services/activity-images'
 import RequestState from '@/components/base/RequestState.vue'
 
 const id = ref(''), activity = ref<Activity | null>(null), roster = ref<PublicMember[]>([]), registration = ref<Registration | null>(null), loading = ref(true), busy = ref(false), error = ref(''), rosterError = ref(''), expanded = ref(false)
+const audience = computed(() => audienceText(activity.value?.audienceTypes, activity.value?.audienceOther))
 const rosterLoading = ref(false), rosterHasMore = ref(false), rosterMoreError = ref('')
 const registrationLoading = ref(false), registrationError = ref(''), registrationKnown = ref(false)
 const searchId = ref(''), recommendationToken = ref('')
@@ -219,6 +220,14 @@ onShareTimeline(shareTimeline)
             type="staff"
             size="36rpx"
           /><text>{{ activity.capacity?'限额 '+activity.capacity+' 人':'不限人数' }}｜已报名 {{ activity.activeRegistrationCount }} 人</text>
+        </view><view
+          v-if="audience"
+          class="meta"
+        >
+          <uni-icons
+            type="person"
+            size="36rpx"
+          /><text>聚会人员：{{ audience }}</text>
         </view><view
           v-if="activity.organizer"
           class="meta organizer-row"

@@ -18,6 +18,24 @@ const base = { ...activityValues(input), organizerMemberId: 'owner', lifecycle: 
 const now = new Date('2030-01-01T00:00:00Z')
 
 describe('organizer write boundaries', () => {
+  it('preserves audience on older edits, clears unused custom labels and permits multiple groups', () => {
+    const values = activityValues({ ...input, audienceTypes: ['member', 'other'], audienceOther: '  园区创业者 ' })
+    const activity = { ...base, ...values, hasRegistrationEver: true }
+    const expected = { audienceTypes: ['member', 'other'], audienceOther: '园区创业者' }
+    expect(values).toMatchObject(expected)
+    expect(validateActivityEdit(activity, [], input, now).values).toMatchObject(expected)
+    expect(validateActivityEdit(activity, [], { ...input, consultationContact: '新联系方式' }, activity.startsAt).values).toMatchObject(expected)
+    expect(validateActivityEdit(activity, [], { ...input, audienceTypes: ['friend'] }, now).values).toMatchObject({ audienceTypes: ['friend'], audienceOther: null })
+    expect(validateActivityEdit(activity, [], { ...input, audienceTypes: [] }, now).values).toMatchObject({ audienceTypes: null, audienceOther: null })
+    expect(() => activityValues({ ...input, audienceTypes: ['other'], audienceOther: '  ' })).toThrow('请填写其他聚会人员')
+  })
+
+  it('validates audience codes and custom text at the API boundary', async () => {
+    for (const fields of [{ audienceTypes: ['unknown'] }, { audienceTypes: ['member', 'member'] }, { audienceTypes: 'other' }, { audienceOther: '字'.repeat(61) }]) {
+      expect((await validate(plainToInstance(ActivityWriteInput, { ...input, ...fields }))).length).toBeGreaterThan(0)
+    }
+    expect(await validate(plainToInstance(ActivityWriteInput, { ...input, audienceTypes: ['all', 'other'], audienceOther: '园区创业者' }))).toHaveLength(0)
+  })
   it('supports optional poster credits before start, preserving fields omitted by older clients', () => {
     const fields = { hostOrganization: '主办社', organizingOrganization: '承办社', sponsorOrganization: '赞助社' }
     expect(activityValues(input)).toMatchObject({ hostOrganization: null, organizingOrganization: null, sponsorOrganization: null })

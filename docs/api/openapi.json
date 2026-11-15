@@ -12578,6 +12578,22 @@
             "type": "string",
             "nullable": true
           },
+          "audienceTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "member",
+                "friend",
+                "all",
+                "other"
+              ]
+            }
+          },
+          "audienceOther": {
+            "type": "string",
+            "nullable": true
+          },
           "organizingOrganization": {
             "type": "string",
             "nullable": true
@@ -12709,6 +12725,8 @@
         },
         "required": [
           "hostOrganization",
+          "audienceTypes",
+          "audienceOther",
           "organizingOrganization",
           "sponsorOrganization",
           "organizer",
@@ -12754,6 +12772,22 @@
         "type": "object",
         "properties": {
           "hostOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "audienceTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "member",
+                "friend",
+                "all",
+                "other"
+              ]
+            }
+          },
+          "audienceOther": {
             "type": "string",
             "nullable": true
           },
@@ -12883,6 +12917,8 @@
         },
         "required": [
           "hostOrganization",
+          "audienceTypes",
+          "audienceOther",
           "organizingOrganization",
           "sponsorOrganization",
           "organizer",
@@ -13421,6 +13457,27 @@
       "ActivityWriteInput": {
         "type": "object",
         "properties": {
+          "audienceTypes": {
+            "type": "array",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "description": "聚会面向的人员，仅作说明，空数组清空",
+            "items": {
+              "type": "string",
+              "enum": [
+                "member",
+                "friend",
+                "all",
+                "other"
+              ]
+            }
+          },
+          "audienceOther": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "选择其他时填写的聚会对象"
+          },
           "hostOrganization": {
             "type": "string",
             "nullable": true,
@@ -13542,6 +13599,22 @@
         "type": "object",
         "properties": {
           "hostOrganization": {
+            "type": "string",
+            "nullable": true
+          },
+          "audienceTypes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "member",
+                "friend",
+                "all",
+                "other"
+              ]
+            }
+          },
+          "audienceOther": {
             "type": "string",
             "nullable": true
           },
@@ -13693,6 +13766,8 @@
         },
         "required": [
           "hostOrganization",
+          "audienceTypes",
+          "audienceOther",
           "organizingOrganization",
           "sponsorOrganization",
           "organizer",

@@ -18,6 +18,9 @@ import { adminAccounts, members } from './members.js'
 import type { DescriptionDelta } from '../../flow/activity-description.js'
 import type { ActivityImageData } from '../../flow/activity-images.js'
 
+export const audienceTypes = ['member', 'friend', 'all', 'other'] as const
+export type ActivityAudienceType = typeof audienceTypes[number]
+
 export const activities = mysqlTable(
   'activities',
   {
@@ -29,6 +32,8 @@ export const activities = mysqlTable(
         onUpdate: 'restrict',
       }),
     title: varchar('title', { length: 200 }).notNull(),
+    audienceTypes: json('audience_types').$type<ActivityAudienceType[]>(),
+    audienceOther: varchar('audience_other', { length: 60 }),
     hostOrganization: varchar('host_organization', { length: 60 }),
     organizingOrganization: varchar('organizing_organization', { length: 60 }),
     sponsorOrganization: varchar('sponsor_organization', { length: 60 }),

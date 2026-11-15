@@ -66,10 +66,11 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
           await tx.update(members).set({ boundPhone: '13800000000', displayName, nameSetByUser: true, avatarUrl: '/fixture.png', avatarSetByUser: true }).where(eq(members.id, session.member.id))
         }
         const units = { hostOrganization: '回滚主办', organizingOrganization: '回滚承办', sponsorOrganization: '回滚赞助' }
-        const draft = await organizer.create({ ...input, ...units }, ownerHeader)
+        const audience: Pick<ActivityWriteInput, 'audienceTypes' | 'audienceOther'> = { audienceTypes: ['friend', 'other'], audienceOther: '园区创业者' }
+        const draft = await organizer.create({ ...input, ...units, ...audience }, ownerHeader)
         activityId = draft.id
         expect(draft.lifecycle).toBe('draft')
-        expect(draft).toMatchObject(units)
+        expect(draft).toMatchObject({ ...units, ...audience })
         await expect(publicActivities.detail(activityId)).rejects.toThrow('活动不存在')
         expect((await publicActivities.list()).items.some(item => item.id === activityId)).toBe(false)
         expect((await organizer.list(ownerHeader)).items.some(item => item.id === activityId)).toBe(true)
@@ -83,7 +84,7 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
         expect((await tx.select().from(activityOperations).where(eq(activityOperations.activityId, activityId))).filter(row => row.action === 'publish')).toHaveLength(1)
         expect((await publicActivities.list()).items.some(item => item.id === activityId)).toBe(true)
         expect(await publicActivities.detail(activityId)).not.toHaveProperty('consultationContact')
-        expect(await publicActivities.detail(activityId)).toMatchObject(units)
+        expect(await publicActivities.detail(activityId)).toMatchObject({ ...units, ...audience })
         expect(await posters.read(activityId, outsiderHeader)).toMatchObject({ ...units, organizerName: '回滚发起人', canEdit: false })
         const registration = await publicActivities.write(activityId, attendeeHeader, 'register', {
           contactPhone: '13900000000', answers: [{ questionId: draft.questions[0].id, value: '私密测试答案' }]
@@ -101,7 +102,9 @@ describe.skipIf(!enabled)('real MySQL organizer flow in an outer rollback transa
         // The old client's input omits host and sponsor; only the explicitly cleared credit changes.
         await expect(organizer.edit(activityId, { ...edit, organizingOrganization: null }, outsiderHeader)).rejects.toThrow('仅活动发起人')
         const expectedUnits = { ...units, organizingOrganization: null }
-        expect(await organizer.edit(activityId, { ...edit, organizingOrganization: null }, ownerHeader)).toMatchObject(expectedUnits)
+        expect(await organizer.edit(activityId, { ...edit, organizingOrganization: null }, ownerHeader)).toMatchObject({ ...expectedUnits, ...audience })
+        expect(await organizer.edit(activityId, { ...edit, audienceTypes: [] }, ownerHeader)).toMatchObject({ audienceTypes: [], audienceOther: null })
+        expect(await publicActivities.detail(activityId)).toMatchObject({ audienceTypes: [], audienceOther: null })
         expect(await posters.read(activityId, attendeeHeader)).toMatchObject({ ...expectedUnits, organizerName: '回滚发起人', canEdit: false })
         // Cancelling the only registration never unlocks the original questions or fee.
         await publicActivities.write(activityId, attendeeHeader, 'cancel')

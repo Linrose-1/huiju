@@ -122,6 +122,8 @@ export class ActivityService {
       id: activity.id,
       title: state === 'removed' ? '活动已下架' : activity.title,
       hostOrganization: state === 'removed' ? null : activity.hostOrganization ?? null,
+      audienceTypes: state === 'removed' ? [] : activity.audienceTypes ?? [],
+      audienceOther: state === 'removed' ? null : activity.audienceOther ?? null,
       organizingOrganization: state === 'removed' ? null : activity.organizingOrganization ?? null,
       sponsorOrganization: state === 'removed' ? null : activity.sponsorOrganization ?? null,
       description: state === 'removed' ? '' : activity.description,
