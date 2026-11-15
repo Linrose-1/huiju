@@ -17,12 +17,11 @@ function page(t, localTest = true) {
     '@dcloudio/uni-app': Object.fromEntries(['onShow', 'onHide', 'onUnload'].map(key => [key, fn => { hooks[key] = fn }])),
     '@/stores/session': { useSessionStore: () => session },
     '@/services/api/environment': { LOCAL_TEST: localTest },
-    '@/services/navigation': {},
+    '@/services/navigation': {}, '@/services/presentation': {},
     '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api': { errorMessage: e => e.message, api: {
       platformContent: async () => ({ canEdit: false }),
-      registrations: async () => ({ activeCount: totals[session.token] }),
-      organizedActivities: async () => ({ total: totals[session.token] }),
+      myActivitySummary: async () => ({ registeredCount: totals[session.token], organizedCount: totals[session.token], nextRegistration: null, latestOrganized: null }),
       notifications: async () => ({ unreadCount: 0 }),
     } },
     '@/services/wechat': {
@@ -31,7 +30,7 @@ function page(t, localTest = true) {
     },
   }
   const source = readFileSync(new URL('../src/pages/mine/index.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const code = ts.transpileModule(source + '\nexport { chooseTestActor, switching, testActorLabel, count, error };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const code = ts.transpileModule(source + '\nexport { chooseTestActor, switching, testActorLabel, summary, error };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const result = {}, scope = vue.effectScope()
   t.after(() => scope.stop())
   scope.run(() => new Function('require', 'exports', 'uni', code)(name => deps[name] ?? require(name), result, {
@@ -43,7 +42,7 @@ function page(t, localTest = true) {
 test('local actor menu locks duplicate taps, exposes seven actors within native six-item limit and reloads counts', async t => {
   const h = page(t)
   h.hooks.onShow(); await setImmediate()
-  assert.equal(h.count.value, 2)
+  assert.equal(h.summary.value.registeredCount, 2)
   const switching = h.chooseTestActor()
   await h.chooseTestActor()
   assert.equal(h.sheets.length, 1)
@@ -53,7 +52,7 @@ test('local actor menu locks duplicate taps, exposes seven actors within native 
   h.sheets.shift().resolve({ tapIndex: 0 }); await switching
   assert.deepEqual(h.switched, ['peer'])
   assert.equal(h.testActorLabel.value, 'peer（测试）')
-  assert.equal(h.count.value, 4)
+  assert.equal(h.summary.value.registeredCount, 4)
   assert.equal(h.switching.value, false)
 })
 

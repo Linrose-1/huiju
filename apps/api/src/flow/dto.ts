@@ -285,6 +285,27 @@ export class ActivityListDto {
   hasMore!: boolean
 }
 
+export class NextRegisteredActivityDto {
+  @ApiProperty() id!: string
+  @ApiProperty() title!: string
+  @ApiProperty() location!: string
+  @ApiProperty({ format: 'date-time' }) startsAt!: string
+}
+
+export class LatestOrganizedActivityDto {
+  @ApiProperty() id!: string
+  @ApiProperty() title!: string
+  @ApiProperty() activeRegistrationCount!: number
+  @ApiProperty({ type: Number, nullable: true }) capacity!: number | null
+}
+
+export class MyActivitySummaryDto {
+  @ApiProperty() registeredCount!: number
+  @ApiProperty() organizedCount!: number
+  @ApiProperty({ type: NextRegisteredActivityDto, nullable: true }) nextRegistration!: NextRegisteredActivityDto | null
+  @ApiProperty({ type: LatestOrganizedActivityDto, nullable: true }) latestOrganized!: LatestOrganizedActivityDto | null
+}
+
 export class RegistrationDto {
   @ApiProperty({ enum: ['ordinary', 'invited_free'] }) feeQualification!: 'ordinary' | 'invited_free'
   @ApiProperty()

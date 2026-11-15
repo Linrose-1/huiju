@@ -4,7 +4,7 @@ import { ActivityService } from './activity.js'
 import { ActivityListQuery } from './activity-list-dto.js'
 import { LeaderboardDto, LeaderboardQuery } from './leaderboard-dto.js'
 import { MyRegistrationQuery, PageQuery } from './pagination.js'
-import { ActivityDto, ActivityListDto, AnswersInput, ErrorDto, PublicRosterDto, RegistrationDto, RegistrationInput, RegistrationListDto } from './dto.js'
+import { ActivityDto, ActivityListDto, AnswersInput, ErrorDto, MyActivitySummaryDto, PublicRosterDto, RegistrationDto, RegistrationInput, RegistrationListDto } from './dto.js'
 
 @ApiTags('activities')
 @ApiResponse({
@@ -95,6 +95,11 @@ export class FlowController {
   leaderboard(@Query() query: LeaderboardQuery, @Headers('authorization') header?: string) {
     return this.activity.leaderboard(query, header)
   }
+
+  @Get('members/me/activity-summary')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOkResponse({ type: MyActivitySummaryDto })
+  activitySummary(@Headers('authorization') header?: string) { return this.activity.myActivitySummary(header) }
 
   @HttpCode(200)
   @Post('activities/:id/registrations')

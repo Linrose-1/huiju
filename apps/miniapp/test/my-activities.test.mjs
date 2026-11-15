@@ -47,25 +47,36 @@ for(const pagePath of ['activity/organized','registration/index']) {
 }
 
 
-test('mine uses the organized total, keeps active registration count and ignores results after hiding', async t => {
+test('mine displays the nearest registration in Beijing time, handles empty cards and ignores stale private data', async t => {
   const session=reactive({token:'a',epoch:0,member:{profileComplete:true}});let hide;let finish
   let pending=false
+
+  const activitySummary={registeredCount:75,organizedCount:125,nextRegistration:{id:'a',title:'讨论会',startsAt:'2026-11-14T17:30:00Z',location:'广州'},latestOrganized:{id:'b',title:'茶话会',activeRegistrationCount:0,capacity:null}}
+  const presentation=compile(readFileSync(new URL('../src/services/presentation.ts',import.meta.url),'utf8'))
   const deps={
     '@dcloudio/uni-app':{onShow(){},onHide(fn){hide=fn},onUnload(){}},
     '@/services/platform-brand': { usePlatformBrand: () => ({ value: { displayName: '有聚点', visible: true } }) },
     '@/services/api':{refreshMember:async()=>{},errorMessage:e=>e.message,api:{
-      registrations:async()=>({items:[{status:'active'},{status:'cancelled'}],activeCount:75}),
+      myActivitySummary:()=>pending?new Promise(resolve=>{finish=resolve}):Promise.resolve(activitySummary),
       notifications:async()=>({items:[],unreadCount:pending?0:103}),
-      organizedActivities:()=>pending?new Promise(resolve=>{finish=resolve}):Promise.resolve({items:[],total:125,hasMore:true})
+      platformContent:async()=>({canEdit:false})
     }},
-    '@/services/api/environment':{}, '@/services/wechat':{bootstrapIdentity:async()=>{}}, '@/services/navigation':{}, '@/stores/session':{useSessionStore:()=>session}
+    '@/services/presentation':presentation,'@/services/api/environment':{}, '@/services/wechat':{bootstrapIdentity:async()=>{}}, '@/services/navigation':{}, '@/stores/session':{useSessionStore:()=>session}
   }
   const source=readFileSync(new URL('../src/pages/mine/index.vue',import.meta.url),'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
   const scope=effectScope();t.after(()=>scope.stop())
-  const page=scope.run(()=>compile(source,deps,';export {load,count,organizedCount,unreadCount};'))
-  await page.load();assert.equal(page.count.value,75);assert.equal(page.organizedCount.value,125);assert.equal(page.unreadCount.value,103)
-  pending=true;const loading=page.load();await Promise.resolve();await Promise.resolve();hide();finish({items:[],total:200});await loading
-  assert.equal(page.organizedCount.value,null);assert.equal(page.unreadCount.value,0)
-  const returning=page.load();await Promise.resolve();await Promise.resolve();finish({items:[],total:125});await returning
-  assert.equal(page.organizedCount.value,125);assert.equal(page.unreadCount.value,0)
+  const page=scope.run(()=>compile(source,deps,';export {load,summary,start,startLabel,unreadCount};'))
+  await page.load()
+  assert.deepEqual(page.summary.value,activitySummary)
+  assert.equal(page.startLabel.value,'11月15日 01:30')
+  assert.equal(page.start.value.week,'周日')
+  assert.equal(page.unreadCount.value,103)
+  pending=true;const loading=page.load();await Promise.resolve();await Promise.resolve();hide();finish(activitySummary);await loading
+  assert.equal(page.summary.value,null);assert.equal(page.unreadCount.value,0)
+  const returning=page.load();await Promise.resolve();await Promise.resolve()
+  finish({...activitySummary,nextRegistration:null,latestOrganized:null});await returning
+  assert.equal(page.start.value,null);assert.equal(page.summary.value.latestOrganized,null)
+  const old=page.load();await Promise.resolve();await Promise.resolve()
+  session.token='new-account';finish(activitySummary);await old
+  assert.equal(page.summary.value,null)
 })

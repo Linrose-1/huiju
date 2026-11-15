@@ -18,7 +18,7 @@ import { readingEvents, readingVisitors } from '../database/schema/interactions.
 import { registrations, registrationAnswers, registrationOperations } from '../database/schema/registrations.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
-import { ActivityDto, ActivityListDto, AnswerInput, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
+import { ActivityDto, ActivityListDto, AnswerInput, MyActivitySummaryDto, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
 import { ActivityListQuery } from './activity-list-dto.js'
 import type { LeaderboardQuery } from './leaderboard-dto.js'
 import { readLeaderboard } from './leaderboard.js'
@@ -304,6 +304,30 @@ export class ActivityService {
     const member = (await this.identity.require(header))!
     if (!complete(member)) fail('PROFILE_INCOMPLETE', '请先完善手机号、头像和用户名称', 403)
     return readLeaderboard(this.database.db, query)
+  }
+
+  async myActivitySummary(header?: string): Promise<MyActivitySummaryDto> {
+    const member = (await this.identity.require(header))!
+    if (!complete(member)) fail('PROFILE_INCOMPLETE', '请先完善手机号、头像和用户名称', 403)
+    const registered = and(eq(registrations.memberId, member.id), eq(registrations.status, 'active'))
+    const organized = eq(activities.organizerMemberId, member.id)
+    const published = and(eq(activities.lifecycle, 'published'), eq(activities.moderation, 'normal'))
+    return this.database.db.transaction(async tx => {
+      const [registrationTotal] = await tx.select({ total: count() }).from(registrations).where(registered)
+      const [organizedTotal] = await tx.select({ total: count() }).from(activities).where(organized)
+      const [next] = await tx.select({ id: activities.id, title: activities.title, location: activities.location, startsAt: activities.startsAt })
+        .from(registrations).innerJoin(activities, eq(activities.id, registrations.activityId))
+        .where(and(registered, published, gt(activities.startsAt, new Date())))
+        .orderBy(asc(activities.startsAt), asc(activities.id)).limit(1)
+      const [latest] = await tx.select({ id: activities.id, title: activities.title,
+        activeRegistrationCount: activities.activeRegistrationCount, capacity: activities.capacity })
+        .from(activities).where(and(organized, published)).orderBy(desc(activities.publishedAt), desc(activities.id)).limit(1)
+      return {
+        registeredCount: registrationTotal.total, organizedCount: organizedTotal.total,
+        nextRegistration: next ? { ...next, startsAt: next.startsAt.toISOString() } : null,
+        latestOrganized: latest ?? null,
+      }
+    })
   }
 
   async allMine(header?: string, query: MyRegistrationQuery = new MyRegistrationQuery()) {

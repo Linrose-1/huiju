@@ -23,14 +23,38 @@ function fixture(results: unknown[][]) {
     }
     return chain
   }) }
-  const identity = { require: vi.fn(async () => ({ id: 'owner' })) } as unknown as IdentityService
-  const database = { db } as unknown as FlowDatabase
+  const identity = { require: vi.fn(async () => ({ id: 'owner', boundPhone: 'test', avatarUrl: '/fixture.png', displayName: '学友', nameSetByUser: true, avatarSetByUser: true })) } as unknown as IdentityService
+  const database = { db: { ...db, transaction: (callback: (tx: typeof db) => unknown) => callback(db) } } as unknown as FlowDatabase
   return { activity: new ActivityService(database, identity), organizer: new OrganizerService(database, identity), calls, db }
 }
 const notification = (id: string) => ({ id, activityId: 'activity', type: 'activity_cancelled', title: '通知', body: '内容', readAt: null, createdAt: now })
 const registration = (id: string) => ({ id, activityId: 'activity', status: 'active', contactPhone: '13800000000', currentRegisteredAt: now, cancelledAt: null, attended: true, attendedAt: now })
 
 describe('bounded list pagination', () => {
+  it('selects a member’s next effective booking and most recently published activity independently of list totals', async () => {
+    const next = { id: 'next', title: '下一场', startsAt: now, location: '珠江新城' }
+    const latest = { id: 'latest', title: '最近发布', activeRegistrationCount: 3, capacity: null }
+    const f = fixture([[{ total: 4 }], [{ total: 8 }], [next], [latest]])
+    expect(await f.activity.myActivitySummary('token')).toEqual({ registeredCount: 4, organizedCount: 8,
+      nextRegistration: { ...next, startsAt: now.toISOString() }, latestOrganized: latest })
+    const conditions = f.calls.filter(call => call.method === 'where').map(call =>
+      dialect.sqlToQuery(call.args[0] as Parameters<MySqlDialect['sqlToQuery']>[0]))
+    expect(conditions[0].params).toEqual(['owner', 'active'])
+    expect(conditions[1].params).toEqual(['owner'])
+    expect(conditions[2].params.slice(0, 4)).toEqual(['owner', 'active', 'published', 'normal'])
+    expect(conditions[2].sql).toContain('starts_at` >')
+    expect(conditions[3].params).toEqual(['owner', 'published', 'normal'])
+    const orderBy = f.calls.filter(call => call.method === 'orderBy').map(call =>
+      dialect.sqlToQuery(call.args[0] as Parameters<MySqlDialect['sqlToQuery']>[0]).sql)
+    expect(orderBy[0]).toContain('starts_at` asc')
+    expect(orderBy[1]).toContain('published_at` desc')
+  })
+
+  it('retains counts when no upcoming booking or published activity can be shown', async () => {
+    const f = fixture([[{ total: 3 }], [{ total: 1 }], [], []])
+    expect(await f.activity.myActivitySummary('token')).toEqual({ registeredCount: 3, organizedCount: 1,
+      nextRegistration: null, latestOrganized: null })
+  })
   it('groups reader counts once for the returned activity page, excluding the lookahead row', async () => {
     const rows = Array.from({ length: 11 }, (_, index) => ({ id: String(index), startsAt: now, endsAt: now }))
     const f = fixture([rows, [{ activityId: '4', total: 7 }], [], [], ...Array.from({ length: 20 }, () => [])])

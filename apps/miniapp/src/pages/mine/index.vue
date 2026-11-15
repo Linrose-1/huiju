@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import TabHeader from '@/components/base/TabHeader.vue'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
 import { api, errorMessage } from '@/services/api'
+import type { MyActivitySummary } from '@/services/api/types'
+import { chinaParts } from '@/services/presentation'
 import { mediaUrl, LOCAL_TEST } from '@/services/api/environment'
 import { navigate, routes, loginPage, requireProfile } from '@/services/navigation'
 import { bootstrapIdentity, switchLocalTestActor, getLocalTestActor, localTestActors } from '@/services/wechat'
-const session = useSessionStore(), count = ref<number | null>(null), organizedCount = ref<number | null>(null), error = ref(''), loading = ref(false)
+const session = useSessionStore(), summary = ref<MyActivitySummary | null>(null), error = ref(''), loading = ref(false)
+const start = computed(() => summary.value?.nextRegistration ? chinaParts(summary.value.nextRegistration.startsAt) : null)
+const startLabel = computed(() => {
+  const parts = start.value
+  return parts ? parts.cnDate.slice(parts.cnDate.indexOf('年') + 1) + ' ' + parts.time : '时间待更新'
+})
 const unreadCount = ref(0)
 const canEditContent = ref(false)
 const backgroundUrl = ref(''), backgroundError = ref(''), backgroundFailed = ref(false)
@@ -53,7 +60,7 @@ async function load() {
   const current = ++generation
   let token = session.token, epoch = session.epoch
   const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
-  count.value = null; organizedCount.value = null; unreadCount.value = 0; error.value = ''; loading.value = false
+  summary.value = null; unreadCount.value = 0; error.value = ''; loading.value = false
   canEditContent.value = false
   loading.value = true
   try {
@@ -62,10 +69,9 @@ async function load() {
     token = session.token; epoch = session.epoch
     if (!session.member?.profileComplete) return
     void Promise.resolve().then(() => api.platformContent()).then(content => { if (isCurrent()) canEditContent.value = content.canEdit }).catch(() => undefined)
-    const [registered, organized, notifications] = await Promise.all([api.registrations(), api.organizedActivities(), api.notifications()])
+    const [activities, notifications] = await Promise.all([api.myActivitySummary(), api.notifications()])
     if (!isCurrent()) return
-    count.value = registered.activeCount
-    organizedCount.value = organized.total
+    summary.value = activities
     unreadCount.value = notifications.unreadCount
   } catch (e) { if (current === generation) error.value = errorMessage(e) }
   finally { if (current === generation) loading.value = false }
@@ -86,10 +92,9 @@ catch (e) {
 }
 finally {
     session.clear()
-    count.value = null
-    organizedCount.value = null
+    summary.value = null
 } }
-watch(() => [session.token, session.epoch], () => { count.value = null; organizedCount.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false }, { flush: 'sync' })
+watch(() => [session.token, session.epoch], () => { summary.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false }, { flush: 'sync' })
 onShow(() => { active = true; void load() })
 onHide(() => { active = false; generation++ })
 onUnload(() => { active = false; generation++ })
@@ -206,39 +211,34 @@ onUnload(() => { active = false; generation++ })
           hover-class="tile-pressed"
           @click="openRegistrations"
         >
-          <view class="row">
-            <view class="tile-icon">
-              <uni-icons
-                type="calendar"
-                size="50rpx"
-                color="#17553f"
-              />
-            </view><view class="grow"><view class="tile-title">我报名的</view><view class="muted"><text class="number">{{ loading?'…':count===null?'—':count }}</text> 个活动</view></view><text
-              class="entry-arrow"
-              aria-hidden="true"
-            >
-              {{ '>' }}
-            </text>
-          </view><view class="muted small tile-desc">查看已报名的活动</view>
-        </view><view
+          <view class="tile-head">
+            <view class="tile-icon"><uni-icons type="calendar" size="32rpx" color="#1c634c" /></view>
+            <text class="tile-title">我报名的</text>
+            <text class="entry-arrow" aria-hidden="true">›</text>
+          </view>
+          <template v-if="summary?.nextRegistration">
+            <view class="tile-activity">{{ summary.nextRegistration.title }}</view>
+            <view class="tile-metric">{{ startLabel }}</view>
+            <view class="tile-note">{{ start?.week }}{{ start && summary.nextRegistration.location ? ' · ' : '' }}{{ summary.nextRegistration.location }}</view>
+          </template>
+          <view v-else class="tile-empty">{{ loading ? '加载中…' : error ? '暂时无法加载' : summary?.registeredCount ? '暂无即将开始的活动' : '暂无待参加的活动' }}</view>
+        </view>
+        <view
           class="tile"
           hover-class="tile-pressed"
           @click="openMemberPage(routes.organizedActivities)"
         >
-          <view class="row">
-            <view class="tile-icon">
-              <uni-icons
-                type="paperplane-filled"
-                size="50rpx"
-                color="#17553f"
-              />
-            </view><view class="grow"><view class="tile-title">我发起的</view><view class="muted"><text class="number">{{ loading?'…':organizedCount===null?'—':organizedCount }}</text> 个活动</view></view><text
-              class="entry-arrow"
-              aria-hidden="true"
-            >
-              {{ '>' }}
-            </text>
-          </view><view class="muted small tile-desc">查看我发起的活动</view>
+          <view class="tile-head">
+            <view class="tile-icon"><uni-icons type="paperplane" size="32rpx" color="#1c634c" /></view>
+            <text class="tile-title">我发起的</text>
+            <text class="entry-arrow" aria-hidden="true">›</text>
+          </view>
+          <template v-if="summary?.latestOrganized">
+            <view class="tile-activity">{{ summary.latestOrganized.title }}</view>
+            <view class="tile-metric">{{ summary.latestOrganized.activeRegistrationCount }} <text class="metric-unit">人已报名</text></view>
+            <view class="tile-note">{{ summary.latestOrganized.capacity == null ? '人数不限' : '限额 ' + summary.latestOrganized.capacity + ' 人' }}</view>
+          </template>
+          <view v-else class="tile-empty">{{ loading ? '加载中…' : error ? '暂时无法加载' : '暂无已发布的活动' }}</view>
         </view>
       </view>
       <view class="menu-card">
@@ -391,13 +391,18 @@ onUnload(() => { active = false; generation++ })
 .namecard .small { line-height: 1.55; font-size: 23rpx; }
 .namecard .edit { min-height: 88rpx; padding: 14rpx 18rpx; }
 .activity-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16rpx; margin-bottom: 22rpx; }
-.tile { min-width: 0; min-height: 196rpx; padding: 24rpx 22rpx; border: 1rpx solid #e8e9e6; border-radius: 17rpx; background: #fff; }
-.tile .row { gap: 14rpx; }
-.tile-icon { background: #e8f0eb; border-radius: 24rpx; width: 86rpx; height: 92rpx; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.tile-title { font-size: 28rpx; font-weight: 600; line-height: 1.4; margin-bottom: 8rpx; color: #18271f; }
-.tile .muted { font-size: 23rpx; line-height: 1.5; }
-.number { font-size: 40rpx; line-height: 1.1; color: #1c7154; font-variant-numeric: tabular-nums; }
-.tile-desc { margin-top: 22rpx; }
+.tile { box-sizing:border-box; display:flex; flex-direction:column; min-width:0; min-height:220rpx; padding:20rpx; background:#fff; border:1rpx solid #dfe7e1; border-radius:18rpx; }
+.tile-head { display:flex; align-items:center; gap:9rpx; }
+.tile-head .entry-arrow { margin-left:auto; color:#799082; }
+.tile-icon { display:flex; align-items:center; justify-content:center; width:47rpx; height:47rpx; flex:none; border-radius:14rpx; background:#e8f2ec; }
+.tile-title { font-size:28rpx; font-weight:600; line-height:1.4; margin-bottom:8rpx; color:#18271f; }
+.tile-head .tile-title { margin:0; }
+.tile-activity { margin:16rpx 0 12rpx; font-size:25rpx; color:#3c5145; line-height:1.45; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+.tile-metric { color:#165b43; font-size:36rpx; font-weight:600; font-variant-numeric:tabular-nums; line-height:1.3; }
+.metric-unit { font-size:23rpx; font-weight:400; }
+.tile-note,.tile-empty { font-size:23rpx; color:#63756a; line-height:1.5; }
+.tile-note { margin-top:5rpx; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tile-empty { margin:auto 0; }
 .menu-card { background: #fff; border: 1rpx solid #e8e9e6; border-radius: 19rpx; padding: 0 24rpx; }
 .menu-row { padding: 28rpx 8rpx; gap: 24rpx; min-height: 134rpx; }
 .menu-row + .menu-row { border-top: 1rpx solid #eaeeeb; }
@@ -410,6 +415,6 @@ onUnload(() => { active = false; generation++ })
   .namecard-icon { width: 114rpx; }
   .namecard .edit { padding-left: 12rpx; padding-right: 12rpx; }
   .tile { padding-left: 16rpx; padding-right: 16rpx; }
-  .tile .row { gap: 10rpx; }
+
 }
 </style>

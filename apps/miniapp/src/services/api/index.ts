@@ -74,6 +74,7 @@ async function memberMutation(path: string, method: 'POST', body: object) {
   return member
 }
 export const api = {
+  myActivitySummary: () => request<import('./types').MyActivitySummary>('/members/me/activity-summary', 'GET', undefined, true),
   activityPoster: (id: string) => request<import('./types').ActivityPoster>(`/activities/${encodeURIComponent(id)}/poster`, 'GET', undefined, true),
   generatePosterCopy: (id: string) => request<import('./types').PosterDraft>(`/organizer/activities/${encodeURIComponent(id)}/poster-draft`, 'POST', {}, true, 100000),
   savePosterCopy: (id: string, input: import('./types').PosterCopyInput) => request<import('./types').ActivityPoster>(`/organizer/activities/${encodeURIComponent(id)}/poster`, 'PUT', input, true),

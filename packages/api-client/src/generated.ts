@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/members/me/activity-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FlowController_activitySummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/activities/{id}/registrations/me/answers": {
         parameters: {
             query?: never;
@@ -2063,6 +2079,25 @@ export interface components {
             /** @description 北京时间的 YYYY-MM，累计榜为 null */
             month: string | null;
         };
+        NextRegisteredActivityDto: {
+            id: string;
+            title: string;
+            location: string;
+            /** Format: date-time */
+            startsAt: string;
+        };
+        LatestOrganizedActivityDto: {
+            id: string;
+            title: string;
+            activeRegistrationCount: number;
+            capacity: number | null;
+        };
+        MyActivitySummaryDto: {
+            registeredCount: number;
+            organizedCount: number;
+            nextRegistration: components["schemas"]["NextRegisteredActivityDto"] | null;
+            latestOrganized: components["schemas"]["LatestOrganizedActivityDto"] | null;
+        };
         RegistrationInput: {
             specialInviteCode?: string;
             recommendationToken?: string;
@@ -3802,6 +3837,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeaderboardDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    FlowController_activitySummary: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyActivitySummaryDto"];
                 };
             };
             400: {

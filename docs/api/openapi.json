@@ -1072,6 +1072,111 @@
         ]
       }
     },
+    "/api/v1/members/me/activity-summary": {
+      "get": {
+        "operationId": "FlowController_activitySummary",
+        "parameters": [
+          {
+            "name": "authorization",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyActivitySummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "activities"
+        ]
+      }
+    },
     "/api/v1/activities/{id}/registrations/me/answers": {
       "post": {
         "operationId": "FlowController_editFromMiniapp",
@@ -13120,6 +13225,89 @@
         "required": [
           "items",
           "month"
+        ]
+      },
+      "NextRegisteredActivityDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "location",
+          "startsAt"
+        ]
+      },
+      "LatestOrganizedActivityDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "activeRegistrationCount": {
+            "type": "number"
+          },
+          "capacity": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "activeRegistrationCount",
+          "capacity"
+        ]
+      },
+      "MyActivitySummaryDto": {
+        "type": "object",
+        "properties": {
+          "registeredCount": {
+            "type": "number"
+          },
+          "organizedCount": {
+            "type": "number"
+          },
+          "nextRegistration": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NextRegisteredActivityDto"
+              }
+            ]
+          },
+          "latestOrganized": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LatestOrganizedActivityDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "registeredCount",
+          "organizedCount",
+          "nextRegistration",
+          "latestOrganized"
         ]
       },
       "RegistrationInput": {
