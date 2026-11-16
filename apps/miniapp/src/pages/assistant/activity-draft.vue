@@ -5,11 +5,12 @@ import GatherMembershipNote from '@/components/business/GatherMembershipNote.vue
 import PageReturn from '@/components/base/PageReturn.vue'
 import { api, ApiError, errorMessage } from '@/services/api'
 import { API_BASE_URL } from '@/services/api/environment'
-import type { ActivityWriteInput, AiActivityDraft } from '@/services/api/types'
+import type { ActivityWriteInput } from '@/services/api/types'
 import { archiveGatherHistory, readGatherHistory, removeGatherHistory, GATHER_HISTORY_TTL } from '@/services/gather-history'
 import type { GatherChatSnapshot, GatherHistoryItem } from '@/services/gather-history'
 import { stageActivityDraft } from '@/services/ai-draft'
-import { createGatherDraft, nextGatherQuestion, gatherQuestionFor, applyGatherAnswer, gatherContext, usableModelQuestion, publicText, gatherFacts, withJoiningDetails } from '@/services/gather-dialog'
+import { createGatherDraft, nextGatherQuestion, gatherQuestionFor, gatherContext, usableModelQuestion, publicText, gatherFacts } from '@/services/gather-dialog'
+import { applyGatherEdit } from '@/services/gather-edits'
 import type { GatherDraft, GatherField, GatherQuestion, GatherTurn } from '@/services/gather-dialog'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
 import { activityTimeRangeWeekday, feeDisclaimer } from '@/services/presentation'
@@ -19,9 +20,10 @@ const session = useSessionStore()
 const idea = ref('')
 const draft = ref<GatherDraft | null>(null)
 const reply = ref('')
+const dockReply = ref('')
 const custom = ref<boolean | 'offline'>(false)
 const editing = ref<GatherField | null>(null)
-type ChatTurn = GatherTurn & { facts?: string[] }
+type ChatTurn = GatherTurn & { facts?: string[]; freeEdit?: boolean }
 const exchanges = ref<ChatTurn[]>([])
 const sentIdea = ref('')
 const openingFacts = ref<string[]>([])
@@ -48,7 +50,7 @@ function current(request: number) {
   return !disposed && canInitiate.value && request === version && !!owner && owner === session.member?.id && !!session.token
 }
 function snapshot(): GatherChatSnapshot {
-  return { idea: idea.value, draft: draft.value, exchanges: exchanges.value, reply: busy.value && outgoing.value ? outgoing.value.answer : reply.value,
+  return { idea: idea.value, draft: draft.value, exchanges: exchanges.value, reply: reply.value, dockReply: dockReply.value,
     sentIdea: sentIdea.value, openingFacts: openingFacts.value,
     manual:manual.value, modelCard:modelCard.value, custom: custom.value, editing: editing.value, createdId: createdId.value, uncertainCreate: uncertainCreate.value }
 }
@@ -99,7 +101,9 @@ function resumeHistory(id: string) {
   idea.value = saved.idea; draft.value = saved.draft; exchanges.value = saved.exchanges
   sentIdea.value = saved.sentIdea || (saved.draft ? saved.idea : '')
   openingFacts.value = saved.openingFacts || []
-  reply.value = saved.reply || ''; editing.value = saved.editing || null; custom.value = saved.custom || false
+  reply.value = saved.dockReply === undefined && !saved.custom ? '' : saved.reply || ''
+  dockReply.value = saved.dockReply ?? (saved.custom ? '' : saved.reply || '')
+  editing.value = saved.editing || null; custom.value = saved.custom || false
   createdId.value = saved.createdId || ''; uncertainCreate.value = !!saved.uncertainCreate
   chatId = id; updatedAt = item.updatedAt; lastSnapshot = JSON.stringify(snapshot())
   showHistory.value = false
@@ -109,7 +113,7 @@ function clearForm() {
   chatId = ''; updatedAt = 0; lastSnapshot = ''
   sentIdea.value = ''; openingFacts.value = []; outgoing.value = null
   modelCard.value = null; manual.value = false
-  idea.value = ''; draft.value = null; exchanges.value = []; reply.value = ''; editing.value = null
+  idea.value = ''; dockReply.value = ''; draft.value = null; exchanges.value = []; reply.value = ''; editing.value = null
   custom.value = false; createdId.value = ''; uncertainCreate.value = false; error.value = ''
 }
 function forget() {
@@ -188,8 +192,8 @@ const starters = ['想约几位同行聊聊 AI 应用', '周末办一场十来�
 const focused = ref<'dock' | 'card' | null>(null)
 const keyboard = ref(0)
 const message = computed({
-  get: () => busy.value ? '' : draft.value ? reply.value : idea.value,
-  set: (value: string) => { if (draft.value) reply.value = value; else idea.value = value }
+  get: () => busy.value ? '' : draft.value ? dockReply.value : idea.value,
+  set: (value: string) => { if (draft.value) dockReply.value = value; else idea.value = value }
 })
 async function focusComposer(target: 'dock' | 'card') {
   focused.value = null
@@ -207,6 +211,12 @@ function writeAnswer() {
   custom.value = true
   void focusComposer('card')
 }
+function sendCard() {
+  if (!reply.value.trim() || busy.value || checking.value) return
+  void answer(reply.value, false, 'card')
+  focused.value = null
+  uni.hideKeyboard()
+}
 function sendMessage() {
   const text = message.value.trim()
   if (!text || busy.value || checking.value) return
@@ -223,6 +233,7 @@ watch(() => [question.value?.prompt, exchanges.value.length, outgoing.value, sen
   let selector = ''
   if (outgoing.value) selector = '#outgoing'
   else if (!draft.value && sentIdea.value) selector = '#sent-idea'
+  else if (draft.value && !question.value) selector = '#invite-preview'
   else if (!editing.value && latest >= 0 && exchanges.value[latest].facts?.length) selector = '#facts-' + latest
   else if (!editing.value && latest < 0 && openingFacts.value.length) selector = '#opening-facts'
   else if (draft.value) selector = question.value ? '#active-question' : '#invite-preview'
@@ -249,88 +260,61 @@ function edit(field: GatherField) {
   if (busy.value || createdId.value) return
   outgoing.value = null; editing.value = field; custom.value = false; reply.value = ''; error.value = ''
 }
-function acceptAnswer(d: GatherDraft, text: string, prompt: string, field: GatherField) {
-  const facts = gatherFacts(draft.value, d)
-  draft.value = d; exchanges.value.push({prompt,answer:text,field,facts})
-  outgoing.value = null
-  editing.value = null; reply.value = ''; custom.value = false; error.value = ''
-  persist()
-}
-function mergeReply(d: GatherDraft, patch: AiActivityDraft): GatherDraft {
-  const next = {...d}
-  for (const field of ['title','description','location','startsAt','endsAt','registrationDeadline'] as const)
-    if (patch[field]?.trim()) next[field] = patch[field]
-  if (patch.capacity !== null) next.capacity = patch.capacity
-  if (patch.feeType) {
-    next.feeType = patch.feeType
-    next.feeAmountCents = patch.feeType === 'free' ? null : patch.feeAmountCents ?? (d.feeType === 'paid' ? d.feeAmountCents : null)
-  }
-  if (patch.startsAt && Number.isFinite(Date.parse(patch.startsAt))) {
-    const china = new Date(Date.parse(patch.startsAt) + 8 * 3600000)
-    next.date = china.toISOString().slice(0,10)
-    next.period = china.getUTCHours() < 12 ? '上午' : china.getUTCHours() < 18 ? '下午' : '晚上'
-  }
-  return next
-}
-async function answer(value: string, suggested = false) {
+async function answer(value: string, suggested = false, source: 'chat' | 'card' = 'chat') {
   const q = question.value, d = draft.value
-  if (!q || !d || busy.value || !current(version)) return
-  let text = value.trim()
-  if (!text) { error.value = '请填写你的回答'; return }
-  if (suggested && q.field === 'contact' && text.startsWith('使用我的手机号')) text = session.member?.boundPhone || ''
-  error.value = ''
-  if (q.field === 'location' && text === '线下聚会') {
+  if (!d || busy.value || checking.value || createdId.value || uncertainCreate.value || !current(version)) return
+  if (suggested) source = 'card'
+  if (source === 'card' && !q) return
+  const text = suggested && q?.field === 'contact' && value.startsWith('使用我的手机号')
+    ? session.member?.boundPhone || '' : value.trim()
+  if (!text) return
+  if (q?.field === 'location' && text === '线下聚会') {
     custom.value = 'offline'
     void focusComposer('card')
     return
   }
-  const compound = !suggested && ['location','title','description'].includes(q.field)
-    && /[，,。；;\n].*(?:免费|收费|限|最多|地点|时间|人数|每人)/.test(text)
-  const next = compound ? d : applyGatherAnswer(d, q.field, text)
-  const known = JSON.stringify(next) !== JSON.stringify(d) || !!editing.value && !compound
-  const turn = {field:q.field, prompt:q.prompt, answer:value}
-  outgoing.value = turn
-  reply.value = ''
-  const finishLocally = () => {
-    if (!known) {
-      reply.value = value
-      error.value = '请按当前问题填写，或打开完整编辑页补充。'
+  const freeEdit = source === 'chat'
+  const turn = {field:q?.field ?? 'time', prompt:freeEdit ? '补充或修改安排' : q!.prompt, answer:value, freeEdit}
+  const local = applyGatherEdit(d, text, q?.field ?? null, source)
+  const request = version
+  const commit = (next: GatherDraft, card: GatherQuestion | null) => {
+    const facts = gatherFacts(d, next)
+    const clarification = usableModelQuestion(card, next)
+    if (!clarification && !facts.length && JSON.stringify(d) === JSON.stringify(next) && !suggested) {
+      error.value = '还没有识别出新的安排，请写明要修改的内容。'
       return
     }
-    modelCard.value = null
-    acceptAnswer(next, value, q.prompt, q.field)
+    draft.value = next
+    exchanges.value.push({...turn, facts})
+    outgoing.value = null
+    const pendingCard = freeEdit && facts.length ? usableModelQuestion(q, next) : null
+    modelCard.value = pendingCard || clarification
+    if (freeEdit) dockReply.value = ''
+    if (!freeEdit || question.value?.field !== q?.field) {
+      editing.value = null; custom.value = false; reply.value = ''
+    }
+    error.value = ''
+    persist()
   }
-  if (q.field === 'contact' || manual.value || (suggested && known && !nextGatherQuestion(next))) {
-    finishLocally()
+  outgoing.value = turn; error.value = ''
+  const localContact = local.consultationContact !== d.consultationContact || (q?.field === 'contact' && !freeEdit)
+  if (localContact || manual.value || (suggested && !nextGatherQuestion(local))) {
+    commit(local, modelCard.value)
     return
   }
-  const request = version
-  const field = q.field === 'date' ? 'time' : q.field === 'amount' ? 'fee' : q.field === 'joining' ? 'location' : q.field
-  const period = next.period === '上午' ? 'morning' : next.period === '下午' ? 'afternoon' : next.period === '晚上' ? 'evening' : undefined
+  const target = q?.field || 'time'
+  const field = target === 'date' || target === 'contact' ? 'time' : target === 'amount' ? 'fee' : target === 'joining' ? 'location' : target
+  const period = d.period === '上午' ? 'morning' : d.period === '下午' ? 'afternoon' : d.period === '晚上' ? 'evening' : undefined
   busy.value = true
   try {
-    const result = await api.interpretActivityReply(publicText(text), field, next.date || undefined, period, gatherContext(next, [...exchanges.value,turn]))
+    const result = await api.interpretActivityReply(publicText(text), field, d.date || undefined, period, gatherContext(local, [...exchanges.value, {...turn, prompt:q?.prompt ?? turn.prompt}]))
     if (!current(request)) return
-    const merged = mergeReply(next, result.draft)
-    if (next.location && merged.location && (
-      (next.location !== d.location && next.location.includes(merged.location)) ||
-      (publicText(next.location) !== next.location && publicText(next.location) === merged.location)
-    )) merged.location = next.location
-    merged.location = withJoiningDetails(merged.location, text)
-    modelCard.value = usableModelQuestion(result.nextQuestion, merged)
-    if (!known && !modelCard.value && JSON.stringify(merged) === JSON.stringify(d)) {
-      reply.value = value
-      error.value = '这项安排还没有确定，你可以再具体一点。'
-      return
-    }
-    acceptAnswer(merged, value, q.prompt, q.field)
+    commit(applyGatherEdit(d, text, q?.field ?? null, source, result.draft), result.nextQuestion ?? null)
   } catch (e) {
     if (!current(request)) return
     manual.value = true
-    if (known) finishLocally()
-    else reply.value = value
+    commit(local, null)
     error.value = errorMessage(e) + '。已保留回答，可继续手动补齐。'
-    persist()
   } finally { if (current(request)) busy.value = false }
 }
 function moreSettings() {
@@ -430,7 +414,8 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
           class="past-turn"
         >
           <view class="past-prompt">{{ turn.prompt }}</view>
-          <button
+          <view v-if="turn.freeEdit" class="user-bubble">{{ turn.answer }}</view>
+          <button v-else
             class="user-bubble past-answer"
             :disabled="busy"
             @click="edit(turn.field)"
@@ -499,9 +484,9 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
               <textarea v-model="reply" class="chat-input" :focus="focused === 'card'" auto-height
                 :disabled="busy || checking" :maxlength="1000" :cursor-spacing="88" confirm-type="send"
                 :placeholder="question.field === 'location' ? '输入场地名称或详细地址' : '填写你的回答'"
-                @keyboardheightchange="keyboard = $event.detail.height" @focus="focused = 'card'" @blur="blurComposer('card')" @confirm="reply = $event.detail.value; sendMessage()" />
+                @keyboardheightchange="keyboard = $event.detail.height" @focus="focused = 'card'" @blur="blurComposer('card')" @confirm="reply = $event.detail.value; sendCard()" />
             </view>
-            <button class="send" :disabled="busy || checking || !reply.trim()" @tap="sendMessage">发送</button>
+            <button class="send" :disabled="busy || checking || !reply.trim()" @tap="sendCard">发送</button>
           </view>
           <button
             v-if="editing"
@@ -596,7 +581,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         {{ createdId ? '继续发布' : '确认发布' }}
       </button>
     </view>
-    <view v-if="canInitiate && !showHistory && (!draft || question)" class="chat-dock" :style="{bottom:keyboard + 'px'}">
+    <view v-if="canInitiate && !showHistory && !createdId && !uncertainCreate" class="chat-dock" :style="{bottom:keyboard + 'px'}">
       <view v-if="!draft && !busy" class="opening-actions">
         <button class="text-link" :disabled="busy" @click="navigate(routes.editor)">手动填写</button>
       </view>
@@ -604,7 +589,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         <view class="input-shell">
           <textarea v-model="message" class="chat-input" :disabled="busy || checking" :maxlength="draft ? 1000 : 5000"
             :focus="focused === 'dock'" :adjust-position="false" fixed auto-height confirm-type="send"
-            :placeholder="draft ? '回复 i 助手…' : '说说你的聚会想法…'"
+            :placeholder="draft ? '补充或修改聚会安排…' : '说说你的聚会想法…'"
             @keyboardheightchange="keyboard = $event.detail.height" @focus="focused = 'dock'" @blur="blurComposer('dock')"
             @confirm="message = $event.detail.value; sendMessage()" />
         </view>

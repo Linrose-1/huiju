@@ -15,11 +15,11 @@ function script(path, exported) {
   return ts.transpileModule(source + `\nexport { ${exported} };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
 }
 
-function loadDialog() {
-  const source = readFileSync(new URL('../src/services/gather-dialog.ts', import.meta.url), 'utf8')
+function loadGatherService(name, deps = {}) {
+  const source = readFileSync(new URL('../src/services/' + name + '.ts', import.meta.url), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const exports = {}
-  new Function('exports', code)(exports)
+  new Function('exports','require', code)(exports, id => deps[id] || require(id))
   return exports
 }
 
@@ -44,17 +44,20 @@ function makePage(t, storage = new Map()) {
   const historySource = readFileSync(new URL('../src/services/gather-history.ts', import.meta.url), 'utf8')
   const historyModule = {}
   new Function('exports','uni',ts.transpileModule(historySource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(historyModule,uni)
+  const dialog = loadGatherService('gather-dialog')
   const deps = {
     '@dcloudio/uni-app': {onShow:fn=>lifecycle.show=fn,onUnload:fn=>lifecycle.unload=fn,onHide:fn=>lifecycle.hide=fn},
     '@/services/gather-history':historyModule,
-    '@/services/gather-dialog':loadDialog(), '@/services/presentation':{}, '@/services/api/environment':{API_BASE_URL:'local'},
+    '@/services/gather-dialog':dialog,
+    '@/services/gather-edits':loadGatherService('gather-edits', {'./gather-dialog':dialog}),
+    '@/services/presentation':{}, '@/services/api/environment':{API_BASE_URL:'local'},
     '@/services/api':{api, errorMessage:e=>e.message, ApiError:class extends Error {}}, '@/services/ai-draft':{},
     '@/services/navigation':{ routes:{manage:'/manage'}, requireProfile: async()=>true, navigate:url=>navigation.push(url) },
     '@/stores/session':{useSessionStore:()=>session}
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
   return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
 }
@@ -89,7 +92,7 @@ test('complete conversation produces preview, publishes only after confirmation 
   await page.answer('14:00–16:00',true)
   assert.equal(page.question.value.field,'location')
   await page.answer('线上聚会')
-  await page.answer('报名后发会议链接',true)
+  await page.answer('报名后发会议链接')
   await page.answer('免费',true)
   await page.answer('群内联系发起人')
   assert.equal(page.question.value,null)
@@ -232,8 +235,10 @@ test('online venue completes location and unsolicited joining details are kept w
         : {field:'fee',prompt:'明天的 AI 沙龙如何收费？',options:['免费参与','收费']} }
   }
   await page.answer('线上聚会')
+  assert.equal(page.draft.value.location, '线上聚会')
   assert.equal(calls[0][4].known.find(item=>item.field==='location').value,'线上聚会')
   assert.equal(calls[0][4].recent.at(-1).prompt,'聚会在哪里举办？')
+  assert.equal(calls[0][4].recent.at(-1).answer, '线上聚会')
   assert.equal(page.question.value.field,'time')
   assert.ok(!calls[0][4].pending.includes('joining'))
   await page.answer('报名后发腾讯会议链接，免费，最多十人')
@@ -324,7 +329,7 @@ test('messages appear before the API responds and each reply keeps its own confi
   const interrupted = makePage(t, new Map(storage))
   await interrupted.lifecycle.show()
   resumeChat(interrupted.page,'明天下午办读书会')
-  assert.equal(interrupted.page.reply.value,text)
+  assert.equal(interrupted.page.message.value,text)
   assert.equal(interrupted.requests.length,0)
   resolveReply({ draft: { ...blankDraft, title: null, description: null } })
   await new Promise(resolve => setImmediate(resolve))
@@ -386,4 +391,69 @@ test('community status is checked again before returning to the AI gathering con
   await h.lifecycle.show()
   assert.equal(h.page.canInitiate.value, false); assert.equal(h.page.invitedFriend.value, true); assert.equal(h.page.accessError.value, '')
   assert.equal(h.requests.length, 0)
+})
+
+test('card and chat keep separate unsent text, including after restoring the conversation', async t => {
+  const h = makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value = '明天下午交流'
+  const pending = h.page.generate()
+  h.requests[0].resolve({draft:blankDraft, nextQuestion:{field:'location',prompt:'在哪里聚会？',options:[]}})
+  await pending
+  h.page.writeAnswer()
+  h.page.reply.value = '珠江书房'
+  h.page.message.value = '人数改成15人'
+  assert.equal(h.page.reply.value, '珠江书房')
+  h.lifecycle.unload()
+  const restored = makePage(t, h.storage)
+  await restored.lifecycle.show()
+  resumeChat(restored.page, '明天下午交流')
+  assert.equal(restored.page.reply.value, '珠江书房')
+  assert.equal(restored.page.message.value, '人数改成15人')
+  restored.page.sendCard()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(restored.page.draft.value.location, '珠江书房')
+  assert.equal(restored.page.draft.value.capacity, null)
+  assert.equal(restored.page.message.value, '人数改成15人')
+})
+
+test('chat changes capacity while location is pending and again from preview, preserving other confirmed values', async t => {
+  const h = makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value = '一场免费聚会'
+  const generating = h.page.generate()
+  const initial = {...blankDraft,startsAt:'2099-12-01T14:00:00+08:00',endsAt:'2099-12-01T16:00:00+08:00',feeType:'free',capacity:20}
+  h.requests[0].resolve({draft:initial})
+  await generating
+  assert.equal(h.page.question.value.field, 'location')
+  const initialState = JSON.parse(JSON.stringify(h.page.draft.value))
+  h.page.writeAnswer()
+  h.page.reply.value = '珠江书房'
+  h.api.interpretActivityReply = async () => ({
+    draft:{...initial,title:'新主题',description:'新介绍',location:'模型补写的地点',feeType:'paid',feeAmountCents:5000,capacity:15}
+  })
+  h.page.message.value = '人数改成15人'
+  h.page.sendMessage()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(h.page.draft.value, {...initialState,capacity:15})
+  assert.equal(h.page.question.value.field,'location')
+  assert.equal(h.page.reply.value, '珠江书房')
+  h.page.sendCard()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(h.page.draft.value, {...initialState,capacity:15,location:'珠江书房'})
+  assert.equal(h.page.question.value.field,'contact')
+  h.page.writeAnswer()
+  h.page.reply.value = '联系发起人'
+  h.page.sendCard()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(h.page.question.value,null)
+  const preview = JSON.parse(JSON.stringify(h.page.draft.value))
+  h.api.interpretActivityReply = async () => ({draft:{...initial,location:'模型补写的地点',capacity:12}})
+  h.page.message.value = '人数改成12人，其他照旧'
+  h.page.sendMessage()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(h.page.draft.value, {...preview,capacity:12})
+  assert.equal(h.page.question.value,null)
+  assert.deepEqual(h.page.exchanges.value.at(-1).facts,['人数 最多 12 人'])
+  assert.deepEqual(h.modals,[])
 })

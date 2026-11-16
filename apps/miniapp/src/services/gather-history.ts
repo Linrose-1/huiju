@@ -4,6 +4,7 @@ export type GatherChatSnapshot = {
   idea: string
   draft: GatherDraft | null
   exchanges: (GatherTurn & { facts?: string[] })[]
+  dockReply?: string
   reply: string
   sentIdea: string
   openingFacts: string[]
