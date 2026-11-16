@@ -54,7 +54,7 @@ function makePage(t, storage = new Map()) {
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'canInitiate,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
   return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
 }
@@ -384,6 +384,6 @@ test('community status is checked again before returning to the AI gathering con
   await h.lifecycle.show(); assert.equal(h.page.canInitiate.value, true)
   h.api.communityAccess = async () => ({isRegistered:false})
   await h.lifecycle.show()
-  assert.equal(h.page.canInitiate.value, false); assert.match(h.page.accessError.value, /在册会员/)
+  assert.equal(h.page.canInitiate.value, false); assert.equal(h.page.invitedFriend.value, true); assert.equal(h.page.accessError.value, '')
   assert.equal(h.requests.length, 0)
 })

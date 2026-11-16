@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import GatherMembershipNote from '@/components/business/GatherMembershipNote.vue'
 import PageReturn from '@/components/base/PageReturn.vue'
 import { api, ApiError, errorMessage } from '@/services/api'
 import { API_BASE_URL } from '@/services/api/environment'
@@ -35,6 +36,8 @@ const error = ref('')
 const busy = ref(false)
 const checking = ref(true)
 const canInitiate = ref(false)
+const invitedFriend = ref(false)
+function returnToAssistant() { uni.switchTab({ url: routes.assistant }) }
 const accessError = ref('')
 const createdId = ref('')
 const uncertainCreate = ref(false)
@@ -127,6 +130,7 @@ async function checkProfile() {
   const request = ++version
   checking.value = true
   canInitiate.value = false
+  invitedFriend.value = false
   accessError.value = ''
   try {
     const ready = await requireProfile(routes.activityDraft)
@@ -134,7 +138,7 @@ async function checkProfile() {
     if (!ready || !session.member?.id) { accessError.value = '请先完善会员资料'; return }
     const access = await api.communityAccess()
     if (disposed || request !== version) return
-    if (!access.isRegistered) { accessError.value = '只有本社群在册会员可以发起聚会。可联系社群管理员确认会员身份。'; return }
+    if (!access.isRegistered) { invitedFriend.value = true; return }
     canInitiate.value = true
     if (owner === session.member.id) {
       refreshHistory()
@@ -390,6 +394,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
     <PageReturn />
     <view v-if="!canInitiate" class="conversation">
       <view v-if="checking" class="helper">正在确认社群身份…</view>
+      <GatherMembershipNote v-else-if="invitedFriend" @back="returnToAssistant" />
       <view v-else class="error">{{ accessError }} <button class="text-link" @click="checkProfile">重新加载</button></view>
     </view>
     <view v-else-if="showHistory" class="conversation">
