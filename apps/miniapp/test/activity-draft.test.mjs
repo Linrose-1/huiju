@@ -27,10 +27,13 @@ const blankDraft = {
   title:'聚会',description:'讨论社群运营',location:null,startsAt:null,endsAt:null,registrationDeadline:null,
   capacity:null,feeType:null,feeAmountCents:null,questions:[]
 }
+function card(field) {
+  return field ? {field,prompt:'模型生成的' + field + '问题',options:[]} : null
+}
 function makePage(t, storage = new Map()) {
   const session = reactive({ token:'token', epoch:1, member:{id:'a'} })
   const requests = [], navigation = [], lifecycle = {}, decisions = [], modals = []
-  const api = { communityAccess: async () => ({isRegistered:true}), interpretActivityReply: async () => ({ draft:{...blankDraft,title:null,description:null}, nextQuestion:null }), generateActivityDraft: idea => new Promise((resolve, reject) => requests.push({idea, resolve, reject})) }
+  const api = { communityAccess: async () => ({isRegistered:true}), interpretActivityReply: async (_answer,_field,_date,_period,context) => ({ draft:{...blankDraft,title:null,description:null}, nextQuestion:card(context.pending[0]) }), generateActivityDraft: (idea,context) => new Promise((resolve, reject) => requests.push({idea, context, resolve, reject})) }
   const uni = {
     setStorageSync:(k,v) => storage.set(k,v), getStorageSync:k => storage.get(k), removeStorageSync:k => storage.delete(k),
     hideKeyboard() {}, pageScrollTo() {}, showModal(options) {
@@ -57,7 +60,7 @@ function makePage(t, storage = new Map()) {
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,manual,options,useManual,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
   return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
 }
@@ -76,7 +79,7 @@ test('gather dialog preserves failed input, suppresses duplicate generation and 
   assert.equal(page.error.value,'网络中断')
   const stale=page.generate()
   session.epoch++
-  requests[1].resolve({draft:blankDraft})
+  requests[1].resolve({draft:blankDraft,nextQuestion:card('time')})
   await stale
   assert.equal(page.draft.value,null)
 })
@@ -86,7 +89,7 @@ test('complete conversation produces preview, publishes only after confirmation 
   await lifecycle.show()
   page.idea.value='明天下午讨论社群运营'
   const pending=page.generate()
-  requests[0].resolve({draft:blankDraft})
+  requests[0].resolve({draft:blankDraft,nextQuestion:card('time')})
   await pending
   assert.equal(page.question.value.field,'time')
   await page.answer('14:00–16:00',true)
@@ -123,14 +126,14 @@ test('compound text can supply place, fee and capacity in one turn, contact stay
   await lifecycle.show()
   page.idea.value='明天讲社群运营'
   const pending=page.generate()
-  requests[0].resolve({draft:blankDraft})
+  requests[0].resolve({draft:blankDraft,nextQuestion:card('time')})
   await pending
   await page.answer('14:00–16:00',true)
   const input='在创客厅，免费，限20人'
   const calls=[]
   api.interpretActivityReply=async(...args)=>{
     calls.push(args)
-    return {draft:{...blankDraft,title:null,description:null,location:'创客厅',feeType:'free',capacity:20}}
+    return {draft:{...blankDraft,title:null,description:null,location:'创客厅',feeType:'free',capacity:20},nextQuestion:card('contact')}
   }
   decisions.push(true)
   await page.answer(input)
@@ -201,7 +204,7 @@ test('chat starter can be edited before sending and the same composer answers th
   page.message.value = '明天下午办读书会'
   page.sendMessage()
   assert.equal(requests[0].idea, '明天下午办读书会')
-  requests[0].resolve({ draft: blankDraft })
+  requests[0].resolve({ draft: blankDraft, nextQuestion:card('time') })
   await new Promise(resolve => setImmediate(resolve))
   page.writeAnswer()
   page.message.value = '三点到五点，免费，最多20人'
@@ -214,16 +217,33 @@ test('chat starter can be edited before sending and the same composer answers th
   assert.equal(requests.length, 1)
 })
 
+test('venue cards offer offline entry with empty suggestions and ask for an address for venue types', async t => {
+  for (const suggestions of [[], ['安静的咖啡馆（填地址）']]) {
+    const {page, requests, lifecycle} = makePage(t)
+    await lifecycle.show()
+    page.idea.value = '想约几位同行聊聊 AI 应用'
+    const generation = page.generate()
+    requests[0].resolve({draft:blankDraft,nextQuestion:{...card('location'),options:suggestions}})
+    await generation
+    const option = suggestions[0] || '线下聚会'
+    assert.deepEqual(page.options.value,[option])
+    await page.answer(option,true)
+    assert.equal(page.custom.value,suggestions.length ? option : 'offline')
+    assert.equal(page.draft.value.location,null)
+  }
+})
+
 test('online venue completes location and unsolicited joining details are kept without another card', async t => {
   const { page, requests, lifecycle, api } = makePage(t)
   await lifecycle.show()
   page.idea.value = '明天聊 AI'
   const pending = page.generate()
   requests[0].resolve({ draft:blankDraft,
-    nextQuestion:{field:'location',prompt:'同行们准备在哪里交流 AI？',options:['线上聚会','行业园区']} })
+    nextQuestion:{field:'location',prompt:'同行们准备在哪里交流 AI？',options:['线下聚会','行业园区']} })
   await pending
   assert.equal(page.question.value.field, 'location')
-  assert.deepEqual(page.options.value,['线下聚会'])
+  assert.equal(page.question.value.prompt,'同行们准备在哪里交流 AI？')
+  assert.deepEqual(page.options.value,['线下聚会','行业园区'])
   await page.answer('线下聚会',true)
   assert.equal(page.custom.value,'offline')
   assert.equal(page.draft.value.location,null)
@@ -237,18 +257,20 @@ test('online venue completes location and unsolicited joining details are kept w
   await page.answer('线上聚会')
   assert.equal(page.draft.value.location, '线上聚会')
   assert.equal(calls[0][4].known.find(item=>item.field==='location').value,'线上聚会')
-  assert.equal(calls[0][4].recent.at(-1).prompt,'聚会在哪里举办？')
+  assert.equal(calls[0][4].recent.at(-1).prompt,'同行们准备在哪里交流 AI？')
   assert.equal(calls[0][4].recent.at(-1).answer, '线上聚会')
-  assert.equal(page.question.value.field,'time')
+  assert.equal(page.question.value,null)
+  assert.equal(page.previewReady.value,false)
   assert.ok(!calls[0][4].pending.includes('joining'))
   await page.answer('报名后发腾讯会议链接，免费，最多十人')
   assert.equal(page.draft.value.location,'线上聚会 · 报名后发腾讯会议链接')
   assert.equal(page.draft.value.feeType,'free')
   assert.equal(page.draft.value.capacity,10)
-  assert.equal(page.question.value.field,'time')
+  assert.equal(page.question.value,null)
+  assert.equal(page.previewReady.value,false)
 })
 
-test('AI outage preserves answers and offers local completion', async t => {
+test('AI outage preserves answers until an explicit question retry and prevents premature publish', async t => {
   const { page, requests, lifecycle, api } = makePage(t)
   await lifecycle.show()
   page.idea.value = '明天下午读书会'
@@ -260,11 +282,18 @@ test('AI outage preserves answers and offers local completion', async t => {
   await page.answer('免费',true)
   assert.equal(page.draft.value.feeType,'free')
   assert.equal(page.exchanges.value.at(-1).answer,'免费')
-  assert.equal(page.manual.value,true)
-  await page.answer('14:00–16:00',true)
-  assert.equal(calls,1)
-  await page.answer('创客厅')
-  assert.equal(page.draft.value.location,'创客厅')
+  assert.equal(page.question.value,null)
+  assert.equal(page.previewReady.value,false)
+  await page.publish()
+  assert.equal(page.createdId.value,'')
+  const retry = page.requestQuestion()
+  await page.requestQuestion()
+  assert.equal(requests.length,2)
+  assert.equal(requests[1].context.known.find(row => row.field === 'fee').value,'free')
+  requests[1].resolve({draft:{...blankDraft,title:'不应该覆盖的标题'},nextQuestion:card('time')})
+  await retry
+  assert.equal(page.question.value.prompt,'模型生成的time问题')
+  assert.equal(page.draft.value.title,blankDraft.title)
   assert.equal(calls,1)
 })
 test('a clarification without a patch remains in history and survives opt-in restore', async t => {
@@ -276,7 +305,7 @@ test('a clarification without a patch remains in history and survives opt-in res
   requests[0].resolve({draft:blankDraft,nextQuestion:{field:'time',prompt:'想几点开始？',options:['14:00–16:00']}})
   await pending
   api.interpretActivityReply=async(...args)=>{
-    assert.equal(args[4].known.some(f=>f.field==='time'),false)
+    assert.match(args[4].known.find(f=>f.field==='time').value,/下午/)
     assert.ok(args[4].pending.includes('time'))
     return {draft:{...blankDraft,title:null,description:null},nextQuestion:{field:'time',prompt:'大家下班时间不同，傍晚哪段更合适？',options:['18:00–20:00','19:00–21:00']}}
   }
@@ -293,15 +322,16 @@ test('a clarification without a patch remains in history and survives opt-in res
   const legacy=makePage(t,new Map([['gather-dialog:v1:local:a',JSON.stringify(legacyRaw)]]))
   await legacy.lifecycle.show()
   resumeChat(legacy.page,legacyRaw.idea)
-  assert.equal(legacy.page.question.value.field,'time')
+  assert.equal(legacy.page.question.value,null)
+  assert.equal(legacy.page.previewReady.value,false)
   let followups = 0
   legacy.api.interpretActivityReply = async () => {
     followups++
     return { draft:{...blankDraft,title:null,description:null}, nextQuestion:null }
   }
-  await legacy.page.answer('15:00–17:00',true)
+  await legacy.page.answer('15:00–17:00')
   assert.equal(followups,1)
-  assert.equal(legacy.page.manual.value,false)
+  assert.equal(legacy.page.previewReady.value,false)
 })
 
 test('messages appear before the API responds and each reply keeps its own confirmed facts', async t => {
@@ -312,7 +342,7 @@ test('messages appear before the API responds and each reply keeps its own confi
   assert.equal(page.sentIdea.value, '明天下午办读书会')
   assert.equal(page.message.value, '')
   assert.deepEqual(page.openingFacts.value, [])
-  requests[0].resolve({ draft: blankDraft })
+  requests[0].resolve({ draft: blankDraft, nextQuestion:card('time') })
   await new Promise(resolve => setImmediate(resolve))
   assert.ok(page.openingFacts.value.some(fact => fact.startsWith('时间')))
   let resolveReply, calls = 0
@@ -371,7 +401,7 @@ test('starting over keeps sent messages readable in local history', async t => {
   await first.lifecycle.show()
   first.page.idea.value='园区读书会'
   const turn=first.page.generate()
-  first.requests[0].resolve({draft:blankDraft})
+  first.requests[0].resolve({draft:blankDraft,nextQuestion:card('date')})
   await turn
   await first.page.answer('明天')
   first.lifecycle.unload()
@@ -398,7 +428,7 @@ test('card and chat keep separate unsent text, including after restoring the con
   await h.lifecycle.show()
   h.page.idea.value = '明天下午交流'
   const pending = h.page.generate()
-  h.requests[0].resolve({draft:blankDraft, nextQuestion:{field:'location',prompt:'在哪里聚会？',options:[]}})
+  h.requests[0].resolve({draft:blankDraft, nextQuestion:{field:'location',prompt:'在哪里聚会？',options:['创客厅','园区书房']}})
   await pending
   h.page.writeAnswer()
   h.page.reply.value = '珠江书房'
@@ -423,13 +453,14 @@ test('chat changes capacity while location is pending and again from preview, pr
   h.page.idea.value = '一场免费聚会'
   const generating = h.page.generate()
   const initial = {...blankDraft,startsAt:'2099-12-01T14:00:00+08:00',endsAt:'2099-12-01T16:00:00+08:00',feeType:'free',capacity:20}
-  h.requests[0].resolve({draft:initial})
+  h.requests[0].resolve({draft:initial,nextQuestion:card('location')})
   await generating
   assert.equal(h.page.question.value.field, 'location')
   const initialState = JSON.parse(JSON.stringify(h.page.draft.value))
   h.page.writeAnswer()
   h.page.reply.value = '珠江书房'
-  h.api.interpretActivityReply = async () => ({
+  h.api.interpretActivityReply = async (_a,_f,_d,_p,context) => ({
+    nextQuestion:card(context.pending[0]),
     draft:{...initial,title:'新主题',description:'新介绍',location:'模型补写的地点',feeType:'paid',feeAmountCents:5000,capacity:15}
   })
   h.page.message.value = '人数改成15人'
@@ -456,4 +487,27 @@ test('chat changes capacity while location is pending and again from preview, pr
   assert.equal(h.page.question.value,null)
   assert.deepEqual(h.page.exchanges.value.at(-1).facts,['人数 最多 12 人'])
   assert.deepEqual(h.modals,[])
+})
+
+test('repeating a known start keeps the draft, records the message once and allows a question retry', async t => {
+  const {page,requests,lifecycle,api} = makePage(t)
+  await lifecycle.show()
+  page.idea.value = '晚上约同行聊 AI'
+  const generating = page.generate()
+  requests[0].resolve({draft:{...blankDraft,startsAt:'2099-11-18T21:00:00+08:00'},nextQuestion:null})
+  await generating
+  const before = JSON.parse(JSON.stringify(page.draft.value))
+  api.interpretActivityReply = async () => ({draft:{...blankDraft,title:null,description:null},nextQuestion:null})
+  page.message.value = '晚上 9 点，约几位同行聊 AI'
+  await page.answer(page.message.value)
+  assert.deepEqual(page.draft.value,before)
+  assert.equal(page.error.value,'')
+  assert.equal(page.outgoing.value,null)
+  assert.equal(page.message.value,'')
+  assert.equal(page.exchanges.value.length,1)
+  assert.equal(page.previewReady.value,false)
+  const retry = page.requestQuestion()
+  requests[1].resolve({draft:blankDraft,nextQuestion:card('time')})
+  await retry
+  assert.equal(page.question.value.field,'time')
 })

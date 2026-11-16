@@ -80,7 +80,10 @@ export class ActivityDraftService {
       const draft = parseActivityDraft(raw, prepared, reply)
       const nextQuestion = context ? parseNextQuestion(raw, context, draft, prepared) : null
       const hasReply = reply && Object.entries(draft).some(([key, item]) => key !== 'questions' && item != null)
-      if (!(reply && nextQuestion) && !hasReply && !draft.title && !draft.description && !draft.location && draft.questions.length === 0) {
+      // A continuation can repeat known facts. Only a new draft needs initial content.
+      const continuing = !!context?.known.length && typeof raw === 'object' && raw !== null
+        && ('nextQuestion' in raw || 'startsAt' in raw || 'title' in raw)
+      if (!continuing && !nextQuestion && !hasReply && !draft.title && !draft.description && !draft.location && draft.questions.length === 0) {
         fail('AI_GENERATION_FAILED', '未能生成有效草稿，请补充活动信息后重试', 502)
       }
       await this.finish(member.id, reservationId)

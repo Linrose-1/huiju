@@ -84,14 +84,14 @@ export function pendingGatherFields(d: GatherDraft, now = new Date()): GatherFie
   if (!d.consultationContact.trim()) fields.push('contact')
   return fields
 }
-export function nextGatherQuestion(d: GatherDraft, now = new Date()): GatherQuestion | null {
-  const [field] = pendingGatherFields(d, now)
-  return field ? gatherQuestionFor(field, d, now) : null
+export function needsGatherEnd(d: GatherDraft, now = new Date()) {
+  const start = Date.parse(d.startsAt ?? '')
+  return start > +now && (!d.endsAt || !(Date.parse(d.endsAt) > start))
 }
 export function usableModelQuestion(q: GatherQuestion | null | undefined, d: GatherDraft): GatherQuestion | null {
   if (!q || !pendingGatherFields(d).includes(q.field) || !q.prompt?.trim() || !Array.isArray(q.options)) return null
-  if (q.field === 'location') return gatherQuestionFor('location', d)
-  return { field:q.field, prompt:q.prompt.trim(), options:[...new Set(q.options.map(x => x.trim()).filter(x => x && x !== '自己填写'))].slice(0,4) }
+  const prompt = q.prompt.trim()
+  return { field:q.field, prompt, options:[...new Set(q.options.map(x => x.trim()).filter(x => x && x !== '自己填写'))].slice(0,4) }
 }
 export type GatherTurn = { field:GatherField; prompt:string; answer:string }
 
@@ -130,7 +130,7 @@ export function publicText(value: string) {
 }
 export function gatherContext(d: GatherDraft, turns: GatherTurn[]) {
   const facts: Partial<Record<GatherField,string|null>> = {
-    title:d.title, description:d.description, date:d.date, time:d.startsAt && d.endsAt ? d.startsAt+' 至 '+d.endsAt : null,
+    title:d.title, description:d.description, date:d.date, time:d.startsAt && d.endsAt ? d.startsAt+' 至 '+d.endsAt : d.startsAt || d.endsAt || d.period ? gatherTime(d) : null,
     location:d.location, fee:d.feeType, amount:d.feeAmountCents ? String(d.feeAmountCents/100)+'元' : null,
     capacity:d.capacity ? String(d.capacity)+'人' : null
   }
@@ -175,30 +175,4 @@ export function applyGatherAnswer(draft: GatherDraft, field: GatherField, answer
   if (people && number(people[1])>0) d.capacity=number(people[1])
   if (/不限人数|人数不限/.test(text)) d.capacity=null
   return d
-}
-export function gatherQuestionFor(field: GatherField, draft: GatherDraft, now = new Date()): GatherQuestion {
-  if (field === 'joining') field = 'location' // Historical turns now edit the venue.
-  const prompts: Record<Exclude<GatherField, 'joining'>, string> = {
-    title:'聚会的主题叫什么？', description:'想怎么介绍这次聚会？', date:'聚会改到哪天？',
-    time:'几点开始和结束？', location:'聚会在哪里举办？', fee:'这场聚会怎么收费？',
-    amount:'每人收多少元？', contact:'参与者可以怎样联系你？', capacity:'最多多少人可以参加？'
-  }
-  let options: string[] = []
-  if (field === 'title') options = ['商友主题交流会', '创业者经验分享', '学友小聚']
-  if (field === 'description') options = draft.title
-    ? ['围绕「' + draft.title + '」分享经验，交流想法。', '欢迎对「' + draft.title + '」感兴趣的朋友一起交流。']
-    : ['分享近期实践，交流彼此的经验。']
-  if (field === 'location') options = ['线下聚会']
-  if (field === 'amount') options = ['每人 30 元', '每人 50 元', '每人 100 元']
-  if (field === 'fee') options = ['免费','收费']
-  if (field === 'date') options = ['今天','明天','后天']
-  if (field === 'capacity') options = ['不限人数','限 10 人','限 20 人']
-  if (field === 'time') {
-    const slots = /早上|上午/.test(draft.period) ? ['09:00–11:00','10:00–12:00']
-      : draft.period === '晚上' ? ['18:00–20:00','19:00–21:00'] : ['14:00–16:00','15:00–17:00','14:00–17:00']
-    options = slots.filter(slot => Date.parse(draft.date+'T'+slot.slice(0,5)+':00+08:00') > +now)
-    if (!options.length) return {field:'time', prompt:'建议时段已过，要换一天还是另填时段？', options:['改到明天','改到后天']}
-    prompts.time = draft.date + ' ' + draft.period + '，几点开始和结束？'
-  }
-  return {field, prompt:prompts[field], options}
 }

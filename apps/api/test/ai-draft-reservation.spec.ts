@@ -186,7 +186,25 @@ describe('AI draft reservation boundary with repository and provider substitutes
     expect(result.nextQuestion).toBeNull()
   })
 
-  it('rejects answered fields, unrelated joining prompts and unsafe text as question-only replies', async () => {
+  it('accepts a model-authored question about just the missing end time, including a question-only retry', async () => {
+    const f = setup()
+    const question = { field: 'time', prompt: '九点开始聊 AI，想留多久交流？', options: ['22:00 结束', '22:30 结束'] }
+    const context = {
+      known: [{ field: 'time' as const, value: '2026-11-18 21:00 开始' }],
+      recent: [{ field: 'time' as const, prompt: '几点开始？', answer: '晚上九点' }],
+      pending: ['time' as const, 'location' as const],
+    }
+    f.provider.generate.mockResolvedValue({ nextQuestion: question })
+    const reply = { field: 'time' as const, date: '2026-11-18' }
+    const result = await f.service.create('晚上九点', 'member', reply, context)
+    expect(result.nextQuestion).toEqual(question)
+    expect(f.provider.generate.mock.lastCall?.at(-1)).toEqual(context)
+    const retry = await f.service.create('继续提问', 'member', undefined, context)
+    expect(retry.nextQuestion).toEqual(question)
+    expect(retry.draft.endsAt).toBeNull()
+  })
+
+  it('discards inapplicable or unsafe follow-ups without invalidating the existing draft', async () => {
     const f = setup()
     const reply = { field: 'location' } as const
     for (const candidate of [
@@ -199,8 +217,19 @@ describe('AI draft reservation boundary with repository and provider substitutes
       f.provider.generate.mockResolvedValueOnce({ nextQuestion: { ...candidate, options: [] } })
       await expect(f.service.create('待定', 'member', reply, {
         known: [{field: 'location', value: '线上聚会'}], recent: [], pending: ['fee', 'joining', 'amount', 'capacity'],
-      })).rejects.toMatchObject({ response: { code: 'AI_GENERATION_FAILED' } })
+      })).resolves.toMatchObject({ nextQuestion: null, draft: { title: null, location: null } })
     }
+  })
+
+  it('keeps a conversation when a repeated start time yields no new fields or question', async () => {
+    const f = setup()
+    f.provider.generate.mockResolvedValueOnce({startsAt:null, endsAt:null, nextQuestion:null})
+    const result = await f.service.create('后天晚上 9 点，约几位同行聊 AI', 'member', {field:'time'}, {
+      known:[{field:'time',value:'2026-11-18 21:00 开始'}], recent:[], pending:['time','location'],
+    })
+    expect(result.nextQuestion).toBeNull()
+    expect(result.draft.endsAt).toBeNull()
+    expect(f.store.reservations.size).toBe(0)
   })
 
   it('releases provider failures and invalid responses so later requests can proceed', async () => {

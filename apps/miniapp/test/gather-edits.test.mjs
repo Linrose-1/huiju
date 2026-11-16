@@ -64,3 +64,22 @@ test('Chinese fee and previously confirmed amount survive a general fee statemen
   assert.deepEqual(paid,{...draft,feeType:'paid',feeAmountCents:3000})
   assert.deepEqual(applyGatherEdit(paid,'收费',null,'chat',unrelatedModel),paid)
 })
+
+test('after 21:00 ask only for the end and accept a choice or a bare clock', () => {
+  const partial = {...draft, date:'2099-11-18', period:'晚上', startsAt:'2099-11-18T21:00:00+08:00', endsAt:null}
+  const dialog = load('gather-dialog')
+  const generated = {field:'time',prompt:'九点开始交流，打算聊到几点？',options:['22:10 结束']}
+  assert.deepEqual(dialog.usableModelQuestion(generated, partial), generated)
+  const ctx = dialog.gatherContext(partial, [])
+  assert.ok(ctx.pending.includes('time'))
+  assert.ok(ctx.known.some(row => row.field === 'time' && row.value === '2099-11-18 21:00 开始'))
+  for (const text of ['22:00 结束', '晚上十点吧']) {
+    assert.deepEqual(applyGatherEdit(partial,text,'time','card'), {...partial,endsAt:'2099-11-18T22:00:00+08:00'})
+  }
+  const duration = applyGatherEdit(partial,'一个小时', 'time','card')
+  assert.equal(duration.startsAt, partial.startsAt)
+  assert.equal(Date.parse(duration.endsAt) - Date.parse(duration.startsAt), 3600000)
+  const late = {...partial,startsAt:'2099-11-18T23:30:00+08:00'}
+  const nextDay = '次日 00:00 结束'
+  assert.equal(applyGatherEdit(late,nextDay,'time','card').endsAt,'2099-11-19T00:00:00+08:00')
+})

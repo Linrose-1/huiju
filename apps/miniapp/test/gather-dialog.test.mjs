@@ -7,14 +7,22 @@ import ts from 'typescript'
 const source = readFileSync(new URL('../src/services/gather-dialog.ts', import.meta.url), 'utf8')
 const methods = {}
 new Function('exports', ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(methods)
-const {createGatherDraft,applyGatherAnswer,nextGatherQuestion} = methods
+const {createGatherDraft,applyGatherAnswer,pendingGatherFields} = methods
 const now = new Date('2026-11-14T02:00:00Z')
 const model = {title:'AI 聚会',description:'交流空间运营经验',startsAt:null,endsAt:null,location:'猩球创客',feeType:null,capacity:null,feeAmountCents:null,questions:[],registrationDeadline:null}
+
+test('date questions distinguish choosing a first date from rescheduling', () => {
+  const draft = createGatherDraft('想约几位同行聊聊 AI 应用', model, now)
+  assert.ok(pendingGatherFields(draft, now).includes('date'))
+  const modelCard = { field:'date', prompt:'你想约同行哪天聊 AI？', options:['下周六'] }
+  assert.deepEqual(methods.usableModelQuestion(modelCard, draft), modelCard)
+  assert.ok(!pendingGatherFields({...draft, date:'2026-11-20'}, now).includes('date'))
+})
 
 test('one contextual reply supplies the time range, fee and capacity while preserving previous details', () => {
   const before=createGatherDraft('本周六下午在猩球创客',model,now)
   assert.equal(before.date,'2026-11-14')
-  assert.equal(nextGatherQuestion(before,now).field,'time')
+  assert.equal(pendingGatherFields(before,now)[0],'time')
   const after=applyGatherAnswer(before,'time','三点到五点，免费，最多 20 人',now)
   assert.equal(after.startsAt,'2026-11-14T15:00:00+08:00')
   assert.equal(after.endsAt,'2026-11-14T17:00:00+08:00')
@@ -25,8 +33,8 @@ test('one contextual reply supplies the time range, fee and capacity while prese
     '时间 2026-11-14 15:00–17:00', '费用 免费', '人数 最多 20 人'
   ])
   assert.deepEqual(methods.gatherFacts(after, {...after, startsAt: new Date(after.startsAt).toISOString()}), [])
-  assert.equal(nextGatherQuestion(after,now).field,'contact')
-  assert.equal(nextGatherQuestion(applyGatherAnswer(after,'contact','向值班室咨询',now),now),null)
+  assert.equal(pendingGatherFields(after,now)[0],'contact')
+  assert.deepEqual(pendingGatherFields(applyGatherAnswer(after,'contact','向值班室咨询',now),now),[])
   assert.equal(before.feeType,null)
 })
 test('opening facts omit unknown fee and capacity; cross-day times and later changes remain explicit', () => {
@@ -44,7 +52,7 @@ test('paid registration asks for the amount, missing time never silently uses a 
   const timed=applyGatherAnswer(before,'time','09:00–11:00',now)
   const paid=applyGatherAnswer(timed,'fee','收费',now)
   assert.equal(paid.feeAmountCents,null)
-  assert.equal(nextGatherQuestion(paid,now).field,'amount')
+  assert.equal(pendingGatherFields(paid,now)[0],'amount')
   assert.equal(applyGatherAnswer(paid,'amount','19.9',now).feeAmountCents,1990)
 })
 test('longer relative dates and afternoon clock notation retain their meaning', () => {
@@ -61,15 +69,13 @@ test('longer relative dates and afternoon clock notation retain their meaning', 
 test('expired suggested slots allow a new day and suggested prices require selection', () => {
   const late=new Date('2026-11-14T14:30:00Z')
   const before=createGatherDraft('今天下午',model,late)
-  const q=nextGatherQuestion(before,late)
-  assert.ok(q.options.includes('改到明天'))
-  const tomorrow=applyGatherAnswer(before,q.field,'改到明天',late)
-  assert.equal(nextGatherQuestion(tomorrow,late).field,'time')
+  assert.ok(pendingGatherFields(before,late).includes('time'))
+  const tomorrow=applyGatherAnswer(before,'time','改到明天',late)
+  assert.equal(pendingGatherFields(tomorrow,late)[0],'time')
   const paid=applyGatherAnswer(applyGatherAnswer(tomorrow,'time','15:00–17:00',late),'fee','收费',late)
-  const prices=nextGatherQuestion(paid,late)
-  assert.ok(prices.options.length)
+  assert.ok(pendingGatherFields(paid,late).includes('amount'))
   assert.equal(paid.feeAmountCents,null)
-  assert.equal(applyGatherAnswer(paid,prices.field,prices.options[0],late).feeAmountCents,3000)
+  assert.equal(applyGatherAnswer(paid,'amount','每人30元',late).feeAmountCents,3000)
 })
 test('only public activity context and the six most recent non-contact turns reach the planner', () => {
   const draft=createGatherDraft('明天下午', model, now)
@@ -87,10 +93,10 @@ test('online venue needs no joining card; volunteered access and contact stay in
   const link = 'https://example.invalid/room'
   const d = createGatherDraft('明天下午三点到五点线上读书会，会议链接 ' + link, {...model, location:'线上聚会',feeType:'free'}, now)
   assert.equal(d.location, '线上聚会 · 会议链接 ' + link)
-  assert.equal(nextGatherQuestion(d, now).field,'contact')
+  assert.equal(pendingGatherFields(d, now)[0],'contact')
   const extra = applyGatherAnswer(d,'contact','报名后在群里通知',now)
   assert.equal(extra.consultationContact,'')
   assert.ok(extra.location.endsWith('报名后在群里通知'))
-  assert.equal(nextGatherQuestion(applyGatherAnswer(extra,'contact','咨询请联系班长',now),now),null)
+  assert.deepEqual(pendingGatherFields(applyGatherAnswer(extra,'contact','咨询请联系班长',now),now),[])
   assert.ok(!JSON.stringify(methods.gatherContext(extra, [])).includes(link))
 })

@@ -9,8 +9,9 @@ export type GatherChatSnapshot = {
   sentIdea: string
   openingFacts: string[]
   manual: boolean
+  modelCardVersion?: 1
   modelCard: GatherQuestion | null
-  custom: boolean | 'offline'
+  custom: boolean | string
   editing: GatherField | null
   createdId: string
   uncertainCreate: boolean

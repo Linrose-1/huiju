@@ -9,7 +9,7 @@ import type { ActivityWriteInput } from '@/services/api/types'
 import { archiveGatherHistory, readGatherHistory, removeGatherHistory, GATHER_HISTORY_TTL } from '@/services/gather-history'
 import type { GatherChatSnapshot, GatherHistoryItem } from '@/services/gather-history'
 import { stageActivityDraft } from '@/services/ai-draft'
-import { createGatherDraft, nextGatherQuestion, gatherQuestionFor, gatherContext, usableModelQuestion, publicText, gatherFacts } from '@/services/gather-dialog'
+import { createGatherDraft, pendingGatherFields, gatherContext, usableModelQuestion, publicText, gatherFacts } from '@/services/gather-dialog'
 import { applyGatherEdit } from '@/services/gather-edits'
 import type { GatherDraft, GatherField, GatherQuestion, GatherTurn } from '@/services/gather-dialog'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
@@ -21,7 +21,7 @@ const idea = ref('')
 const draft = ref<GatherDraft | null>(null)
 const reply = ref('')
 const dockReply = ref('')
-const custom = ref<boolean | 'offline'>(false)
+const custom = ref<boolean | string>(false)
 const editing = ref<GatherField | null>(null)
 type ChatTurn = GatherTurn & { facts?: string[]; freeEdit?: boolean }
 const exchanges = ref<ChatTurn[]>([])
@@ -29,11 +29,6 @@ const sentIdea = ref('')
 const openingFacts = ref<string[]>([])
 const outgoing = ref<GatherTurn | null>(null)
 const modelCard = ref<GatherQuestion | null>(null)
-const manual = ref(false)
-function useManual() {
-  manual.value = true
-  error.value = ''
-}
 const error = ref('')
 const busy = ref(false)
 const checking = ref(true)
@@ -52,7 +47,7 @@ function current(request: number) {
 function snapshot(): GatherChatSnapshot {
   return { idea: idea.value, draft: draft.value, exchanges: exchanges.value, reply: reply.value, dockReply: dockReply.value,
     sentIdea: sentIdea.value, openingFacts: openingFacts.value,
-    manual:manual.value, modelCard:modelCard.value, custom: custom.value, editing: editing.value, createdId: createdId.value, uncertainCreate: uncertainCreate.value }
+    manual:false, modelCardVersion:1, modelCard:modelCard.value, custom: custom.value, editing: editing.value, createdId: createdId.value, uncertainCreate: uncertainCreate.value }
 }
 const history = ref<GatherHistoryItem[]>([])
 const showHistory = ref(false)
@@ -97,13 +92,16 @@ function resumeHistory(id: string) {
   if (!item?.snapshot) return
   const saved = item.snapshot
   clearForm()
-  modelCard.value = saved.modelCard || null; manual.value = !!saved.manual
+  modelCard.value = saved.modelCardVersion === 1 ? saved.modelCard : null
   idea.value = saved.idea; draft.value = saved.draft; exchanges.value = saved.exchanges
   sentIdea.value = saved.sentIdea || (saved.draft ? saved.idea : '')
   openingFacts.value = saved.openingFacts || []
   reply.value = saved.dockReply === undefined && !saved.custom ? '' : saved.reply || ''
   dockReply.value = saved.dockReply ?? (saved.custom ? '' : saved.reply || '')
   editing.value = saved.editing || null; custom.value = saved.custom || false
+  if (saved.modelCardVersion !== 1 && !editing.value && custom.value && reply.value && saved.draft) {
+    editing.value = saved.modelCard?.field ?? pendingGatherFields(saved.draft)[0] ?? null
+  }
   createdId.value = saved.createdId || ''; uncertainCreate.value = !!saved.uncertainCreate
   chatId = id; updatedAt = item.updatedAt; lastSnapshot = JSON.stringify(snapshot())
   showHistory.value = false
@@ -112,7 +110,7 @@ watch(snapshot, () => { globalThis.clearTimeout(persistTimer); persistTimer = gl
 function clearForm() {
   chatId = ''; updatedAt = 0; lastSnapshot = ''
   sentIdea.value = ''; openingFacts.value = []; outgoing.value = null
-  modelCard.value = null; manual.value = false
+  modelCard.value = null
   idea.value = ''; dockReply.value = ''; draft.value = null; exchanges.value = []; reply.value = ''; editing.value = null
   custom.value = false; createdId.value = ''; uncertainCreate.value = false; error.value = ''
 }
@@ -186,8 +184,29 @@ async function generate() {
   } catch (e) { if (current(request)) error.value = errorMessage(e) }
   finally { if (current(request)) busy.value = false }
 }
-const question = computed(() => !draft.value ? null : editing.value
-  ? gatherQuestionFor(editing.value, draft.value) : usableModelQuestion(modelCard.value, draft.value) || nextGatherQuestion(draft.value))
+const fieldNames: Record<GatherField,string> = {
+  title:'主题', description:'聚会介绍', date:'日期', time:'时间', location:'地点', joining:'地点',
+  fee:'费用', amount:'金额', capacity:'人数', contact:'咨询方式'
+}
+const pending = computed(() => draft.value ? pendingGatherFields(draft.value) : [])
+const previewReady = computed(() => !!draft.value && !editing.value && !pending.value.length)
+const question = computed<GatherQuestion | null>(() => {
+  if (!draft.value) return null
+  if (editing.value) return { field:editing.value, prompt:'修改' + fieldNames[editing.value], options:[] }
+  return usableModelQuestion(modelCard.value, draft.value)
+})
+async function requestQuestion() {
+  const d = draft.value, request = version
+  if (!d || !pending.value.length || busy.value || checking.value || !current(request)) return
+  busy.value = true; error.value = ''
+  try {
+    const result = await api.generateActivityDraft('请根据已确认的聚会安排和表单缺项继续提问。', gatherContext(d, exchanges.value))
+    if (!current(request)) return
+    modelCard.value = usableModelQuestion(result.nextQuestion, d)
+    persist()
+  } catch (e) { if (current(request)) error.value = errorMessage(e) }
+  finally { if (current(request)) busy.value = false }
+}
 const starters = ['想约几位同行聊聊 AI 应用', '周末办一场十来人的读书会']
 const focused = ref<'dock' | 'card' | null>(null)
 const keyboard = ref(0)
@@ -233,7 +252,7 @@ watch(() => [question.value?.prompt, exchanges.value.length, outgoing.value, sen
   let selector = ''
   if (outgoing.value) selector = '#outgoing'
   else if (!draft.value && sentIdea.value) selector = '#sent-idea'
-  else if (draft.value && !question.value) selector = '#invite-preview'
+  else if (draft.value && !question.value) selector = previewReady.value ? '#invite-preview' : '#ask-again'
   else if (!editing.value && latest >= 0 && exchanges.value[latest].facts?.length) selector = '#facts-' + latest
   else if (!editing.value && latest < 0 && openingFacts.value.length) selector = '#opening-facts'
   else if (draft.value) selector = question.value ? '#active-question' : '#invite-preview'
@@ -241,6 +260,7 @@ watch(() => [question.value?.prompt, exchanges.value.length, outgoing.value, sen
 })
 const options = computed(() => {
   const q = question.value
+  if (q?.field === 'location' && !editing.value && !q.options.length) return ['线下聚会']
   if (q?.field === 'contact' && session.member?.boundPhone && /^1\d{10}$/.test(session.member.boundPhone))
     return ['使用我的手机号（尾号 ' + session.member.boundPhone.slice(-4) + '）', ...q.options]
   return q?.options || []
@@ -258,7 +278,7 @@ const rows = computed(() => {
 })
 function edit(field: GatherField) {
   if (busy.value || createdId.value) return
-  outgoing.value = null; editing.value = field; custom.value = false; reply.value = ''; error.value = ''
+  outgoing.value = null; editing.value = field; custom.value = true; reply.value = ''; error.value = ''
 }
 async function answer(value: string, suggested = false, source: 'chat' | 'card' = 'chat') {
   const q = question.value, d = draft.value
@@ -268,8 +288,8 @@ async function answer(value: string, suggested = false, source: 'chat' | 'card' 
   const text = suggested && q?.field === 'contact' && value.startsWith('使用我的手机号')
     ? session.member?.boundPhone || '' : value.trim()
   if (!text) return
-  if (q?.field === 'location' && text === '线下聚会') {
-    custom.value = 'offline'
+  if (q?.field === 'location' && (text === '线下聚会' || (suggested && text.endsWith('（填地址）')))) {
+    custom.value = text === '线下聚会' ? 'offline' : text
     void focusComposer('card')
     return
   }
@@ -280,15 +300,10 @@ async function answer(value: string, suggested = false, source: 'chat' | 'card' 
   const commit = (next: GatherDraft, card: GatherQuestion | null) => {
     const facts = gatherFacts(d, next)
     const clarification = usableModelQuestion(card, next)
-    if (!clarification && !facts.length && JSON.stringify(d) === JSON.stringify(next) && !suggested) {
-      error.value = '还没有识别出新的安排，请写明要修改的内容。'
-      return
-    }
     draft.value = next
     exchanges.value.push({...turn, facts})
     outgoing.value = null
-    const pendingCard = freeEdit && facts.length ? usableModelQuestion(q, next) : null
-    modelCard.value = pendingCard || clarification
+    modelCard.value = clarification
     if (freeEdit) dockReply.value = ''
     if (!freeEdit || question.value?.field !== q?.field) {
       editing.value = null; custom.value = false; reply.value = ''
@@ -298,8 +313,9 @@ async function answer(value: string, suggested = false, source: 'chat' | 'card' 
   }
   outgoing.value = turn; error.value = ''
   const localContact = local.consultationContact !== d.consultationContact || (q?.field === 'contact' && !freeEdit)
-  if (localContact || manual.value || (suggested && !nextGatherQuestion(local))) {
-    commit(local, modelCard.value)
+  if (localContact || (suggested && !pendingGatherFields(local).length)) {
+    commit(local, null)
+    if (localContact && !outgoing.value && pending.value.length) await requestQuestion()
     return
   }
   const target = q?.field || 'time'
@@ -312,9 +328,9 @@ async function answer(value: string, suggested = false, source: 'chat' | 'card' 
     commit(applyGatherEdit(d, text, q?.field ?? null, source, result.draft), result.nextQuestion ?? null)
   } catch (e) {
     if (!current(request)) return
-    manual.value = true
-    commit(local, null)
-    error.value = errorMessage(e) + '。已保留回答，可继续手动补齐。'
+    modelCard.value = null
+    if (JSON.stringify(local) !== JSON.stringify(d) || suggested) commit(local, null)
+    error.value = errorMessage(e) + '。已保留你的回答。'
   } finally { if (current(request)) busy.value = false }
 }
 function moreSettings() {
@@ -326,7 +342,7 @@ function moreSettings() {
   navigate(routes.editor + '?aiDraft=1')
 }
 function inputForPublish(d: GatherDraft): ActivityWriteInput {
-  if (nextGatherQuestion(d) || !d.title || !d.description || !d.location || !d.feeType || !d.startsAt || !d.endsAt || !d.consultationContact)
+  if (pendingGatherFields(d).length || !d.title || !d.description || !d.location || !d.feeType || !d.startsAt || !d.endsAt || !d.consultationContact)
     throw new Error('请先补齐邀请卡内容')
   if (d.registrationDeadline && (Date.parse(d.registrationDeadline) <= Date.now() || Date.parse(d.registrationDeadline) > Date.parse(d.startsAt)))
     throw new Error('请在更多设置中调整报名截止时间')
@@ -340,7 +356,7 @@ function inputForPublish(d: GatherDraft): ActivityWriteInput {
     capacity:d.capacity, registrationDeadline:d.registrationDeadline, questions}
 }
 async function publish() {
-  if (!draft.value || question.value || busy.value || !current(version) || uncertainCreate.value) return
+  if (!draft.value || !previewReady.value || busy.value || !current(version) || uncertainCreate.value) return
   const request = version
   busy.value = true; error.value = ''
   try {
@@ -398,13 +414,15 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
       </view>
     </view>
     <view v-else class="conversation" :style="keyboard ? {paddingBottom:(keyboard + 84) + 'px'} : undefined">
-      <view class="assistant-line"><view class="assistant-mark">✦</view><text>i 助手</text><button class="text-link history-link" :disabled="busy || checking" @click="openHistory">聊天记录</button></view>
-      <view class="greeting">想办一场什么聚会？<view>先说个大概，时间、地点这些细节，我们边聊边定。</view></view>
+      <view class="assistant-line chat-heading">
+        <view class="assistant-mark">✦</view><text>i 助手</text>
+        <button class="utility-button history-link" :disabled="busy || checking" @click="openHistory"><view class="clock-icon" />聊天记录</button>
+      </view>
+      <view v-if="!sentIdea" class="greeting">说说你的聚会想法，i 助手会根据你提供的信息继续提问。</view>
       <view v-if="!sentIdea && !draft && !busy" class="starters">
         <button v-for="starter in starters" :key="starter" class="starter" :disabled="checking" @click="chooseStarter(starter)">{{ starter }} ›</button>
       </view>
       <view v-if="sentIdea" id="sent-idea" class="user-bubble">{{ sentIdea }}</view>
-      <view v-if="busy && !draft" class="past-prompt">正在整理你的想法…</view>
       <view v-if="openingFacts.length" id="opening-facts" class="fact-summary">
         <text class="fact-heading">已记下</text><text v-for="fact in openingFacts" :key="fact" class="fact">{{ fact }}</text>
       </view>
@@ -425,22 +443,17 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
           <view v-if="turn.facts?.length" :id="'facts-' + index" class="fact-summary">
             <text class="fact-heading">已记下</text><text v-for="fact in turn.facts" :key="fact" class="fact">{{ fact }}</text>
           </view>
+          <view v-if="turn.facts?.length === 0" class="past-prompt">本轮没有更新聚会安排。</view>
         </view>
       <view v-if="outgoing" id="outgoing">
         <view class="past-prompt">{{ outgoing.prompt }}</view>
         <view class="user-bubble">{{ outgoing.answer }}</view>
-        <view v-if="busy" class="past-prompt">正在整理你的回复…</view>
-        <view v-else-if="error" class="error" role="alert">{{ error }}</view>
+        <view v-if="error && !busy" class="error" role="alert">{{ error }}</view>
       </view>
+      <view v-if="busy && (!previewReady || outgoing)" class="reply-status">i 助手正在回复…</view>
       <view v-if="question && draft && !(outgoing && busy)" class="turns">
-        <view class="assistant-line"><view class="assistant-mark">✦</view><text>{{ busy ? 'i 助手正在整理回复…' : 'i 助手' }}</text></view>
-        <view v-if="manual" class="helper">
-          正在手动补齐聚会信息。
-          <button class="text-link" :disabled="busy" @click="manual = false; error = ''">继续 AI 追问</button>
-          <button class="text-link" :disabled="busy" @click="moreSettings">打开完整编辑页</button>
-        </view>
-        <view v-else-if="question.field !== 'contact'" class="helper">
-          <button class="text-link" :disabled="busy" @click="useManual">手动补齐</button>
+        <view v-if="!editing" class="assistant-line"><view class="assistant-mark">✦</view><text>i 助手</text>
+          <button v-if="!busy" class="utility-button manual-link" @click="moreSettings">手动填写 <text>›</text></button>
         </view>
         <view
           id="active-question"
@@ -465,13 +478,14 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
             v-for="option in options"
             :key="option"
             class="option"
-            :class="{selected:option === '线下聚会' && custom === 'offline'}"
+            :class="{selected:(option === '线下聚会' && custom === 'offline') || option === custom}"
             :disabled="busy"
             @click="answer(option, true)"
           >
             <view class="radio" /><text>{{ option }}</text>
           </button>
           <button
+            v-if="!editing"
             class="option custom-option"
             :class="{selected:custom === true}"
             :disabled="busy"
@@ -499,7 +513,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         </view>
       </view>
       <view
-        v-else-if="draft && !question"
+        v-else-if="previewReady && draft"
         id="invite-preview"
         class="review"
       >
@@ -553,6 +567,13 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
           {{ feeDisclaimer }}
         </text>
       </view>
+      <view v-else-if="draft && !question && !previewReady && !busy" id="ask-again" class="retry-panel">
+        <text class="helper">已保留你的安排。你可以补充{{ fieldNames[pending[0]] }}，或请 AI 继续提问。</text>
+        <view class="retry-actions">
+          <button class="utility-button retry-primary" :disabled="checking" @click="requestQuestion">请 AI 继续提问</button>
+          <button class="utility-button" :disabled="checking" @click="moreSettings">手动填写 <text>›</text></button>
+        </view>
+      </view>
       <view
         v-if="error && !outgoing"
         class="error"
@@ -572,7 +593,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         </button>
       </view>
       <button
-        v-if="draft && !question"
+        v-if="previewReady"
         class="primary publish"
         :disabled="busy || checking || uncertainCreate"
         :loading="busy"
@@ -583,7 +604,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
     </view>
     <view v-if="canInitiate && !showHistory && !createdId && !uncertainCreate" class="chat-dock" :style="{bottom:keyboard + 'px'}">
       <view v-if="!draft && !busy" class="opening-actions">
-        <button class="text-link" :disabled="busy" @click="navigate(routes.editor)">手动填写</button>
+        <button class="utility-button manual-link" @click="navigate(routes.editor)">手动填写 <text>›</text></button>
       </view>
       <view class="chat-bar">
         <view class="input-shell">
@@ -603,14 +624,23 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
 .gather-page { min-height:100vh; background:#eaf1ed; color:#182c23; }
 .conversation { padding:32rpx 28rpx calc(200rpx + env(safe-area-inset-bottom)); }
 .assistant-line { display:flex; align-items:center; gap:16rpx; color:#56685f; font-size:25rpx; }
-.history-link { margin-left:auto; }
+.chat-heading { margin-bottom:16rpx; }
+.utility-button { box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:10rpx; min-height:72rpx; margin:0; padding:0 24rpx; border:1rpx solid #cadbd1; border-radius:18rpx; background:#fff; color:#265741; font-size:26rpx; font-weight:500; line-height:1.3; }
+.utility-button::after { border:0; }
+.history-link,.manual-link { margin-left:auto; }
+.clock-icon { position:relative; box-sizing:border-box; width:26rpx; height:26rpx; border:2rpx solid currentColor; border-radius:50%; }
+.clock-icon::before { content:''; position:absolute; left:9rpx; top:4rpx; width:6rpx; height:7rpx; border-left:2rpx solid currentColor; border-bottom:2rpx solid currentColor; }
+.reply-status { margin:16rpx 0; color:#526d5f; font-size:26rpx; }
+.retry-panel { padding:24rpx; background:#fff; border-radius:20rpx; }
+.retry-actions { display:flex; flex-wrap:wrap; gap:16rpx; margin-top:16rpx; }
+.retry-primary { background:#185e44; border-color:#185e44; color:#fff; }
 .assistant-mark { display:flex; align-items:center; justify-content:center; width:56rpx; height:56rpx; background:#185e44; color:white; border-radius:14rpx; font-size:36rpx; }
 .greeting { margin:-8rpx 12rpx 20rpx 72rpx; background:white; border-radius:4rpx 22rpx 22rpx; padding:20rpx 24rpx; font-size:31rpx; line-height:1.55; }
 .starters { margin-left:72rpx; }
 .starter { display:table; margin:12rpx 0; padding:12rpx 20rpx; border:1rpx solid #9abaac; background:white; color:#195e45; border-radius:40rpx; font-size:26rpx; line-height:1.5; }
 .question-card,.invitation { border-radius:22rpx; background:white; border:1rpx solid #dce4dc; }
 .chat-dock { position:fixed; left:0; right:0; z-index:3; }
-.opening-actions { display:flex; align-items:center; justify-content:flex-end; padding:0 24rpx; }
+.opening-actions { display:flex; align-items:center; justify-content:flex-end; padding:8rpx 20rpx 14rpx; }
 .chat-bar { display:flex; align-items:flex-end; padding:14rpx 20rpx calc(14rpx + env(safe-area-inset-bottom)); gap:14rpx; background:#fff; border-top:1rpx solid #dce4dc; }
 .input-shell { flex:1; min-width:0; padding:15rpx 20rpx; background:#f9faf9; border:1rpx solid #cbd8cf; border-radius:22rpx; }
 .chat-input { display:block; width:100%; min-height:46rpx; max-height:180rpx; padding:0; color:#182c23; font-size:30rpx; line-height:46rpx; }

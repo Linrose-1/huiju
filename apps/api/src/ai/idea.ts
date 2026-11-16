@@ -49,11 +49,13 @@ export function parseNextQuestion(raw: unknown, context: DraftConversation, draf
   const location = draft.location || known.get('location') || ''
   const complete: Partial<Record<typeof field, unknown>> = {
     title: draft.title, description: draft.description, date: draft.startsAt || /\d{4}年\d{1,2}月\d{1,2}日/.test(idea),
-    time: draft.startsAt && draft.endsAt, location, fee: draft.feeType,
+    time: draft.startsAt && draft.endsAt, location: location.trim() && location.trim() !== '线下聚会', fee: draft.feeType,
     amount: draft.feeType === 'free' || draft.feeAmountCents,
   }
   if (field === 'amount' && !(draft.feeType === 'paid' || (!draft.feeType && (known.get('fee')?.match(/收费|paid/) || /收费|每人.{0,5}元/.test(idea))))) return null
-  if (complete[field] || known.has(field)) return null
+  // The client can know just the start/end of a time range or the venue mode
+  // while still requesting the missing end/start or the actual address.
+  if (complete[field] || (field !== 'time' && field !== 'location' && known.has(field))) return null
   const clean = (value: unknown, max: number) => {
     if (typeof value !== 'string') return null
     const text = value.trim()

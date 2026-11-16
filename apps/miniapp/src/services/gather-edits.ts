@@ -1,5 +1,5 @@
 import type { AiActivityDraft } from './api/types'
-import { applyGatherAnswer, withJoiningDetails } from './gather-dialog'
+import { applyGatherAnswer, needsGatherEnd, withJoiningDetails } from './gather-dialog'
 import type { GatherDraft, GatherField } from './gather-dialog'
 
 const labels = {
@@ -21,9 +21,9 @@ function clockNumber(text: string) {
 function localDay(iso: string) {
   return new Date(Date.parse(iso) + 8 * 3600000).toISOString().slice(0, 10)
 }
-function applyTime(d: GatherDraft, clause: string, parsed: GatherDraft, model?: AiActivityDraft) {
+function applyTime(d: GatherDraft, clause: string, parsed: GatherDraft, answeringTime: boolean, model?: AiActivityDraft) {
   const previousDay = d.date
-  const endOnly = /结束|散场/.test(clause)
+  const endOnly = /结束|散场/.test(clause) || (answeringTime && needsGatherEnd(d) && !/开始|开场|开办/.test(clause))
   Object.assign(d, { date:parsed.date, period:endOnly ? d.period : parsed.period, startsAt:parsed.startsAt, endsAt:parsed.endsAt })
   const clocks = [...clause.matchAll(clock)]
   if (clocks.length > 1 || /(?:持续|时长|历时)/.test(clause)) {
@@ -33,13 +33,17 @@ function applyTime(d: GatherDraft, clause: string, parsed: GatherDraft, model?: 
   } else if (clocks.length === 1) {
     const m = clocks[0]
     const old = endOnly ? d.endsAt : d.startsAt
-    const date = endOnly && old && previousDay === d.date ? localDay(old) : d.date
-    const period = m[0].match(/凌晨|上午|中午|下午|晚上|早上/)?.[0] || (m[3] ? '' : d.period)
+    const date = endOnly && /次日|翌日/.test(clause) && d.startsAt
+      ? localDay(new Date(Date.parse(d.startsAt) + 86400000).toISOString())
+      : endOnly && old && previousDay === d.date ? localDay(old) : d.date
+    const startHour = d.startsAt ? new Date(Date.parse(d.startsAt) + 8 * 3600000).getUTCHours() : 0
+    const period = m[0].match(/凌晨|上午|中午|下午|晚上|早上/)?.[0] || (m[3] ? '' : d.period || (endOnly && startHour >= 12 ? '下午' : ''))
     let hour = clockNumber(m[1])
     if (hour < 12 && /下午|晚上|中午/.test(period)) hour += 12
     const minute = m[3] ? Number(m[3]) : m[2] === '半' ? 30 : m[2] ? clockNumber(m[2].replace('分','')) : 0
     if (date && hour >= 0 && hour < 24 && minute >= 0 && minute < 60) {
-      d[endOnly ? 'endsAt' : 'startsAt'] = date + 'T' + String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0') + ':00+08:00'
+      const iso = date + 'T' + String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0') + ':00+08:00'
+      if (!endOnly || !d.startsAt || Date.parse(iso) > Date.parse(d.startsAt)) d[endOnly ? 'endsAt' : 'startsAt'] = iso
     }
   }
 }
@@ -66,6 +70,17 @@ export function applyGatherEdit(before: GatherDraft, text: string, currentField:
     if (allowed('location') && withJoiningDetails(d.location, clause) !== d.location) {
       d.location = withJoiningDetails(d.location, clause)
       continue
+    }
+    // The model may offer a duration instead of a clock when only the end is missing.
+    if (allowed('time') && needsGatherEnd(d)) {
+      const duration = clause.match(/^(?:大约|大概|约|聊|持续|预计|开)?\s*(半|\d+(?:\.\d+)?|[一二两三四五六七八九十]+)\s*(?:个)?(小时|分钟)(?:左右|吧|后结束)?$/)
+      if (duration) {
+        const amount = duration[1] === '半' ? 0.5 : /^\d/.test(duration[1]) ? Number(duration[1]) : clockNumber(duration[1])
+        const minutes = amount * (duration[2] === '小时' ? 60 : 1)
+        const end = new Date(Date.parse(d.startsAt!) + minutes * 60000)
+        if (minutes > 0 && Number.isFinite(+end)) d.endsAt = end.toISOString()
+        continue
+      }
     }
     if (/报名截止|截止报名/.test(clause)) {
       if (source === 'chat' && model?.registrationDeadline) d.registrationDeadline = model.registrationDeadline
@@ -98,7 +113,7 @@ export function applyGatherEdit(before: GatherDraft, text: string, currentField:
       if (source === 'card' && currentField === 'date') {
         const dateOnly = applyGatherAnswer(d, 'date', clause.replace(clock,'').replace(/凌晨|上午|中午|下午|晚上|早上/g,''))
         Object.assign(d, {date:dateOnly.date, startsAt:dateOnly.startsAt, endsAt:dateOnly.endsAt})
-      } else applyTime(d, clause, parsed, model)
+      } else applyTime(d, clause, parsed, currentField === 'time', model)
       matched = true
     }
     // One spoken clause may give both a time and a venue.
