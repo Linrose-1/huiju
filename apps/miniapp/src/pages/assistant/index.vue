@@ -2,10 +2,7 @@
 import TabHeader from '@/components/base/TabHeader.vue'
 import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
-import { computed, ref } from 'vue'
-import GatherMembershipNote from '@/components/business/GatherMembershipNote.vue'
-import { bootstrapIdentity } from '@/services/wechat'
-import { useSessionStore } from '@/stores/session'
+import { ref } from 'vue'
 import { onShareAppMessage, onShareTimeline, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { navigate, routes } from '@/services/navigation'
 import { api, errorMessage } from '@/services/api'
@@ -22,28 +19,7 @@ async function loadContent() {
 }
 onShow(loadContent); onHide(() => { contentGeneration++ }); onUnload(() => { contentGeneration++ })
 function browse() { navigate(routes.activitySearch) }
-const session = useSessionStore()
-const friendId = ref('')
-const isFriend = computed(() => !!session.token && friendId.value === session.member?.id)
-const showMembership = ref(false)
-onShow(async () => {
-  const generation = contentGeneration
-  friendId.value = ''
-  showMembership.value = false
-  try {
-    await bootstrapIdentity()
-    const id = session.member?.id
-    if (!id || !session.member?.profileComplete || generation !== contentGeneration) return
-    const access = await api.communityAccess()
-    if (generation === contentGeneration && session.member?.id === id && !access.isRegistered) friendId.value = id
-  } catch {
-    // The destination checks access again and provides retry on request failure.
-  }
-})
-function draftActivity() {
-  if (isFriend.value) showMembership.value = true
-  else navigate(routes.activityDraft)
-}
+function draftActivity() { navigate(routes.activityDraft) }
 const { shareError, shareBusy, retryShare, shareMessage, shareTimeline } = usePageShare(() => ({path: routes.assistant, title: '有聚点助手'}), true)
 onShareAppMessage(shareMessage)
 onShareTimeline(shareTimeline)
@@ -95,8 +71,7 @@ onShareTimeline(shareTimeline)
           重试文案加载
         </button>
       </view>
-      <GatherMembershipNote v-if="isFriend && showMembership" class="entry-note" @back="showMembership = false" />
-      <view v-else class="task-card">
+      <view class="task-card">
         <image
           class="task-image"
           src="/static/huiju/assistant-plan.jpg"
@@ -104,14 +79,14 @@ onShareTimeline(shareTimeline)
         />
         <view class="task-fade" />
         <view class="task-content">
-          <view class="task-title serif">帮我发聚会</view>
-          <view class="task-desc">社群在册会员可发起聚会</view>
-          <view v-if="!isFriend" class="task-example">例如：下周六下午在园区办一场 AI 分享会，30 人，免费报名</view>
+          <view class="task-title serif">i 助手发聚会</view>
+          <view class="task-desc">说出想法，点选待定的细节，核对邀请卡后发布</view>
+          <view class="task-example">例如：下周六下午在园区办一场 AI 分享会，30 人，免费报名</view>
           <button
             class="primary task-button"
             @click="draftActivity"
           >
-            {{ isFriend ? '查看身份说明' : '聊聊聚会想法' }}
+            聊聊聚会想法
             <uni-icons
               type="arrow-right"
               size="20"
@@ -148,7 +123,6 @@ onShareTimeline(shareTimeline)
   </view>
 </template>
 <style scoped>
-.entry-note{margin-bottom:24rpx}
 .sheet{margin-top:0}
 .hero{height:375rpx}
 .hero-text{position:relative;padding:40rpx 38rpx 0}
