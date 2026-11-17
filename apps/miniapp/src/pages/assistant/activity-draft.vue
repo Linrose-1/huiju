@@ -6,7 +6,7 @@ import PageReturn from '@/components/base/PageReturn.vue'
 import { api, ApiError, errorMessage } from '@/services/api'
 import { API_BASE_URL } from '@/services/api/environment'
 import type { ActivityWriteInput } from '@/services/api/types'
-import { archiveGatherHistory, readGatherHistory, removeGatherHistory, GATHER_HISTORY_TTL } from '@/services/gather-history'
+import { archiveGatherHistory, readGatherHistory, removeGatherHistory } from '@/services/gather-history'
 import type { GatherChatSnapshot, GatherHistoryItem } from '@/services/gather-history'
 import { stageActivityDraft } from '@/services/ai-draft'
 import { createGatherDraft, pendingGatherFields, gatherContext, usableModelQuestion, publicText, gatherFacts } from '@/services/gather-dialog'
@@ -62,6 +62,20 @@ function openHistory() {
   expandedId.value = ''
   showHistory.value = true
 }
+async function newConversation() {
+  if (!current(version) || checking.value || busy.value || (!idea.value.trim() && !draft.value)) return
+  const request = version
+  busy.value = true
+  try {
+    if (!await confirm('开启新对话？', '当前未发布对话会保存到聊天记录，之后可继续填写。', '开启新对话', '继续当前') || !current(request)) return
+    if (!persist()) return
+    archiveGatherHistory(storageKey(), {...historyEntry(chatId, updatedAt, snapshot()), snapshot:snapshot()})
+    // Keep an empty active marker so reopening does not auto-resume a paused conversation.
+    uni.setStorageSync(storageKey(), JSON.stringify({idea:'', draft:null, exchanges:[]}))
+    clearForm()
+  } catch { if (current(request)) error.value = '本机保存失败，已保留当前对话，请重试' }
+  finally { if (current(request)) busy.value = false }
+}
 function historyEntry(id: string, time: number, data: GatherChatSnapshot): GatherHistoryItem {
   return { id, updatedAt:time, idea:data.sentIdea || data.idea, openingFacts:data.openingFacts || [], exchanges:data.exchanges }
 }
@@ -70,17 +84,14 @@ function persist() {
   if (!current(version) || checking.value) return false
   try {
     if (!idea.value.trim() && !draft.value) {
-      if (chatId) { removeGatherHistory(storageKey(), chatId); clearForm() }
+      if (chatId) { uni.removeStorageSync(storageKey()); clearForm() }
       return true
-    }
-    if (updatedAt && Date.now() - updatedAt >= GATHER_HISTORY_TTL) {
-      removeGatherHistory(storageKey(), chatId); clearForm(); return true
     }
     const data = snapshot(), serialized = JSON.stringify(data)
     if (serialized === lastSnapshot) return true
     const now = Date.now()
     if (!chatId) chatId = now.toString(36) + '-' + Math.random().toString(36).slice(2)
-    archiveGatherHistory(storageKey(), {...historyEntry(chatId, now, data), snapshot:data})
+    uni.setStorageSync(storageKey(), JSON.stringify({...data, chatId, updatedAt:now}))
     updatedAt = now; lastSnapshot = serialized
     return true
   } catch { error.value = '本机保存失败，请保留当前页面'; return false }
@@ -90,7 +101,15 @@ function resumeHistory(id: string) {
   refreshHistory()
   const item = history.value.find(row => row.id === id)
   if (!item?.snapshot) return
-  const saved = item.snapshot
+  if (chatId && chatId !== id && (idea.value.trim() || draft.value)) {
+    error.value = '请先发布当前聚会，再继续其他对话'; showHistory.value = false; return
+  }
+  restore(item.snapshot, id, item.updatedAt)
+  if (!persist()) return
+  removeGatherHistory(storageKey(), id)
+  showHistory.value = false
+}
+function restore(saved: GatherChatSnapshot, id: string, time: number) {
   clearForm()
   modelCard.value = saved.modelCardVersion === 1 ? saved.modelCard : null
   idea.value = saved.idea; draft.value = saved.draft; exchanges.value = saved.exchanges
@@ -103,8 +122,7 @@ function resumeHistory(id: string) {
     editing.value = saved.modelCard?.field ?? pendingGatherFields(saved.draft)[0] ?? null
   }
   createdId.value = saved.createdId || ''; uncertainCreate.value = !!saved.uncertainCreate
-  chatId = id; updatedAt = item.updatedAt; lastSnapshot = JSON.stringify(snapshot())
-  showHistory.value = false
+  chatId = id; updatedAt = time; lastSnapshot = ''
 }
 watch(snapshot, () => { globalThis.clearTimeout(persistTimer); persistTimer = globalThis.setTimeout(persist, 300) }, {deep:true})
 function clearForm() {
@@ -115,13 +133,16 @@ function clearForm() {
   custom.value = false; createdId.value = ''; uncertainCreate.value = false; error.value = ''
 }
 function forget() {
-  if (owner && chatId) archiveGatherHistory(storageKey(), historyEntry(chatId, updatedAt, snapshot()))
+  if (!owner || !chatId) return
+  archiveGatherHistory(storageKey(), historyEntry(chatId, Date.now(), snapshot()))
+  uni.removeStorageSync(storageKey())
   clearForm()
 }
-watch(() => [session.token, session.epoch, session.member?.id], () => {
+watch([() => session.token, () => session.epoch, () => session.member?.id], () => {
   if (!owner) return
   showHistory.value = false; history.value = []; expandedId.value = ''
-  ++version; owner = ''; busy.value = false; checking.value = true; canInitiate.value = false; clearForm()
+  ++version; owner = ''; busy.value = false; checking.value = false; canInitiate.value = false; invitedFriend.value = false; clearForm()
+  accessError.value = '身份已变更，请重新确认社群身份'
 }, {flush:'sync'})
 function confirm(title: string, content: string, confirmText: string, cancelText: string) {
   return new Promise<boolean|null>(resolve => uni.showModal({title, content, confirmText, cancelText,
@@ -142,27 +163,31 @@ async function checkProfile() {
     if (disposed || request !== version) return
     if (!access.isRegistered) { invitedFriend.value = true; return }
     canInitiate.value = true
-    if (owner === session.member.id) {
+    if (owner !== session.member.id) {
+      owner = session.member.id
       refreshHistory()
-      if (updatedAt && Date.now() - updatedAt >= GATHER_HISTORY_TTL) clearForm()
-      return
+      const raw = uni.getStorageSync(storageKey())
+      if (raw) {
+        const saved: GatherChatSnapshot & {chatId?:string; updatedAt?:number} = JSON.parse(raw)
+        if (typeof saved.idea === 'string' && Array.isArray(saved.exchanges) && (saved.idea.trim() || saved.draft)) {
+          restore(saved, saved.chatId || Date.now().toString(36), saved.updatedAt || Date.now())
+        }
+      } else {
+        // Recover the latest unfinished conversation saved by the old history-only flow.
+        const unfinished = history.value.find(item => item.snapshot)
+        if (unfinished?.snapshot) {
+          restore(unfinished.snapshot, unfinished.id, unfinished.updatedAt)
+          uni.setStorageSync(storageKey(), JSON.stringify({...snapshot(), chatId, updatedAt}))
+          removeGatherHistory(storageKey(), unfinished.id)
+        }
+      }
     }
-    owner = session.member.id
     refreshHistory()
-    const raw = uni.getStorageSync(storageKey())
-    if (!raw) return
-    const saved: ReturnType<typeof snapshot> & {chatId?:string; updatedAt?:number} = JSON.parse(raw)
-    if (typeof saved.idea !== 'string' || !Array.isArray(saved.exchanges)) return
-    // Legacy snapshots have no reliable creation time; give them one bounded recovery window.
-    const savedTime = saved.updatedAt ?? Date.now()
-    if (!Number.isFinite(savedTime) || Date.now() - savedTime >= GATHER_HISTORY_TTL || savedTime > Date.now()) {
-      uni.removeStorageSync(storageKey()); return
+    if (createdId.value) {
+      const record = await api.managedActivity(createdId.value)
+      if (disposed || request !== version) return
+      if (record.lifecycle === 'published') forget()
     }
-    const savedId = saved.chatId || savedTime.toString(36) + '-' + Math.random().toString(36).slice(2)
-    // Import the old single active draft once. Opening the page always starts a fresh chat.
-    archiveGatherHistory(storageKey(), {...historyEntry(savedId, savedTime, saved), snapshot:saved})
-    uni.removeStorageSync(storageKey())
-    refreshHistory()
   } catch (e) { if (request === version) { if (canInitiate.value) error.value = errorMessage(e); else accessError.value = errorMessage(e) } }
   finally { if (request === version) checking.value = false }
 }
@@ -338,7 +363,9 @@ function moreSettings() {
   if (!d || busy.value || !current(request) || uncertainCreate.value) return
   if (createdId.value) { navigate(routes.editor + '?id=' + encodeURIComponent(createdId.value)); return }
   persist()
-  stageActivityDraft(owner, session.epoch, d, d.consultationContact, () => { if (current(request)) forget() })
+  stageActivityDraft(owner, session.epoch, d, d.consultationContact, id => {
+    if (current(request)) { createdId.value = id; uncertainCreate.value = false; persist() }
+  })
   navigate(routes.editor + '?aiDraft=1')
 }
 function inputForPublish(d: GatherDraft): ActivityWriteInput {
@@ -399,7 +426,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
     </view>
     <view v-else-if="showHistory" class="conversation">
       <button class="text-link" @click="showHistory = false">返回对话</button>
-      <view class="question-title">近七天聊天记录</view>
+      <view class="question-title">聊天记录</view>
       <view v-if="!history.length" class="helper">暂无聊天记录</view>
       <view v-for="item in history" :key="item.id" class="question-card">
         <button class="option" @click="expandedId = expandedId === item.id ? '' : item.id">{{ item.idea }}</button>
@@ -416,6 +443,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
     <view v-else class="conversation" :style="keyboard ? {paddingBottom:(keyboard + 84) + 'px'} : undefined">
       <view class="assistant-line chat-heading">
         <view class="assistant-mark">✦</view><text>i 助手</text>
+        <button class="utility-button new-chat-link" :disabled="busy || checking || (!idea.trim() && !draft)" @click="newConversation">新对话</button>
         <button class="utility-button history-link" :disabled="busy || checking" @click="openHistory"><view class="clock-icon" />聊天记录</button>
       </view>
       <view v-if="!sentIdea" class="greeting">说说你的聚会想法，i 助手会根据你提供的信息继续提问。</view>
@@ -627,7 +655,7 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
 .chat-heading { margin-bottom:16rpx; }
 .utility-button { box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:10rpx; min-height:72rpx; margin:0; padding:0 24rpx; border:1rpx solid #cadbd1; border-radius:18rpx; background:#fff; color:#265741; font-size:26rpx; font-weight:500; line-height:1.3; }
 .utility-button::after { border:0; }
-.history-link,.manual-link { margin-left:auto; }
+.new-chat-link,.manual-link { margin-left:auto; }
 .clock-icon { position:relative; box-sizing:border-box; width:26rpx; height:26rpx; border:2rpx solid currentColor; border-radius:50%; }
 .clock-icon::before { content:''; position:absolute; left:9rpx; top:4rpx; width:6rpx; height:7rpx; border-left:2rpx solid currentColor; border-bottom:2rpx solid currentColor; }
 .reply-status { margin:16rpx 0; color:#526d5f; font-size:26rpx; }

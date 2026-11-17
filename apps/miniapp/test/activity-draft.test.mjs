@@ -60,7 +60,7 @@ function makePage(t, storage = new Map()) {
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'newConversation,checking,canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
   return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
 }
@@ -148,27 +148,20 @@ test('compound text can supply place, fee and capacity in one turn, contact stay
 })
 
 function resumeChat(page, idea) {
-  page.openHistory()
-  const item = page.history.value.find(item => item.idea === idea)
-  assert.ok(item, 'Expected a history entry for ' + idea)
-  page.resumeHistory(item.id)
-  return item
+  assert.equal(page.idea.value, idea, 'unfinished conversation should restore automatically')
 }
 
-test('re-entering opens a blank conversation and unsent ideas can be resumed from history', async t => {
+test('leaving and re-entering automatically restores unsent input without archiving it', async t => {
   const first=makePage(t)
   await first.lifecycle.show()
   first.page.idea.value='上次未提交的想法'
+  first.lifecycle.hide()
   first.lifecycle.unload()
   const next=makePage(t,first.storage)
   await next.lifecycle.show()
-  assert.deepEqual(next.modals,[])
-  assert.equal(next.page.idea.value,'')
-  next.page.idea.value='另一场读书会'
-  resumeChat(next.page,'上次未提交的想法')
   assert.equal(next.page.idea.value,'上次未提交的想法')
-  resumeChat(next.page,'另一场读书会')
-  assert.equal(next.page.idea.value,'另一场读书会')
+  next.page.openHistory()
+  assert.equal(next.page.history.value.length,0)
   assert.equal(next.requests.length,0)
   assert.deepEqual(next.modals,[])
 })
@@ -296,7 +289,7 @@ test('AI outage preserves answers until an explicit question retry and prevents 
   assert.equal(page.draft.value.title,blankDraft.title)
   assert.equal(calls,1)
 })
-test('a clarification without a patch remains in history and survives opt-in restore', async t => {
+test('a clarification without a patch restores automatically after leaving', async t => {
   const first=makePage(t)
   const {page,lifecycle,requests,api}=first
   await lifecycle.show()
@@ -376,42 +369,29 @@ test('messages appear before the API responds and each reply keeps its own confi
   assert.deepEqual(resumed.page.exchanges.value[0].facts, turn.facts)
 })
 
-test('restoring and leaving a chat does not extend the seven-day window', async t => {
+test('unfinished conversation survives beyond seven days and keeps both input fields', async t => {
   const key='gather-dialog:v1:local:a'
-  const saved={idea:'读书会',exchanges:[],reply:'',chatId:'legacy-1',updatedAt:Date.now()-6*86400000}
+  const saved={idea:'读书会',draft:null,exchanges:[],reply:'卡内未发内容',dockReply:'聊天未发内容',custom:true,chatId:'active-1',updatedAt:Date.now()-8*86400000}
   const next=makePage(t,new Map([[key,JSON.stringify(saved)]]))
   await next.lifecycle.show()
-  assert.equal(next.storage.has(key),false)
-  const restored=resumeChat(next.page,saved.idea)
-  assert.equal(restored.updatedAt,saved.updatedAt)
+  assert.equal(next.page.idea.value,'读书会')
+  assert.equal(next.page.reply.value,saved.reply)
+  assert.equal(next.page.message.value,'读书会')
   next.lifecycle.hide()
-  next.page.openHistory()
-  assert.equal(next.page.history.value[0].updatedAt,saved.updatedAt)
-  const expired=makePage(t,new Map([[key,JSON.stringify({...saved,updatedAt:Date.now()-7*86400000})]]))
-  await expired.lifecycle.show()
-  expired.page.openHistory()
-  assert.equal(expired.page.idea.value,'')
-  assert.equal(expired.page.history.value.length,0)
-  assert.deepEqual(expired.modals,[])
-
+  assert.equal(next.storage.has(key),true)
+  assert.equal(JSON.parse(next.storage.get(key)).dockReply,saved.dockReply)
 })
 
-test('starting over keeps sent messages readable in local history', async t => {
-  const first=makePage(t)
-  await first.lifecycle.show()
-  first.page.idea.value='园区读书会'
-  const turn=first.page.generate()
-  first.requests[0].resolve({draft:blankDraft,nextQuestion:card('date')})
-  await turn
-  await first.page.answer('明天')
-  first.lifecycle.unload()
-  const next=makePage(t,first.storage)
+test('old unfinished history is recovered as the active conversation', async t => {
+  const key='gather-dialog:v1:local:a'
+  const saved={idea:'园区读书会',draft:null,exchanges:[],reply:'',createdId:''}
+  const storage=new Map([[key+':history',JSON.stringify([{id:'old',updatedAt:Date.now(),idea:saved.idea,openingFacts:[],exchanges:[],snapshot:saved}])]])
+  const next=makePage(t,storage)
   await next.lifecycle.show()
+  assert.equal(next.page.idea.value,saved.idea)
+  assert.equal(JSON.parse(storage.get(key)).idea,saved.idea)
   next.page.openHistory()
-  assert.equal(next.page.idea.value,'')
-  assert.equal(next.page.history.value.length,1)
-  assert.equal(next.page.history.value[0].idea,'园区读书会')
-  assert.equal(next.page.history.value[0].exchanges[0].answer,'明天')
+  assert.equal(next.page.history.value.length,0)
 })
 
 test('community status is checked again before returning to the AI gathering conversation', async t => {
@@ -510,4 +490,101 @@ test('repeating a known start keeps the draft, records the message once and allo
   requests[1].resolve({draft:blankDraft,nextQuestion:card('time')})
   await retry
   assert.equal(page.question.value.field,'time')
+})
+
+test('refreshing the same member while checking community access finishes and keeps the conversation', async t => {
+  const h = makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value = '继续交流 AI 应用'
+  let resolveAccess
+  h.api.communityAccess = () => new Promise(resolve => { resolveAccess = resolve })
+  const checking = h.lifecycle.show()
+  await new Promise(resolve => setImmediate(resolve))
+  h.session.member = {...h.session.member}
+  resolveAccess({isRegistered:true})
+  await checking
+  assert.equal(h.page.checking.value, false)
+  assert.equal(h.page.canInitiate.value, true)
+  assert.equal(h.page.idea.value, '继续交流 AI 应用')
+})
+
+test('identity change during community check drops the old result and offers a retry', async t => {
+  const h = makePage(t)
+  await h.lifecycle.show()
+  let resolveAccess
+  h.api.communityAccess = () => new Promise(resolve => { resolveAccess = resolve })
+  const checking = h.lifecycle.show()
+  await new Promise(resolve => setImmediate(resolve))
+  h.session.member = {id:'b'}
+  resolveAccess({isRegistered:true})
+  await checking
+  assert.equal(h.page.checking.value, false)
+  assert.equal(h.page.canInitiate.value, false)
+  assert.match(h.page.accessError.value, /身份已变更/)
+  h.api.communityAccess = async () => ({isRegistered:true})
+  await h.lifecycle.show()
+  assert.equal(h.page.checking.value, false)
+  assert.equal(h.page.canInitiate.value, true)
+})
+
+test('saved activity draft keeps its conversation until publication is confirmed by the server', async t => {
+  const key='gather-dialog:v1:local:a'
+  const saved={idea:'等待发布的聚会',draft:loadGatherService('gather-dialog').createGatherDraft('等待发布的聚会',blankDraft),exchanges:[],reply:'',createdId:'saved-draft',chatId:'active',updatedAt:Date.now()}
+  const h=makePage(t,new Map([[key,JSON.stringify(saved)]]))
+  h.api.managedActivity=async()=>({lifecycle:'draft'})
+  await h.lifecycle.show()
+  assert.equal(h.page.idea.value,saved.idea)
+  assert.equal(h.page.createdId.value,'saved-draft')
+  assert.equal(h.storage.has(key),true)
+  h.api.managedActivity=async()=>{throw new Error('查询失败')}
+  await h.lifecycle.show()
+  assert.equal(h.page.idea.value,saved.idea)
+  assert.equal(h.storage.has(key),true)
+  h.api.managedActivity=async()=>({lifecycle:'published'})
+  await h.lifecycle.show()
+  assert.equal(h.page.idea.value,'')
+  assert.equal(h.storage.has(key),false)
+  h.page.openHistory()
+  assert.equal(h.page.history.value.length,1)
+  assert.equal(h.page.history.value[0].idea,saved.idea)
+  assert.equal(h.page.history.value[0].snapshot,undefined)
+  const reopened=makePage(t,h.storage)
+  await reopened.lifecycle.show()
+  assert.equal(reopened.page.idea.value,'')
+})
+
+test('unfinished conversation is isolated by account and uncertain creation is retained', async t => {
+  const key='gather-dialog:v1:local:a'
+  const saved={idea:'尚未确认创建结果',draft:loadGatherService('gather-dialog').createGatherDraft('尚未确认创建结果',blankDraft),exchanges:[],reply:'',createdId:'',uncertainCreate:true,chatId:'uncertain',updatedAt:Date.now()}
+  const h=makePage(t,new Map([[key,JSON.stringify(saved)]]))
+  await h.lifecycle.show()
+  assert.equal(h.page.idea.value,saved.idea)
+  h.session.member={id:'b'}
+  await h.lifecycle.show()
+  assert.equal(h.page.idea.value,'')
+  assert.equal(JSON.parse(h.storage.get(key)).uncertainCreate,true)
+  h.session.member={id:'a'}
+  await h.lifecycle.show()
+  assert.equal(h.page.idea.value,saved.idea)
+})
+
+test('new conversation cancels safely, archives on confirmation and stays blank after reopening', async t => {
+  const h=makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value='未发布的原对话'
+  h.decisions.push(false)
+  await h.page.newConversation()
+  assert.equal(h.page.idea.value,'未发布的原对话')
+  h.decisions.push(true)
+  await h.page.newConversation()
+  assert.equal(h.page.idea.value,'')
+  h.lifecycle.unload()
+  const next=makePage(t,h.storage)
+  await next.lifecycle.show()
+  assert.equal(next.page.idea.value,'')
+  next.page.openHistory()
+  const saved=next.page.history.value.find(item=>item.idea==='未发布的原对话')
+  assert.ok(saved.snapshot)
+  next.page.resumeHistory(saved.id)
+  assert.equal(next.page.idea.value,'未发布的原对话')
 })

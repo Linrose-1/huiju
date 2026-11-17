@@ -44,7 +44,7 @@ export function readGatherHistory(key: string): GatherHistoryItem[] {
   }
   const cutoff = Date.now() - GATHER_HISTORY_TTL
   const items = Array.isArray(saved) ? saved.filter(item => item && Number.isFinite(item.updatedAt) &&
-    item.updatedAt > cutoff && typeof item.id === 'string' && typeof item.idea === 'string' &&
+    (item.snapshot || item.updatedAt > cutoff) && typeof item.id === 'string' && typeof item.idea === 'string' &&
     Array.isArray(item.openingFacts) && Array.isArray(item.exchanges)) : []
   if (!items.length || items.length !== saved.length) writeHistory(key, items)
   return items.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -52,7 +52,7 @@ export function readGatherHistory(key: string): GatherHistoryItem[] {
 
 export function archiveGatherHistory(key: string, item: GatherHistoryItem) {
   const items = readGatherHistory(key)
-  if (!Number.isFinite(item.updatedAt) || item.updatedAt <= Date.now() - GATHER_HISTORY_TTL) return
+  if (!Number.isFinite(item.updatedAt) || (!item.snapshot && item.updatedAt <= Date.now() - GATHER_HISTORY_TTL)) return
   const existing = items.find(previous => previous.id === item.id)
   if (existing && existing.updatedAt > item.updatedAt) return
   writeHistory(key, [item, ...items.filter(previous => previous.id !== item.id)])

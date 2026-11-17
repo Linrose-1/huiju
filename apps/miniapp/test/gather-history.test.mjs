@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
+import { URL } from 'node:url'
 import ts from 'typescript'
 
 const source = readFileSync(new URL('../src/services/gather-history.ts', import.meta.url), 'utf8')
@@ -48,4 +49,11 @@ test('updates replace only the matching session, order by latest change, and iso
   assert.deepEqual(readGatherHistory('trial:A'), [])
   advance(7 * 86_400_000 - 100)
   assert.deepEqual(readGatherHistory('local:A'), [changed])
+})
+
+test('paused unfinished conversations remain resumable beyond seven days', () => {
+  const h=setup(), item={...h.item('unfinished','待继续的聚会'),snapshot:{idea:'待继续的聚会'}}
+  h.archiveGatherHistory('local:A',item)
+  h.advance(8*86_400_000)
+  assert.deepEqual(h.readGatherHistory('local:A'),[item])
 })

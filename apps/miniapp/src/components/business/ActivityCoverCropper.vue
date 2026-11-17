@@ -39,7 +39,7 @@ function start(event: { touches: ArrayLike<Touch> }) {
   gesture = { x: event.touches[0].clientX, y: event.touches[0].clientY, left: geometry.value.x, top: geometry.value.y, zoom: zoom.value, distance: distance(event.touches) }
 }
 function setZoom(value: number) {
-  const old = geometry.value, nextZoom = Math.max(1, Math.min(4, value)), ratio = nextZoom / zoom.value
+  const old = geometry.value, nextZoom = Math.max(geometry.value.minZoom, Math.min(4, value)), ratio = nextZoom / zoom.value
   x.value = frameWidth.value / 2 - (frameWidth.value / 2 - old.x) * ratio
   y.value = frameWidth.value * .4 - (frameWidth.value * .4 - old.y) * ratio
   zoom.value = nextZoom
@@ -57,7 +57,9 @@ async function confirm() {
     await nextTick()
     const g = geometry.value
     const canvas = uni.createCanvasContext('activity-cover-canvas', instance?.proxy)
-    canvas.drawImage(src.value, g.sourceX, g.sourceY, g.sourceWidth, g.sourceHeight, 0, 0, 1250, 1000)
+    canvas.setFillStyle('#ffffff')
+    canvas.fillRect(0, 0, 1250, 1000)
+    canvas.drawImage(src.value, g.sourceX, g.sourceY, g.sourceWidth, g.sourceHeight, g.destX, g.destY, g.destWidth, g.destHeight)
     await new Promise<void>(resolve => canvas.draw(false, () => resolve()))
     const file = await new Promise<string>((resolve, reject) => uni.canvasToTempFilePath({ canvasId: 'activity-cover-canvas', width: 1250, height: 1000, destWidth: 1250, destHeight: 1000, fileType: 'jpg', quality: .9, success: result => resolve(result.tempFilePath), fail: () => reject(new Error('裁剪未完成，请重试')) }, instance?.proxy))
     if (request === sequence) finish(file)
@@ -76,7 +78,7 @@ defineExpose({ open, cancel: () => finish(null) })
     <view class="crop-heading">
       裁剪封面
     </view><text class="crop-help">
-      固定 5:4 · 拖动图片、双指或滑块缩放
+      固定 5:4 · 可缩小显示全图，空白处留白
     </text>
     <view
       class="crop-stage"
@@ -101,7 +103,7 @@ defineExpose({ open, cancel: () => finish(null) })
     <slider
       class="crop-slider"
       :value="zoom * 100"
-      :min="100"
+      :min="Math.floor(geometry.minZoom * 100)"
       :max="400"
       :disabled="saving"
       active-color="#2d805f"
@@ -139,5 +141,5 @@ defineExpose({ open, cancel: () => finish(null) })
   </view>
 </template>
 <style scoped>
-.crop-overlay{position:fixed;inset:0;z-index:1000;background:#f5f8f7;display:flex;flex-direction:column;align-items:center;padding:calc(30rpx + env(safe-area-inset-top)) 24rpx calc(30rpx + env(safe-area-inset-bottom));overflow:auto}.crop-heading{font-size:34rpx;font-weight:600;margin:20rpx 0}.crop-help{font-size:25rpx;color:#647b6d;margin-bottom:40rpx}.crop-stage{position:relative;overflow:hidden;box-sizing:border-box;padding:40px 16px;background:#172e22;flex-shrink:0}.crop-frame{position:relative;overflow:visible;background:#172e22;flex-shrink:0}.crop-source{position:absolute;max-width:none}.crop-grid{position:absolute;inset:0;box-shadow:0 0 0 2000px #0009;border:4rpx solid white;box-sizing:border-box;pointer-events:none;background:linear-gradient(90deg,transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%),linear-gradient(transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%)}.crop-corners{position:absolute;inset:-4rpx;border:6rpx solid #6ff0ac;pointer-events:none;box-sizing:border-box}.crop-slider{width:90%;margin-top:35rpx}.crop-actions{display:flex;gap:20rpx;width:100%;margin-top:auto;padding-top:30rpx}.crop-action{flex:1}.crop-error{color:#b14e32;font-size:26rpx}.crop-canvas{position:absolute;left:-10000px;top:0;width:1250px;height:1000px}
+.crop-overlay{position:fixed;inset:0;z-index:1000;background:#f5f8f7;display:flex;flex-direction:column;align-items:center;padding:calc(30rpx + env(safe-area-inset-top)) 24rpx calc(30rpx + env(safe-area-inset-bottom));overflow:auto}.crop-heading{font-size:34rpx;font-weight:600;margin:20rpx 0}.crop-help{font-size:25rpx;color:#647b6d;margin-bottom:40rpx}.crop-stage{position:relative;overflow:hidden;box-sizing:border-box;padding:40px 16px;background:#172e22;flex-shrink:0}.crop-frame{position:relative;overflow:visible;background:#fff;flex-shrink:0}.crop-source{position:absolute;max-width:none}.crop-grid{position:absolute;inset:0;box-shadow:0 0 0 2000px #0009;border:4rpx solid white;box-sizing:border-box;pointer-events:none;background:linear-gradient(90deg,transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%),linear-gradient(transparent 33%,#ffffff80 33.3%,transparent 33.6%,transparent 66%,#ffffff80 66.3%,transparent 66.6%)}.crop-corners{position:absolute;inset:-4rpx;border:6rpx solid #6ff0ac;pointer-events:none;box-sizing:border-box}.crop-slider{width:90%;margin-top:35rpx}.crop-actions{display:flex;gap:20rpx;width:100%;margin-top:auto;padding-top:30rpx}.crop-action{flex:1}.crop-error{color:#b14e32;font-size:26rpx}.crop-canvas{position:absolute;left:-10000px;top:0;width:1250px;height:1000px}
 </style>
