@@ -1,20 +1,20 @@
 {
   "pages": [
     {
+      "path": "pages/activity/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "友聚会",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
       "path": "pages/circle/index",
       "style": {
         "navigationStyle": "custom",
         "navigationBarTitleText": "商友圈",
         "navigationBarBackgroundColor": "#f4f9f7",
         "backgroundColor": "#f4f9f7",
-        "enablePullDownRefresh": true
-      }
-    },
-    {
-      "path": "pages/activity/index",
-      "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "友聚会",
         "enablePullDownRefresh": true
       }
     },
