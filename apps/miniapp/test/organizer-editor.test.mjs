@@ -27,7 +27,7 @@ const activity = overrides => ({
   lifecycle: 'draft', moderation: 'normal', hasRegistrationEver: false, questions: [], ...overrides,
 })
 const script = readFileSync(new URL('../src/pages/activity/editor.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-function harness({ storage = new Map(), showModal = options => options.success({ confirm: true }), record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseImages = async () => [], chooseActivityLocation = async () => null, DateClass = Date, windowInfo = { windowWidth: 375 } } = {}) {
+function harness({ loadOptions = {}, stagedDraft = null, storage = new Map(), showModal = options => options.success({ confirm: true }), record = activity(), apiOverrides = {}, chooseCover = async () => null, chooseImages = async () => [], chooseActivityLocation = async () => null, DateClass = Date, windowInfo = { windowWidth: 375 } } = {}) {
   const session = reactive({ token: 'token-a', epoch: 1, member: { id: 'member-a' } })
   const navigations = [], creates = [], updates = [], publishes = []
   let onUnload
@@ -43,10 +43,10 @@ function harness({ storage = new Map(), showModal = options => options.success({
     ...apiOverrides,
   }
   const dependencies = {
-    '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onHide() {}, onUnload(callback) { onUnload = callback } },
+    '@dcloudio/uni-app': { onLoad(callback) { callback(loadOptions) }, onShow() {}, onHide() {}, onUnload(callback) { onUnload = callback } },
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
     '@/services/activity-images': activityImages,
-    '@/services/ai-draft': { takeActivityDraft: () => null },
+    '@/services/ai-draft': { takeActivityDraft: () => stagedDraft },
     '@/services/presentation': { ...presentation, feeDisclaimer: '', activityTimeRangeWeekday: (start,end) => start + ' — ' + end },
     '@/services/wechat': { chooseActivityImagePath: chooseCover, chooseActivityImagePaths: chooseImages, readActivityImage: async image => image, chooseActivityLocation },
     '@/services/api/environment': { mediaUrl: value => value },
@@ -56,7 +56,7 @@ function harness({ storage = new Map(), showModal = options => options.success({
     },
     '@/stores/session': { useSessionStore: () => session },
   }
-  const code = ts.transpileModule(script + '\nexport { toggleAudience, previewAudience, optionRows, writeOption, addOption, addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
+  const code = ts.transpileModule(script + '\nexport { optionalOnly, locationCoordinates, applyAiDraft, toggleAudience, previewAudience, optionRows, writeOption, addOption, addImages, promoteImage, questionLocked, visibilityDisabled, changeVisibility, commonQuestions, closeQuestion, selectQuestionTemplate, loadQuestionHistory, retryQuestionHistory, clearQuestionHistory, historyItems, historyHasMore, historyError, historyLoading, historyOpen, selectLocation, locationError, selectingLocation, descriptionDelta, registrationNotice, updateDescription, richValid, changeImage, removeImage, extraImages, cropper, coverUrl, coverSourceUrl, coverError, load, submit, timestamp, dateParts, id, form, source, questions, locked, editable, started, payload, loading, busy, error, submitError, beginQuestion, saveQuestion, editingQuestion, questionError, removeQuestion, moveQuestion, setCapacityLimited, capacityLimited, startQuestionDrag, moveQuestionDrag, endQuestionDrag, step, changeStep, openDate, confirmDate, clearDeadline, pickerDate, pickerTime, dateField, customDeadline, reviewed, confirmPublish, previewTime, previewQuestionTypes };', {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText
   const page = {}
@@ -855,4 +855,39 @@ test('non-registered users cannot enter a new or existing draft, but can edit th
   assert.equal(h.page.error.value, '')
   assert.equal(h.page.source.value.lifecycle, 'published')
   h.unload()
+})
+
+
+test('AI optional settings carries confirmed required fields, images and map coordinates into the publish payload', async () => {
+  const draft = {
+    title:'同行交流', description:'交流实践案例', location:'深圳会议室',
+    startsAt:'2099-11-20T14:00:00+08:00', endsAt:'2099-11-20T16:00:00+08:00',
+    registrationDeadline:null, capacity:null, feeType:'free', feeAmountCents:null, questions:[],
+    imageUrls:['/cover.jpg','/extra.jpg'], coverUrl:'/cover.jpg', coverSourceUrl:'/original.jpg',
+    latitude:22.53, longitude:113.95,
+  }
+  const h = harness({ loadOptions:{aiDraft:'1',optionalOnly:'1'}, stagedDraft:{draft,consultationContact:'组织者微信'} })
+  await h.page.load()
+  assert.equal(h.page.optionalOnly.value,true)
+  assert.equal(h.page.form.title,draft.title)
+  assert.equal(h.page.form.consultationContact,'组织者微信')
+  const input = h.page.payload()
+  assert.equal(input.startsAt,'2099-11-20T06:00:00.000Z')
+  assert.equal(input.endsAt,'2099-11-20T08:00:00.000Z')
+  assert.deepEqual(input.imageUrls,draft.imageUrls)
+  assert.equal(input.coverSourceUrl,draft.coverSourceUrl)
+  assert.equal(input.locationLatitude,22.53)
+  assert.equal(input.locationLongitude,113.95)
+  assert.equal(input.description,draft.description)
+  h.unload()
+})
+
+test('optional-only query does not affect the manual editor and a missing AI draft leaves the full form available', async () => {
+  const manual = harness({loadOptions:{optionalOnly:'1'}})
+  assert.equal(manual.page.optionalOnly.value,false)
+  manual.unload()
+  const missing = harness({loadOptions:{aiDraft:'1',optionalOnly:'1'}})
+  await missing.page.load()
+  assert.equal(missing.page.optionalOnly.value,false)
+  missing.unload()
 })

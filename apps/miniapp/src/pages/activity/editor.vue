@@ -27,6 +27,7 @@ const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), sub
 const aiDraftApplied = ref(false)
 const aiDraftMissing = ref(false)
 let fromAi = false, fromShare = false
+const optionalOnly = ref(false)
 let onAiDraftSaved: ((activityId: string) => void) | undefined
 const source = ref<ManagedActivity | null>(null)
 const coverUrl = ref(''), coverSourceUrl = ref(''), coverError = ref('')
@@ -130,7 +131,7 @@ watch(() => form.capacity, value => { if (value || step.value === 0) capacityLim
 const locationFocus = ref(false)
 const dateField = ref<'start' | 'end' | 'deadline' | null>(null)
 const pickerDate = ref(''), pickerTime = ref('')
-const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : fromAi ? '?aiDraft=1' : ''))
+const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : fromAi ? '?aiDraft=1' + (optionalOnly.value ? '&optionalOnly=1' : '') : ''))
 
 // Only a new, manually created activity uses the device draft.
 function manualDraftKey() {
@@ -239,7 +240,8 @@ function reset() {
   aiDraftApplied.value = false
   aiDraftMissing.value = false
 }
-function applyAiDraft(draft: AiActivityDraft) {
+type AiEditorDraft = AiActivityDraft & { imageUrls?: string[]; coverUrl?: string | null; coverSourceUrl?: string | null; latitude?: number | null; longitude?: number | null }
+function applyAiDraft(draft: AiEditorDraft) {
   descriptionDelta.value = null
   const start = draft.startsAt ? dateParts(draft.startsAt) : { date: '', time: '' }
   const end = draft.endsAt ? dateParts(draft.endsAt) : { date: '', time: '' }
@@ -251,6 +253,11 @@ function applyAiDraft(draft: AiActivityDraft) {
     capacity: draft.capacity ? String(draft.capacity) : '', feeType: draft.feeType || '',
     amount: draft.feeAmountCents ? (draft.feeAmountCents / 100).toFixed(2) : ''
   })
+  const images = activityImages(draft)
+  coverUrl.value = images[0] || ''
+  coverSourceUrl.value = draft.coverSourceUrl || ''
+  extraImages.value = Array.from({ length: 8 }, (_, index) => images[index + 1] || '')
+  locationCoordinates.value = draft.latitude != null && draft.longitude != null ? { latitude:draft.latitude, longitude:draft.longitude } : null
   capacityLimited.value = draft.capacity !== null
   customDeadline.value = draft.registrationDeadline !== null
   questions.value = draft.questions.map(question => ({
@@ -312,7 +319,7 @@ async function load() {
         applyAiDraft(draft.draft)
         form.consultationContact = draft.consultationContact
         onAiDraftSaved = draft.onSaved
-      } else aiDraftMissing.value = true
+      } else { aiDraftMissing.value = true; optionalOnly.value = false }
     }
     const key = manualDraftKey()
     if (!initialized && key) {
@@ -664,7 +671,7 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
   loading.value = false
   error.value = '登录身份已变更，请重新加载后填写活动'
 }, { flush: 'sync' })
-onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1'; fromShare = !!id.value && options?.from === 'share' })
+onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1'; optionalOnly.value = fromAi && options?.optionalOnly === '1'; fromShare = !!id.value && options?.from === 'share' })
 onShow(load)
 onHide(() => { flushManualDraft(); clearQuestionHistory() })
 onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
@@ -683,7 +690,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
         :disabled="busy"
         @click="changeStep(0)"
       >
-        基本信息
+        {{ optionalOnly ? '更多设置' : '基本信息' }}
       </button>
       <view
         class="step-line"
@@ -727,7 +734,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
         v-if="aiDraftApplied"
         class="notice"
       >
-        已带入对话中确认的信息。你可以补充封面、单位署名和报名填写项。
+        {{ optionalOnly ? '聚会必填信息已在对话中确认，这里只需按需补充选填项。' : '已带入对话中确认的信息。你可以补充封面、单位署名和报名填写项。' }}
       </view>
       <view
         v-if="!editable"
@@ -745,7 +752,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
         v-show="step === 0"
         class="basic-information"
       >
-        <view class="form-card type-card">
+        <view v-if="!optionalOnly" class="form-card type-card">
           <view class="card-heading"><text>活动类型</text><text class="helper">选择活动类型</text></view>
           <view class="activity-types">
             <button
@@ -794,7 +801,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             已有报名或活动已开始，费用模式及金额不可修改。
           </view>
         </view>
-        <view class="form-card title-card">
+        <view v-if="!optionalOnly" class="form-card title-card">
           <view class="card-heading"><text>活动标题 <text class="required">*</text></text><text class="helper">{{ form.title.length }}/{{ Math.max(50, source?.title.length || 0) }}</text></view>
           <input
             v-model="form.title"
@@ -883,7 +890,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
         >
           {{ coverError }}，可重新选择上传。
         </view>
-        <view class="form-card description-card">
+        <view v-if="!optionalOnly" class="form-card description-card">
           <view class="card-heading"><text>活动介绍 <text class="required">*</text></text><text class="helper">{{ form.description.length }}/10000</text></view>
           <ActivityRichEditor
             :value="{ text: form.description, delta: descriptionDelta }"
@@ -892,7 +899,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             @validity="richValid = $event"
           />
         </view>
-        <view class="form-card time-card">
+        <view v-if="!optionalOnly" class="form-card time-card">
           <view class="card-heading"><text>活动时间 <text class="required">*</text></text></view>
           <view class="event-times">
             <button
@@ -920,7 +927,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             </button>
           </view>
         </view>
-        <view class="form-card location-card">
+        <view v-if="!optionalOnly" class="form-card location-card">
           <view class="card-heading">
             <text>活动地点 <text class="required">*</text></text><button
               class="location-link"
@@ -1012,7 +1019,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             </button>
           </view>
         </view>
-        <view class="form-card contact-card">
+        <view v-if="!optionalOnly" class="form-card contact-card">
           <view class="card-heading"><text>咨询联系方式 <text class="required">*</text></text></view><view class="field icon-field">
             <uni-icons
               type="phone"
@@ -1512,7 +1519,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             :disabled="busy"
             @click="changeStep(step - 1)"
           >
-            {{ step === 2 ? '上一步：报名设置' : '上一步：基本信息' }}
+            {{ step === 2 ? '上一步：报名设置' : optionalOnly ? '上一步：更多设置' : '上一步：基本信息' }}
           </button>
           <button
             v-if="step < 2"

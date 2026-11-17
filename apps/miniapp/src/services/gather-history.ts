@@ -14,6 +14,9 @@ export type GatherChatSnapshot = {
   custom: boolean | string
   editing: GatherField | null
   createdId: string
+  descriptionCandidate?: string | null
+  confirmedDescription?: string
+  imagesDecided?: boolean
   uncertainCreate: boolean
 }
 

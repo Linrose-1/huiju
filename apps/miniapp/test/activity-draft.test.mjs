@@ -32,11 +32,13 @@ function card(field) {
 }
 function makePage(t, storage = new Map()) {
   const session = reactive({ token:'token', epoch:1, member:{id:'a'} })
-  const requests = [], navigation = [], lifecycle = {}, decisions = [], modals = []
+  const requests = [], navigation = [], lifecycle = {}, decisions = [], modals = [], staged = []
+  const wechat = {}
   const api = { communityAccess: async () => ({isRegistered:true}), interpretActivityReply: async (_answer,_field,_date,_period,context) => ({ draft:{...blankDraft,title:null,description:null}, nextQuestion:card(context.pending[0]) }), generateActivityDraft: (idea,context) => new Promise((resolve, reject) => requests.push({idea, context, resolve, reject})) }
   const uni = {
     setStorageSync:(k,v) => storage.set(k,v), getStorageSync:k => storage.get(k), removeStorageSync:k => storage.delete(k),
     hideKeyboard() {}, pageScrollTo() {}, showModal(options) {
+      assert.ok([...options.confirmText || '确定'].length <= 4, '微信弹窗确认按钮最多4个字符')
       modals.push(options.title)
       const choice = decisions.shift()
       if (choice === undefined) throw new Error('unexpected modal: ' + options.title)
@@ -53,16 +55,16 @@ function makePage(t, storage = new Map()) {
     '@/services/gather-history':historyModule,
     '@/services/gather-dialog':dialog,
     '@/services/gather-edits':loadGatherService('gather-edits', {'./gather-dialog':dialog}),
-    '@/services/presentation':{}, '@/services/api/environment':{API_BASE_URL:'local'},
-    '@/services/api':{api, errorMessage:e=>e.message, ApiError:class extends Error {}}, '@/services/ai-draft':{},
+    '@/services/wechat':wechat, '@/services/presentation':{activityTimeRangeWeekday:(start,end)=>start+' 至 '+end}, '@/services/api/environment':{API_BASE_URL:'local',mediaUrl:value=>value},
+    '@/services/api':{api, errorMessage:e=>e.message, ApiError:class extends Error {}}, '@/services/ai-draft':{stageActivityDraft:(...args)=>staged.push(args)},
     '@/services/navigation':{ routes:{manage:'/manage'}, requireProfile: async()=>true, navigate:url=>navigation.push(url) },
     '@/stores/session':{useSessionStore:()=>session}
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'newConversation,checking,canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'inputDescription,acceptDescription,selectTime,selectLocation,recordSelection,writeDescription,descriptionCandidate,confirmedDescription,imagesDecided,addGatherImages,removeGatherImage,cropper,inputForPublish,moreSettings,newConversation,checking,canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
-  return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals}
+  return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals,wechat,staged}
 }
 
 test('gather dialog preserves failed input, suppresses duplicate generation and late responses for another session', async t=>{
@@ -99,6 +101,7 @@ test('complete conversation produces preview, publishes only after confirmation 
   await page.answer('免费',true)
   await page.answer('群内联系发起人')
   assert.equal(page.question.value,null)
+  page.confirmedDescription.value=page.draft.value.description; page.imagesDecided.value=true
   let creates=0, publishes=0
   api.createActivity=async input=>{creates++;assert.equal(input.location,'线上聚会 · 报名后发会议链接');return {id:'existing'}}
   api.managedActivity=async()=>({lifecycle:'draft'})
@@ -540,12 +543,13 @@ test('saved activity draft keeps its conversation until publication is confirmed
   await h.lifecycle.show()
   assert.equal(h.page.idea.value,saved.idea)
   assert.equal(h.storage.has(key),true)
+  h.storage.set(key+':history',JSON.stringify([{id:'paused-before',updatedAt:Date.now(),idea:'更早的未发布对话',openingFacts:[],exchanges:[],snapshot:{idea:'更早的未发布对话',draft:null,exchanges:[],reply:''}}]))
   h.api.managedActivity=async()=>({lifecycle:'published'})
   await h.lifecycle.show()
   assert.equal(h.page.idea.value,'')
-  assert.equal(h.storage.has(key),false)
+  assert.equal(JSON.parse(h.storage.get(key)).idea,'')
   h.page.openHistory()
-  assert.equal(h.page.history.value.length,1)
+  assert.equal(h.page.history.value.length,2)
   assert.equal(h.page.history.value[0].idea,saved.idea)
   assert.equal(h.page.history.value[0].snapshot,undefined)
   const reopened=makePage(t,h.storage)
@@ -587,4 +591,118 @@ test('new conversation cancels safely, archives on confirmation and stays blank 
   assert.ok(saved.snapshot)
   next.page.resumeHistory(saved.id)
   assert.equal(next.page.idea.value,'未发布的原对话')
+})
+
+function completedDraft() {
+  return {...loadGatherService('gather-dialog').createGatherDraft('AI交流', {...blankDraft,startsAt:'2099-12-01T14:00:00+08:00',endsAt:'2099-12-01T16:00:00+08:00',location:'交流中心',feeType:'free'}),consultationContact:'联系发起人'}
+}
+
+test('native time and map selections preserve unrelated facts and cancellation or stale map cannot overwrite them', async t => {
+  const h=makePage(t)
+  await h.lifecycle.show()
+  h.page.draft.value=completedDraft()
+  await h.page.selectTime({startsAt:'2099-12-02T23:00:00+08:00',endsAt:'2099-12-03T01:00:00+08:00'})
+  assert.equal(h.page.draft.value.date,'2099-12-02')
+  assert.equal(h.page.draft.value.location,'交流中心')
+  h.wechat.chooseActivityLocation=async()=>({location:'广州 · 创客空间',latitude:23.1,longitude:113.2})
+  await h.page.selectLocation()
+  assert.equal(h.page.draft.value.latitude,23.1)
+  assert.equal(h.page.inputForPublish(h.page.draft.value).locationLongitude,113.2)
+  h.wechat.chooseActivityLocation=async()=>null
+  await h.page.selectLocation()
+  assert.equal(h.page.draft.value.location,'广州 · 创客空间')
+  let resolveLocation
+  h.wechat.chooseActivityLocation=()=>new Promise(resolve=>{resolveLocation=resolve})
+  const map=h.page.selectLocation()
+  h.session.epoch++
+  resolveLocation({location:'迟到地点',latitude:1,longitude:2})
+  await map
+  assert.equal(h.page.draft.value,null)
+})
+
+test('AI description stays a candidate until confirmation and images plus review state survive leaving', async t => {
+  const h=makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value='AI交流'; h.page.draft.value=completedDraft()
+  const before=h.page.draft.value.description
+  const generating=h.page.writeDescription()
+  assert.match(h.requests[0].idea,/不虚构/)
+  h.requests[0].resolve({draft:{...blankDraft,description:'围绕AI应用交流实践经验，欢迎带着实际问题参与讨论。'}})
+  await generating
+  assert.equal(h.page.draft.value.description,before)
+  assert.equal(h.page.confirmedDescription.value,'')
+  await h.page.acceptDescription()
+  assert.match(h.page.draft.value.description,/实践经验/)
+  h.wechat.chooseActivityImagePaths=async()=>['one','two']
+  h.wechat.readActivityImage=async path=>({base64:path,mimeType:'image/jpeg'})
+  h.page.cropper.value={open:async()=> 'cropped',cancel(){}}
+  let uploads=0
+  h.api.uploadCover=async()=>({coverUrl:'/image-'+(++uploads)})
+  await h.page.addGatherImages()
+  assert.deepEqual(h.page.draft.value.imageUrls,['/image-2','/image-3'])
+  assert.equal(h.page.draft.value.coverSourceUrl,'/image-1')
+  assert.equal(h.page.imagesDecided.value,true)
+  const payload=h.page.inputForPublish(h.page.draft.value)
+  assert.equal(payload.coverUrl,'/image-2')
+  h.lifecycle.unload()
+  const next=makePage(t,h.storage)
+  await next.lifecycle.show()
+  assert.deepEqual(next.page.draft.value.imageUrls,payload.imageUrls)
+  assert.equal(next.page.confirmedDescription.value,next.page.draft.value.description)
+  assert.equal(next.page.imagesDecided.value,true)
+  next.page.moreSettings(true)
+  assert.match(next.navigation[0],/optionalOnly=1/)
+  assert.deepEqual(next.staged[0][2].imageUrls,payload.imageUrls)
+})
+
+test('publish requires explicit introduction and image decisions, failed uploads preserve uploaded images', async t => {
+  const h=makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value='AI交流'; h.page.draft.value=completedDraft()
+  let creates=0
+  h.api.createActivity=async()=>{creates++;return {id:'unexpected'}}
+  await h.page.publish()
+  assert.equal(creates,0)
+  assert.match(h.page.error.value,/确认活动介绍/)
+  h.wechat.chooseActivityImagePaths=async()=>['one','bad']
+  h.wechat.readActivityImage=async path=>{if(path==='bad')throw new Error('读取失败');return {base64:path,mimeType:'image/jpeg'}}
+  h.page.cropper.value={open:async()=> 'cropped',cancel(){}}
+  let uploads=0
+  h.api.uploadCover=async()=>({coverUrl:'/uploaded-'+(++uploads)})
+  await h.page.addGatherImages()
+  assert.deepEqual(h.page.draft.value.imageUrls,['/uploaded-2'])
+  assert.match(h.page.error.value,/已上传的图片已保留/)
+})
+
+test('editing a confirmed introduction revokes approval and cannot bypass review via optional settings', async t => {
+  const h=makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value='AI交流'; h.page.draft.value=completedDraft()
+  h.page.confirmedDescription.value=h.page.draft.value.description;h.page.imagesDecided.value=true
+  h.page.inputDescription({detail:{value:'尚未确认的新介绍'}})
+  assert.equal(h.page.confirmedDescription.value,'')
+  h.page.moreSettings(true)
+  assert.equal(h.navigation.length,0)
+  await h.page.publish()
+  assert.match(h.page.error.value,/确认活动介绍/)
+  await h.page.acceptDescription()
+  h.page.moreSettings(true)
+  assert.equal(h.navigation.length,1)
+  assert.equal(h.staged[0][2].description,'尚未确认的新介绍')
+})
+
+test('returning from saved optional settings refreshes the exact server draft before reviewing', async t => {
+  const h=makePage(t)
+  await h.lifecycle.show()
+  h.page.idea.value='AI交流'; h.page.draft.value=completedDraft();h.page.createdId.value='saved'
+  const record={...completedDraft(),title:'服务端草稿',description:'更新后的介绍',lifecycle:'draft',capacity:16,imageUrls:['/saved-cover'],coverUrl:'/saved-cover',coverSourceUrl:'/original',locationLatitude:23.1,locationLongitude:113.2,questions:[]}
+  h.api.managedActivity=async()=>record
+  await h.lifecycle.show()
+  assert.equal(h.page.draft.value.capacity,16)
+  assert.deepEqual(h.page.draft.value.imageUrls,['/saved-cover'])
+  assert.equal(h.page.draft.value.latitude,23.1)
+  assert.equal(h.page.draft.value.description,'更新后的介绍')
+  await h.page.acceptDescription()
+  assert.equal(h.page.confirmedDescription.value,'更新后的介绍')
+  assert.equal(h.page.imagesDecided.value,true)
 })

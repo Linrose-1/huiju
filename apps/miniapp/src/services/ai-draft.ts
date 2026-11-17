@@ -1,15 +1,16 @@
 import type { AiActivityDraft } from './api/types'
+export type EditorAiDraft = AiActivityDraft & { imageUrls?:string[]; coverUrl?:string|null; coverSourceUrl?:string|null; latitude?:number|null; longitude?:number|null }
 
 interface EditorDraft {
   owner: string
   epoch: number
-  draft: AiActivityDraft
+  draft: EditorAiDraft
   consultationContact: string
   onSaved?: (activityId: string) => void
 }
 let pending: EditorDraft | null = null
 
-export function stageActivityDraft(owner: string, epoch: number, draft: AiActivityDraft, consultationContact = '', onSaved?: EditorDraft['onSaved']) {
+export function stageActivityDraft(owner: string, epoch: number, draft: EditorAiDraft, consultationContact = '', onSaved?: EditorDraft['onSaved']) {
   pending = { owner, epoch, draft, consultationContact, onSaved }
 }
 

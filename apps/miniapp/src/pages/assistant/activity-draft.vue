@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
+import ActivityCoverCropper from '@/components/business/ActivityCoverCropper.vue'
+import GatherTimePicker from '@/components/business/GatherTimePicker.vue'
+import { chooseActivityLocation, chooseActivityImagePaths, readActivityImage } from '@/services/wechat'
 import GatherMembershipNote from '@/components/business/GatherMembershipNote.vue'
 import PageReturn from '@/components/base/PageReturn.vue'
 import { api, ApiError, errorMessage } from '@/services/api'
-import { API_BASE_URL } from '@/services/api/environment'
+import { API_BASE_URL, mediaUrl } from '@/services/api/environment'
 import type { ActivityWriteInput } from '@/services/api/types'
 import { archiveGatherHistory, readGatherHistory, removeGatherHistory } from '@/services/gather-history'
 import type { GatherChatSnapshot, GatherHistoryItem } from '@/services/gather-history'
@@ -29,6 +32,8 @@ const sentIdea = ref('')
 const openingFacts = ref<string[]>([])
 const outgoing = ref<GatherTurn | null>(null)
 const modelCard = ref<GatherQuestion | null>(null)
+const descriptionCandidate = ref<string | null>(null), confirmedDescription = ref(''), imagesDecided = ref(false)
+const cropper = ref<InstanceType<typeof ActivityCoverCropper> | null>(null)
 const error = ref('')
 const busy = ref(false)
 const checking = ref(true)
@@ -47,7 +52,7 @@ function current(request: number) {
 function snapshot(): GatherChatSnapshot {
   return { idea: idea.value, draft: draft.value, exchanges: exchanges.value, reply: reply.value, dockReply: dockReply.value,
     sentIdea: sentIdea.value, openingFacts: openingFacts.value,
-    manual:false, modelCardVersion:1, modelCard:modelCard.value, custom: custom.value, editing: editing.value, createdId: createdId.value, uncertainCreate: uncertainCreate.value }
+    manual:false, modelCardVersion:1, modelCard:modelCard.value, custom: custom.value, editing: editing.value, createdId: createdId.value, uncertainCreate: uncertainCreate.value, descriptionCandidate:descriptionCandidate.value, confirmedDescription:confirmedDescription.value, imagesDecided:imagesDecided.value }
 }
 const history = ref<GatherHistoryItem[]>([])
 const showHistory = ref(false)
@@ -67,7 +72,7 @@ async function newConversation() {
   const request = version
   busy.value = true
   try {
-    if (!await confirm('开启新对话？', '当前未发布对话会保存到聊天记录，之后可继续填写。', '开启新对话', '继续当前') || !current(request)) return
+    if (!await confirm('开启新对话？', '当前未发布对话会保存到聊天记录，之后可继续填写。', '新对话', '继续当前') || !current(request)) return
     if (!persist()) return
     archiveGatherHistory(storageKey(), {...historyEntry(chatId, updatedAt, snapshot()), snapshot:snapshot()})
     // Keep an empty active marker so reopening does not auto-resume a paused conversation.
@@ -111,6 +116,7 @@ function resumeHistory(id: string) {
 }
 function restore(saved: GatherChatSnapshot, id: string, time: number) {
   clearForm()
+  descriptionCandidate.value = saved.descriptionCandidate ?? null; confirmedDescription.value = saved.confirmedDescription || ''; imagesDecided.value = !!saved.imagesDecided
   modelCard.value = saved.modelCardVersion === 1 ? saved.modelCard : null
   idea.value = saved.idea; draft.value = saved.draft; exchanges.value = saved.exchanges
   sentIdea.value = saved.sentIdea || (saved.draft ? saved.idea : '')
@@ -127,6 +133,7 @@ function restore(saved: GatherChatSnapshot, id: string, time: number) {
 watch(snapshot, () => { globalThis.clearTimeout(persistTimer); persistTimer = globalThis.setTimeout(persist, 300) }, {deep:true})
 function clearForm() {
   chatId = ''; updatedAt = 0; lastSnapshot = ''
+  descriptionCandidate.value = null; confirmedDescription.value = ''; imagesDecided.value = false
   sentIdea.value = ''; openingFacts.value = []; outgoing.value = null
   modelCard.value = null
   idea.value = ''; dockReply.value = ''; draft.value = null; exchanges.value = []; reply.value = ''; editing.value = null
@@ -135,7 +142,7 @@ function clearForm() {
 function forget() {
   if (!owner || !chatId) return
   archiveGatherHistory(storageKey(), historyEntry(chatId, Date.now(), snapshot()))
-  uni.removeStorageSync(storageKey())
+  uni.setStorageSync(storageKey(), JSON.stringify({idea:'', draft:null, exchanges:[]}))
   clearForm()
 }
 watch([() => session.token, () => session.epoch, () => session.member?.id], () => {
@@ -187,6 +194,15 @@ async function checkProfile() {
       const record = await api.managedActivity(createdId.value)
       if (disposed || request !== version) return
       if (record.lifecycle === 'published') forget()
+      else if (record.lifecycle === 'draft' && draft.value && typeof record.title === 'string') {
+        Object.assign(draft.value, {title:record.title, description:record.description, location:record.location,
+          startsAt:record.startsAt, endsAt:record.endsAt, date:new Date(Date.parse(record.startsAt)+8*3600000).toISOString().slice(0,10),
+          feeType:record.feeType,feeAmountCents:record.feeAmountCents,consultationContact:record.consultationContact,
+          capacity:record.capacity,registrationDeadline:record.registrationDeadline,questions:record.questions,
+          imageUrls:record.imageUrls,coverUrl:record.coverUrl,coverSourceUrl:record.coverSourceUrl,
+          latitude:record.locationLatitude,longitude:record.locationLongitude})
+        if (record.imageUrls.length) imagesDecided.value = true
+      }
     }
   } catch (e) { if (request === version) { if (canInitiate.value) error.value = errorMessage(e); else accessError.value = errorMessage(e) } }
   finally { if (request === version) checking.value = false }
@@ -270,14 +286,14 @@ function sendMessage() {
   uni.hideKeyboard()
 }
 const questionNames = computed(() => draft.value?.questions.map(q => q.prompt).join('、') || '')
-watch(() => [question.value?.prompt, exchanges.value.length, outgoing.value, sentIdea.value, draft.value !== null], async () => {
+watch(() => [question.value?.prompt, exchanges.value.length, outgoing.value, sentIdea.value, draft.value !== null, confirmedDescription.value, imagesDecided.value], async () => {
   await nextTick()
   if (disposed) return
   const latest = exchanges.value.length - 1
   let selector = ''
   if (outgoing.value) selector = '#outgoing'
   else if (!draft.value && sentIdea.value) selector = '#sent-idea'
-  else if (draft.value && !question.value) selector = previewReady.value ? '#invite-preview' : '#ask-again'
+  else if (draft.value && !question.value) selector = !previewReady.value ? '#ask-again' : confirmedDescription.value !== draft.value.description || descriptionCandidate.value !== null ? '#description-review' : !imagesDecided.value ? '#image-review' : '#invite-preview'
   else if (!editing.value && latest >= 0 && exchanges.value[latest].facts?.length) selector = '#facts-' + latest
   else if (!editing.value && latest < 0 && openingFacts.value.length) selector = '#opening-facts'
   else if (draft.value) selector = question.value ? '#active-question' : '#invite-preview'
@@ -325,6 +341,8 @@ async function answer(value: string, suggested = false, source: 'chat' | 'card' 
   const commit = (next: GatherDraft, card: GatherQuestion | null) => {
     const facts = gatherFacts(d, next)
     const clarification = usableModelQuestion(card, next)
+    invalidateDescription(d, next)
+    if (next.location !== d.location) { delete next.latitude; delete next.longitude }
     draft.value = next
     exchanges.value.push({...turn, facts})
     outgoing.value = null
@@ -358,15 +376,124 @@ async function answer(value: string, suggested = false, source: 'chat' | 'card' 
     error.value = errorMessage(e) + '。已保留你的回答。'
   } finally { if (current(request)) busy.value = false }
 }
-function moreSettings() {
+function invalidateDescription(before: GatherDraft, after: GatherDraft) {
+  if (['title','location','startsAt','endsAt','feeType','feeAmountCents'].some(key => before[key as keyof GatherDraft] !== after[key as keyof GatherDraft])) {
+    confirmedDescription.value = ''; descriptionCandidate.value = null
+  }
+}
+async function recordSelection(field: GatherField, answer: string, patch: Partial<GatherDraft>) {
+  const d = draft.value
+  if (!d || busy.value || checking.value || createdId.value || uncertainCreate.value || !current(version)) return
+  const next = {...d, ...patch}
+  if (field !== 'description') invalidateDescription(d,next)
+  exchanges.value.push({field, prompt:field === 'time' ? '选择聚会时间' : field === 'location' ? '地图选择地点' : '确认活动介绍', answer, facts:gatherFacts(d,next)})
+  draft.value = next; modelCard.value = null; editing.value = null; custom.value = false; reply.value = ''; error.value = ''
+  persist()
+  if (pending.value.length) await requestQuestion()
+}
+async function selectTime(value: {startsAt:string; endsAt:string}) {
+  if (!(Date.parse(value.startsAt) > Date.now()) || !(Date.parse(value.endsAt) > Date.parse(value.startsAt))) { error.value = '请选择未来的开始时间，结束时间应晚于开始时间'; return }
+  await recordSelection('time', activityTimeRangeWeekday(value.startsAt,value.endsAt), {...value,date:new Date(Date.parse(value.startsAt)+8*3600000).toISOString().slice(0,10)})
+}
+async function selectLocation() {
+  if (busy.value || checking.value || createdId.value || !current(version)) return
+  const request = version
+  busy.value = true; error.value = ''
+  let location: Awaited<ReturnType<typeof chooseActivityLocation>> = null
+  try { location = await chooseActivityLocation() }
+  catch (e) { if (current(request)) error.value = errorMessage(e) }
+  finally { if (current(request)) busy.value = false }
+  if (location && current(request)) await recordSelection('location',location.location,location)
+}
+function inputDescription(event: unknown) {
+  descriptionCandidate.value = (event as unknown as {detail:{value:string}}).detail.value
+  confirmedDescription.value = ''
+}
+function previewGatherImage(url: string) {
+  uni.previewImage({current:mediaUrl(url),urls:(draft.value?.imageUrls || []).map(mediaUrl)})
+}
+async function writeDescription() {
+  const d = draft.value, request = version
+  if (!d || busy.value || checking.value || createdId.value || !current(request)) return
+  busy.value = true; error.value = ''
+  try {
+    const context = gatherContext(d, [])
+    const result = await api.generateActivityDraft('请代写一段清晰、具体的活动介绍，约200至400字，可分段说明聚会目的、交流内容与参与方式。仅依据以下已确认信息和原介绍展开，不虚构嘉宾、议程、福利或承诺。只需在description返回介绍，其他未知信息保持null。已确认信息：' + JSON.stringify(context.known))
+    if (!current(request)) return
+    if (!result.draft.description?.trim()) throw new Error('未能生成活动介绍，请重试或自己填写')
+    descriptionCandidate.value = result.draft.description.trim(); confirmedDescription.value = ''; persist()
+  } catch (e) { if (current(request)) error.value = errorMessage(e) }
+  finally { if (current(request)) busy.value = false }
+}
+async function acceptDescription() {
+  const text = (descriptionCandidate.value ?? draft.value?.description ?? '').trim()
+  if (!text) { error.value = '请填写或生成活动介绍'; return }
+  if (busy.value || checking.value || uncertainCreate.value || !current(version)) return
+  if (createdId.value) {
+    if (text !== draft.value?.description) { error.value = '已保存的活动介绍请在手动填写中修改'; return }
+    confirmedDescription.value = text; descriptionCandidate.value = null; persist(); return
+  }
+  confirmedDescription.value = text; descriptionCandidate.value = null
+  await recordSelection('description',text,{description:text})
+}
+async function addGatherImages() {
+  const d = draft.value, request = version
+  if (!d || busy.value || checking.value || createdId.value || !current(request)) return
+  busy.value = true; error.value = ''
+  try {
+    const paths = await chooseActivityImagePaths(9 - (d.imageUrls?.length || 0))
+    for (const selected of paths.slice(0,9 - (d.imageUrls?.length || 0))) {
+      if (!current(request)) return
+      const first = !d.imageUrls?.length
+      const path = first ? await cropper.value?.open(selected) : selected
+      if (!path || !current(request)) return
+      let originalUrl = ''
+      if (first) {
+        const original = await readActivityImage(selected)
+        if (!current(request)) return
+        originalUrl = (await api.uploadCover(original.base64,original.mimeType)).coverUrl
+      }
+      if (!current(request)) return
+      const image = await readActivityImage(path)
+      if (!current(request)) return
+      const uploaded = await api.uploadCover(image.base64,image.mimeType)
+      if (!current(request)) return
+      d.imageUrls = [...(d.imageUrls || []), uploaded.coverUrl]
+      if (first) { d.coverUrl = uploaded.coverUrl; d.coverSourceUrl = originalUrl }
+      imagesDecided.value = true; persist()
+    }
+  } catch (e) { if (current(request)) error.value = errorMessage(e) + '；已上传的图片已保留' }
+  finally { if (current(request)) busy.value = false }
+}
+async function removeGatherImage(index: number) {
+  const d = draft.value, request = version
+  if (!d || busy.value || createdId.value || !current(request) || !d.imageUrls?.[index]) return
+  if (index === 0 && d.imageUrls.length > 1) {
+    busy.value = true
+    try {
+      const original = d.imageUrls[1]
+      const path = await cropper.value?.open(mediaUrl(original))
+      if (!path || !current(request)) return
+      const image = await readActivityImage(path)
+      if (!current(request)) return
+      const uploaded = await api.uploadCover(image.base64,image.mimeType)
+      if (!current(request)) return
+      d.imageUrls = [uploaded.coverUrl,...d.imageUrls.slice(2)]; d.coverSourceUrl = original
+    } catch(e) { if (current(request)) error.value = errorMessage(e) }
+    finally { if (current(request)) busy.value = false }
+  } else d.imageUrls = d.imageUrls.filter((_,position) => position !== index)
+  if (current(request)) { d.coverUrl = d.imageUrls[0] || null; if (!d.imageUrls.length) d.coverSourceUrl = null; persist() }
+}
+function moreSettings(optionalOnly = false) {
   const d = draft.value, request = version
   if (!d || busy.value || !current(request) || uncertainCreate.value) return
-  if (createdId.value) { navigate(routes.editor + '?id=' + encodeURIComponent(createdId.value)); return }
+  if (optionalOnly && (!previewReady.value || descriptionCandidate.value !== null || confirmedDescription.value !== d.description || !imagesDecided.value)) { error.value = '请先确认活动介绍，并选择添加图片或暂不添加'; return }
+  if (createdId.value) { navigate(routes.editor + '?id=' + encodeURIComponent(createdId.value) + (optionalOnly ? '&aiDraft=1&optionalOnly=1' : '')); return }
   persist()
   stageActivityDraft(owner, session.epoch, d, d.consultationContact, id => {
     if (current(request)) { createdId.value = id; uncertainCreate.value = false; persist() }
   })
-  navigate(routes.editor + '?aiDraft=1')
+  navigate(routes.editor + '?aiDraft=1' + (optionalOnly ? '&optionalOnly=1' : ''))
 }
 function inputForPublish(d: GatherDraft): ActivityWriteInput {
   if (pendingGatherFields(d).length || !d.title || !d.description || !d.location || !d.feeType || !d.startsAt || !d.endsAt || !d.consultationContact)
@@ -380,13 +507,16 @@ function inputForPublish(d: GatherDraft): ActivityWriteInput {
   })
   return {title:d.title, description:d.description, location:d.location, consultationContact:d.consultationContact,
     startsAt:d.startsAt, endsAt:d.endsAt, feeType:d.feeType, feeAmountCents:d.feeAmountCents,
-    capacity:d.capacity, registrationDeadline:d.registrationDeadline, questions}
+    capacity:d.capacity, registrationDeadline:d.registrationDeadline, questions,
+    imageUrls:d.imageUrls, coverUrl:d.imageUrls?.[0], coverSourceUrl:d.coverSourceUrl,
+    locationLatitude:d.latitude, locationLongitude:d.longitude}
 }
 async function publish() {
   if (!draft.value || !previewReady.value || busy.value || !current(version) || uncertainCreate.value) return
   const request = version
   busy.value = true; error.value = ''
   try {
+    if (descriptionCandidate.value !== null || confirmedDescription.value !== draft.value.description || !imagesDecided.value) throw new Error('请先确认活动介绍，并选择添加图片或暂不添加')
     const input = inputForPublish(draft.value)
     if (!await confirm('发布这场聚会？', '发布后，用户可以查看聚会并报名。', '确认发布', '再看看') || !current(request)) return
     if (!createdId.value) {
@@ -413,11 +543,12 @@ async function publish() {
 }
 onShow(checkProfile)
 onHide(persist)
-onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTimer); ++version })
+onUnload(() => { cropper.value?.cancel(); persist(); disposed = true; globalThis.clearTimeout(persistTimer); ++version })
 </script>
 
 <template>
   <view class="gather-page">
+    <ActivityCoverCropper ref="cropper" />
     <PageReturn />
     <view v-if="!canInitiate" class="conversation">
       <view v-if="checking" class="helper">正在确认社群身份…</view>
@@ -479,15 +610,26 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         <view v-if="error && !busy" class="error" role="alert">{{ error }}</view>
       </view>
       <view v-if="busy && (!previewReady || outgoing)" class="reply-status">i 助手正在回复…</view>
+      <view v-if="draft && (previewReady || question?.field === 'description' || (!question && pending.includes('description')))" id="description-review" class="question-card description-review">
+        <view class="question-title">确认活动介绍</view>
+        <text class="helper">AI 可以帮你展开介绍，使用前请核对内容。</text>
+        <textarea :value="descriptionCandidate ?? draft.description ?? ''" maxlength="10000" auto-height class="review-textarea" :disabled="busy || !!createdId" @input="inputDescription" />
+        <view class="review-actions">
+          <button class="utility-button" :disabled="busy || !!createdId" @click="writeDescription">AI 代写介绍</button>
+          <button class="utility-button" :disabled="busy" @click="acceptDescription">{{ confirmedDescription === draft.description && !descriptionCandidate ? '介绍已确认' : '使用这版介绍' }}</button>
+        </view>
+      </view>
       <view v-if="question && draft && !(outgoing && busy)" class="turns">
         <view v-if="!editing" class="assistant-line"><view class="assistant-mark">✦</view><text>i 助手</text>
-          <button v-if="!busy" class="utility-button manual-link" @click="moreSettings">手动填写 <text>›</text></button>
+          <button v-if="!busy" class="utility-button manual-link" @click="moreSettings()">手动填写 <text>›</text></button>
         </view>
         <view
           id="active-question"
           class="question-card"
         >
           <view class="question-title">{{ question.prompt }}</view>
+          <GatherTimePicker v-if="question.field === 'time' || question.field === 'date'" :starts-at="draft.startsAt" :ends-at="draft.endsAt" :date="draft.date" :disabled="busy || checking || !!createdId" @confirm="selectTime" />
+          <button v-if="question.field === 'location'" class="utility-button" :disabled="busy || checking || !!createdId" @click="selectLocation">地图选位置</button>
           <button
             v-if="question.field === 'time'"
             class="text-link"
@@ -583,10 +725,24 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
           <button
             class="more"
             :disabled="busy"
-            @click="moreSettings"
+            @click="moreSettings(true)"
           >
-            <text>更多设置</text><text class="chevron">›</text>
+            <text>更多设置（选填）</text><text class="chevron">›</text>
           </button>
+        </view>
+        <view id="image-review" class="question-card image-review">
+          <view class="question-title">要给聚会加几张图片吗？</view>
+          <text class="helper">选填，最多9张。首图作为封面，支持裁剪。</text>
+          <view class="gather-images">
+            <view v-for="(url,index) in draft.imageUrls || []" :key="url + index" class="gather-image">
+              <image :src="mediaUrl(url)" mode="aspectFill" @click="previewGatherImage(url)" />
+              <button :disabled="busy || !!createdId" @click="removeGatherImage(index)">移除</button>
+            </view>
+          </view>
+          <view class="review-actions">
+            <button v-if="(draft.imageUrls?.length || 0) < 9" class="utility-button" :disabled="busy || checking || !!createdId" @click="addGatherImages">添加图片</button>
+            <button v-if="!draft.imageUrls?.length" class="utility-button" :disabled="busy" @click="imagesDecided = true; persist()">{{ imagesDecided ? '已选择不添加' : '暂不添加' }}</button>
+          </view>
         </view>
         <text
           v-if="draft.feeType === 'paid'"
@@ -596,10 +752,12 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
         </text>
       </view>
       <view v-else-if="draft && !question && !previewReady && !busy" id="ask-again" class="retry-panel">
+        <GatherTimePicker v-if="pending.includes('date') || pending.includes('time')" :starts-at="draft.startsAt" :ends-at="draft.endsAt" :date="draft.date" :disabled="busy || checking" @confirm="selectTime" />
+        <button v-if="pending.includes('location')" class="utility-button" :disabled="busy || checking" @click="selectLocation">地图选位置</button>
         <text class="helper">已保留你的安排。你可以补充{{ fieldNames[pending[0]] }}，或请 AI 继续提问。</text>
         <view class="retry-actions">
           <button class="utility-button retry-primary" :disabled="checking" @click="requestQuestion">请 AI 继续提问</button>
-          <button class="utility-button" :disabled="checking" @click="moreSettings">手动填写 <text>›</text></button>
+          <button class="utility-button" :disabled="checking" @click="moreSettings()">手动填写 <text>›</text></button>
         </view>
       </view>
       <view
@@ -620,10 +778,11 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
           查看我发起的
         </button>
       </view>
+      <text v-if="previewReady && (descriptionCandidate !== null || confirmedDescription !== draft?.description || !imagesDecided)" class="helper">请先确认活动介绍，并选择添加图片或暂不添加。</text>
       <button
         v-if="previewReady"
         class="primary publish"
-        :disabled="busy || checking || uncertainCreate"
+        :disabled="busy || checking || uncertainCreate || descriptionCandidate !== null || confirmedDescription !== draft?.description || !imagesDecided"
         :loading="busy"
         @click="publish"
       >
@@ -708,4 +867,8 @@ onUnload(() => { persist(); disposed = true; globalThis.clearTimeout(persistTime
 .more { font-size:27rpx; line-height:1.5; padding:22rpx 2rpx 5rpx; }
 .questions-summary,.paid-note { display:block; margin-top:16rpx; font-size:25rpx; line-height:1.5; color:#596d60; }
 .error { margin-top:16rpx; background:#fbefea; color:#963b26; border-radius:12rpx; padding:18rpx 20rpx; font-size:25rpx; line-height:1.6; }
+</style>
+
+<style scoped>
+.review-actions{display:flex;gap:16rpx;flex-wrap:wrap;margin-top:20rpx}.review-textarea{box-sizing:border-box;width:100%;min-height:180rpx;padding:20rpx;background:#f7faf8;border:1rpx solid #dce6df;border-radius:14rpx;font-size:28rpx;line-height:1.6;margin-top:18rpx}.gather-images{display:flex;flex-wrap:wrap;gap:16rpx;margin-top:20rpx}.gather-image{width:180rpx}.gather-image image{width:180rpx;height:144rpx;border-radius:12rpx}.gather-image button{font-size:24rpx;color:#647b6d;background:transparent;line-height:2.5}.description-review{margin-bottom:24rpx}
 </style>
