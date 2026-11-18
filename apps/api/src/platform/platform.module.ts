@@ -6,6 +6,8 @@ import { AdminPlatformController, PlatformController } from './controller.js'
 import { PlatformService } from './service.js'
 import { AdminBrandController, PublicBrandController } from './brand-controller.js'
 import { BrandService } from './brand-service.js'
+import { AdminMcpController } from './mcp-controller.js'
+import { McpSettingsService } from './mcp-service.js'
 
-@Module({ imports: [DatabaseModule, IdentityModule, AdminModule], controllers: [PlatformController, AdminPlatformController, PublicBrandController, AdminBrandController], providers: [PlatformService, BrandService] })
+@Module({ imports: [DatabaseModule, IdentityModule, AdminModule], controllers: [PlatformController, AdminPlatformController, PublicBrandController, AdminBrandController, AdminMcpController], providers: [PlatformService, BrandService, McpSettingsService] })
 export class PlatformModule {}

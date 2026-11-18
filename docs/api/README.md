@@ -20,6 +20,12 @@
 - 登录接口仍有每来源15分钟30次及数据库每账号5次失败锁15分钟。仅显式 `ADMIN_TRUST_LOOPBACK_PROXY=true` 并来自回环连接时采用XFF最右有效IP；部署要求见 `infra/deploy/README.md`，默认不信任转发头。
 - 0018本机已授权执行；服务器尚未应用本轮变更。OpenAPI与客户端由实际路由生成，不能将生成契约视为上线。
 
+## MCP 接入设置（管理端预留）
+
+- `GET /admin/platform/mcp`：仅超管，返回 `{ enabled: false, ready: false }`。本期无总开关写入接口，也无对外 MCP 协议端点。
+- `GET /admin/platform/mcp/partners`、`GET /admin/platform/mcp/audit`：仅超管，支持 `offset`、`limit`，返回 `items/hasMore/total`。
+- `POST /admin/platform/mcp/partners`：创建停用且无任何授权的对接方。 `PUT /admin/platform/mcp/partners/:id`：保存带当前版本的独立搜索、详情权限。可选字段限 `location`、`fee`、`cover`、`description`；能力关闭时后端清空字段。写入要求 Cookie、Origin、CSRF 和超管身份，配置与审计同事务提交；版本冲突为 `MCP_PARTNER_VERSION_CONFLICT`/409。详见[产品规则与验收](../product/MCP接入设置.md)。
+
 ## 报名名单公开字段（第5项）
 
 活动问题输入增加可选 `publicToParticipants` 布尔值，新建省略为false，编辑省略保留原值；问题输出包含该标记，报名表据此提前告知。手机号、微信号、二维码、邮箱等联系方式题目不允许开启，返回 `QUESTION_CONTACT_PRIVATE`；已有首次报名后false变true返回 `QUESTION_VISIBILITY_LOCKED`（409），关闭公开不改答案及题目内容。活动编辑的生命周期限制继续有效。

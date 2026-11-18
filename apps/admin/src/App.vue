@@ -137,6 +137,12 @@ watch(() => [brand.displayName, brand.visible], () => {
         </router-link>
         <router-link
           v-if="isSuperAdmin"
+          to="/mcp-settings"
+        >
+          MCP 接入设置
+        </router-link>
+        <router-link
+          v-if="isSuperAdmin"
           to="/accounts"
         >
           运营账号

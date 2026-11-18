@@ -190,6 +190,13 @@
       "when": 1794720283832,
       "tag": "0026_community_membership",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1795005403726,
+      "tag": "0027_platform_mcp_settings",
+      "breakpoints": true
     }
   ]
 }

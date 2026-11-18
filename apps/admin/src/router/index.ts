@@ -13,6 +13,7 @@ import ActivitiesPage from '../modules/activities/ActivitiesPage.vue'
 import CirclePage from '../modules/circle/CirclePage.vue'
 import AdvertisingPage from '../modules/advertising/AdvertisingPage.vue'
 import BrandPage from '../modules/brand/BrandPage.vue'
+import McpSettingsPage from '../modules/mcp/McpSettingsPage.vue'
 
 export { allowedRoute } from '../services/access'
 
@@ -24,6 +25,7 @@ export const router = createRouter({
     { path: '/content', component: ContentPage },
     { path: '/advertising', component: AdvertisingPage },
     { path: '/brand', component: BrandPage },
+    { path: '/mcp-settings', component: McpSettingsPage },
     { path: '/login', component: LoginPage },
     { path: '/password', component: PasswordPage },
     { path: '/feedback', component: FeedbackPage },
