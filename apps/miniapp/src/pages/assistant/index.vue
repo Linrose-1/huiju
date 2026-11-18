@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TabHeader from '@/components/base/TabHeader.vue'
+import { usePlatformBrand } from '@/services/platform-brand'
 import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref } from 'vue'
@@ -7,6 +8,7 @@ import { onShareAppMessage, onShareTimeline, onShow, onHide, onUnload } from '@d
 import { navigate, routes } from '@/services/navigation'
 import { api, errorMessage } from '@/services/api'
 const adActive = ref(false), adRefresh = ref(0)
+const brand = usePlatformBrand()
 onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
 
 const assistantText = ref('“学加”活动智能助手'), contentError = ref('')
@@ -26,7 +28,7 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view>
-    <TabHeader title="i 助手" subtitle="智能助手 AI 提效" />
+    <TabHeader :title="brand.tabNames.assistant" subtitle="智能助手 AI 提效" />
     <view
       v-if="shareError"
       class="error"

@@ -12,7 +12,7 @@ afterEach(() => { scopes.splice(0).forEach(scope => scope.stop()); vi.restoreAll
 function page() {
   const api = { get: vi.fn(), save: vi.fn() }, accept = vi.fn(), success = vi.fn()
   const source = readFileSync(new URL('../src/modules/brand/BrandPage.vue', import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]
-  const code = ts.transpileModule(source + '\nexport { load, save, form, error, loaded, saving };', { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
+  const code = ts.transpileModule(source + '\nexport { load, save, form, error, loaded, saving, addPartner, removePartner, partners, tabNames, logoImageId };', { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
   const deps: Record<string, unknown> = {
     vue: { ...vue, onMounted() {} }, 'element-plus': { ElMessage: { success } },
     '../../services/admin': { errorMessage: (e: Error) => e.message },
@@ -21,7 +21,12 @@ function page() {
   }
   const exports = {}, scope = vue.effectScope(); scopes.push(scope)
   scope.run(() => new Function('require', 'exports', code)((name: string) => deps[name], exports))
-  return { ...exports as { load(): Promise<void>; save(): Promise<void>; form: { displayName: string; visible: boolean; version: number }; error: vue.Ref<string>; loaded: vue.Ref<boolean>; saving: vue.Ref<boolean> }, api, accept, success, scope }
+  return { ...exports as {
+    load(): Promise<void>; save(): Promise<void>; addPartner(): void; removePartner(key: number): void
+    form: { displayName: string; visible: boolean; version: number }; error: vue.Ref<string>; loaded: vue.Ref<boolean>; saving: vue.Ref<boolean>
+    partners: vue.Ref<Array<{ key: number; name: string; description: string; logoImageId: string | null; codeImageId: string | null; sortOrder: number; visible: boolean }>>
+    tabNames: { circle: string; activity: string; assistant: string; mine: string }; logoImageId: vue.Ref<string | null>
+  }, api, accept, success, scope }
 }
 describe('brand configuration', () => {
   it('guards operator navigation and allows super-admin settings', () => {
@@ -39,13 +44,36 @@ describe('brand configuration', () => {
     h.form.displayName = '  新品牌  '; h.form.visible = false
     h.api.save.mockRejectedValue(new AdminRequestError(409, 'BRAND_VERSION_CONFLICT', '请重新读取'))
     await h.save()
-    expect(h.api.save).toHaveBeenCalledWith({ displayName: '新品牌', visible: false, version: 2 })
+    expect(h.api.save).toHaveBeenCalledWith({ displayName: '新品牌', visible: false, version: 2, appearance: {
+      logoImageId: null, tabNames: { circle: '', activity: '', assistant: '', mine: '' }, partners: [],
+    } })
     expect(h.form).toEqual({ displayName: '  新品牌  ', visible: false, version: 2 })
     expect(h.error.value).toBe('请重新读取')
     expect(h.saving.value).toBe(false)
     expect(h.accept).toHaveBeenCalledTimes(1)
     h.form.displayName = ' '
     await h.save(); expect(h.api.save).toHaveBeenCalledTimes(1)
+  })
+  it('keeps new partners hidden, requires an image to show them, and saves all appearance settings without UI keys', async () => {
+    const h = page()
+    const original = { displayName: '有聚点', visible: true, version: 0 }
+    h.api.get.mockResolvedValue(original); await h.load()
+    h.addPartner()
+    const partner = h.partners.value[0]!
+    expect(partner).toMatchObject({ visible: false, codeImageId: null })
+    partner.name = '  猩聚社  '; partner.visible = true
+    await h.save()
+    expect(h.api.save).not.toHaveBeenCalled()
+    expect(h.error.value).toContain('小程序码')
+    partner.codeImageId = 'code-image'; h.logoImageId.value = 'brand-logo'; h.tabNames.activity = ' 找活动 '
+    const appearance = { logoImageId: 'brand-logo', tabNames: { circle: '', activity: '找活动', assistant: '', mine: '' },
+      partners: [{ name: '猩聚社', description: '', logoImageId: null, codeImageId: 'code-image', sortOrder: 1, visible: true }] }
+    h.api.save.mockResolvedValue({ ...original, version: 1, appearance }); await h.save()
+    expect(h.api.save).toHaveBeenCalledWith({ ...original, appearance })
+    expect(h.partners.value[0]?.name).toBe('猩聚社')
+    expect(h.tabNames.activity).toBe('找活动')
+    h.removePartner(h.partners.value[0]!.key)
+    expect(h.partners.value).toEqual([])
   })
   it('locks duplicate saves and applies the returned version only on success', async () => {
     const h = page()

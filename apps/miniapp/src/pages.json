@@ -58,6 +58,7 @@
         "navigationBarTitleText": "注册与登录"
       }
     },
+    { "path": "pages/mine/partners", "style": { "navigationBarTitleText": "合作小程序", "enablePullDownRefresh": true } },
     {
       "path": "pages/legal/terms",
       "style": { "navigationBarTitleText": "用户协议" }

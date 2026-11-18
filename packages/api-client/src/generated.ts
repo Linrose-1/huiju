@@ -1716,6 +1716,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PublicBrandAppearanceController_appearance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform/appearance/images/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["PublicBrandAppearanceController_image"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/platform/brand": {
         parameters: {
             query?: never;
@@ -1725,6 +1757,38 @@ export interface paths {
         };
         get: operations["AdminBrandController_read"];
         put: operations["AdminBrandController_save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/platform/brand/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AdminBrandController_uploadImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/platform/brand/images/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminBrandController_image"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -3156,15 +3220,63 @@ export interface components {
             displayName: string;
             visible: boolean;
         };
+        BrandTabNamesDto: {
+            circle: string;
+            activity: string;
+            assistant: string;
+            mine: string;
+        };
+        PublicBrandPartnerDto: {
+            name: string;
+            description: string;
+            logoUrl: string | null;
+            codeUrl: string;
+        };
+        PublicBrandAppearanceDto: {
+            displayName: string;
+            visible: boolean;
+            logoUrl: string | null;
+            tabNames: components["schemas"]["BrandTabNamesDto"];
+            partners: components["schemas"]["PublicBrandPartnerDto"][];
+        };
+        BrandPartnerInput: {
+            /** Format: uuid */
+            logoImageId: string | null;
+            name: string;
+            description: string;
+            /** Format: uuid */
+            codeImageId: string | null;
+            sortOrder: number;
+            visible: boolean;
+        };
+        BrandAppearanceDto: {
+            /** Format: uuid */
+            logoImageId: string | null;
+            tabNames: components["schemas"]["BrandTabNamesDto"];
+            partners: components["schemas"]["BrandPartnerInput"][];
+        };
         BrandDto: {
             displayName: string;
             visible: boolean;
             version: number;
+            appearance?: components["schemas"]["BrandAppearanceDto"];
         };
         BrandInput: {
             displayName: string;
             visible: boolean;
             version: number;
+            appearance?: components["schemas"]["BrandAppearanceDto"];
+        };
+        BrandImageInput: {
+            base64: string;
+            /** @enum {string} */
+            mimeType: "image/png" | "image/jpeg";
+            /** @enum {string} */
+            purpose: "logo" | "code";
+        };
+        BrandImageDto: {
+            /** Format: uuid */
+            id: string;
         };
         McpStatusDto: {
             /** @enum {boolean} */
@@ -10310,6 +10422,55 @@ export interface operations {
             };
         };
     };
+    PublicBrandAppearanceController_appearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBrandAppearanceDto"];
+                };
+            };
+        };
+    };
+    PublicBrandAppearanceController_image: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
     AdminBrandController_read: {
         parameters: {
             query?: never;
@@ -10401,6 +10562,109 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminBrandController_uploadImage: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrandImageInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandImageDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminBrandController_image: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

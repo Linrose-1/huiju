@@ -80,6 +80,12 @@ watch(() => [brand.displayName, brand.visible], () => {
     <header class="app-header">
       <div class="brand">
         <template v-if="brand.visible">
+          <img
+            v-if="brand.logoUrl"
+            :src="brand.logoUrl"
+            class="brand-logo"
+            alt=""
+          >
           {{ brand.displayName }}
         </template><span>管理后台</span>
       </div>
@@ -174,6 +180,7 @@ p { line-height: 1.65; }
 .page-description { margin: 0 0 20px; font-size: 14px; }
 .app-header { display: flex; justify-content: space-between; align-items: center; min-height: 60px; padding: 0 24px; border-bottom: 1px solid var(--huiju-border); background: white; gap: 16px; }
 .brand { font-size: 20px; font-weight: 700; overflow-wrap: anywhere; color: var(--huiju-green); }
+.brand-logo { width:32px; height:32px; object-fit:contain; margin-right:8px; vertical-align:middle; }
 .brand span { margin-left: 10px; font-size: 13px; color: var(--huiju-muted); font-weight: 400; }
 .identity { display: flex; align-items: center; gap: 4px; font-size: 13px; flex-wrap: wrap; }
 .workspace { display: flex; min-height: calc(100vh - 60px); }

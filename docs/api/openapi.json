@@ -10977,6 +10977,78 @@
         ]
       }
     },
+    "/api/v1/platform/appearance": {
+      "get": {
+        "operationId": "PublicBrandAppearanceController_appearance",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicBrandAppearanceDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "summary": "",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
+    "/api/v1/platform/appearance/images/{id}": {
+      "get": {
+        "operationId": "PublicBrandAppearanceController_image",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "summary": "",
+        "tags": [
+          "platform"
+        ]
+      }
+    },
     "/api/v1/admin/platform/brand": {
       "get": {
         "operationId": "AdminBrandController_read",
@@ -11096,6 +11168,163 @@
             }
           },
           "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-platform"
+        ]
+      }
+    },
+    "/api/v1/admin/platform/brand/images": {
+      "post": {
+        "operationId": "AdminBrandController_uploadImage",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrandImageInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandImageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-platform"
+        ]
+      }
+    },
+    "/api/v1/admin/platform/brand/images/{id}": {
+      "get": {
+        "operationId": "AdminBrandController_image",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "description": ""
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -17914,6 +18143,154 @@
           "visible"
         ]
       },
+      "BrandTabNamesDto": {
+        "type": "object",
+        "properties": {
+          "circle": {
+            "type": "string",
+            "maxLength": 5
+          },
+          "activity": {
+            "type": "string",
+            "maxLength": 5
+          },
+          "assistant": {
+            "type": "string",
+            "maxLength": 5
+          },
+          "mine": {
+            "type": "string",
+            "maxLength": 5
+          }
+        },
+        "required": [
+          "circle",
+          "activity",
+          "assistant",
+          "mine"
+        ]
+      },
+      "PublicBrandPartnerDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "codeUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "logoUrl",
+          "codeUrl"
+        ]
+      },
+      "PublicBrandAppearanceDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 30
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "logoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "tabNames": {
+            "$ref": "#/components/schemas/BrandTabNamesDto"
+          },
+          "partners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicBrandPartnerDto"
+            }
+          }
+        },
+        "required": [
+          "displayName",
+          "visible",
+          "logoUrl",
+          "tabNames",
+          "partners"
+        ]
+      },
+      "BrandPartnerInput": {
+        "type": "object",
+        "properties": {
+          "logoImageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 30
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "codeImageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 999
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "logoImageId",
+          "name",
+          "description",
+          "codeImageId",
+          "sortOrder",
+          "visible"
+        ]
+      },
+      "BrandAppearanceDto": {
+        "type": "object",
+        "properties": {
+          "logoImageId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "tabNames": {
+            "$ref": "#/components/schemas/BrandTabNamesDto"
+          },
+          "partners": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrandPartnerInput"
+            }
+          }
+        },
+        "required": [
+          "logoImageId",
+          "tabNames",
+          "partners"
+        ]
+      },
       "BrandDto": {
         "type": "object",
         "properties": {
@@ -17928,6 +18305,9 @@
           "version": {
             "type": "number",
             "minimum": 0
+          },
+          "appearance": {
+            "$ref": "#/components/schemas/BrandAppearanceDto"
           }
         },
         "required": [
@@ -17951,12 +18331,55 @@
             "type": "number",
             "minimum": 0,
             "maximum": 4294967294
+          },
+          "appearance": {
+            "$ref": "#/components/schemas/BrandAppearanceDto"
           }
         },
         "required": [
           "displayName",
           "visible",
           "version"
+        ]
+      },
+      "BrandImageInput": {
+        "type": "object",
+        "properties": {
+          "base64": {
+            "type": "string",
+            "maxLength": 2796204
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/jpeg"
+            ]
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "logo",
+              "code"
+            ]
+          }
+        },
+        "required": [
+          "base64",
+          "mimeType",
+          "purpose"
+        ]
+      },
+      "BrandImageDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id"
         ]
       },
       "McpStatusDto": {

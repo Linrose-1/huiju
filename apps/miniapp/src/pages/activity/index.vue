@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TabHeader from '@/components/base/TabHeader.vue'
+import { usePlatformBrand } from '@/services/platform-brand'
 import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
@@ -14,6 +15,7 @@ import { scanActivityCode } from '@/services/wechat'
 import { activityCodeTarget, activityPosterScene } from '@/services/activity-code'
 import RequestState from '@/components/base/RequestState.vue'
 const adActive = ref(false), adRefresh = ref(0)
+const brand = usePlatformBrand()
 onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
 onPullDownRefresh(() => { adRefresh.value++ })
 
@@ -130,7 +132,7 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view>
-    <TabHeader title="友聚会" subtitle="主题聚会 商机分享" />
+    <TabHeader :title="brand.tabNames.activity" subtitle="主题聚会 商机分享" />
     <view
       v-if="shareError"
       class="error"

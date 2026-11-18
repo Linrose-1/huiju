@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TabHeader from '@/components/base/TabHeader.vue'
+import { defaultBrandName, usePlatformBrand } from '@/services/platform-brand'
 import { computed, ref, watch } from 'vue'
 import { onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { useSessionStore } from '@/stores/session'
@@ -10,6 +11,8 @@ import { mediaUrl, LOCAL_TEST } from '@/services/api/environment'
 import { navigate, routes, loginPage, requireProfile } from '@/services/navigation'
 import { bootstrapIdentity, switchLocalTestActor, getLocalTestActor, localTestActors } from '@/services/wechat'
 const session = useSessionStore(), summary = ref<MyActivitySummary | null>(null), error = ref(''), loading = ref(false)
+const brand = usePlatformBrand()
+const failedBrandLogo = ref('')
 const start = computed(() => summary.value?.nextRegistration ? chinaParts(summary.value.nextRegistration.startsAt) : null)
 const startLabel = computed(() => {
   const parts = start.value
@@ -106,7 +109,7 @@ onUnload(() => { active = false; generation++ })
 </script>
 <template>
   <view>
-    <TabHeader title="我世界" subtitle="商友资源 价值运营" />
+    <TabHeader :title="brand.tabNames.mine" subtitle="商友资源 价值运营" />
     <view class="mine-hero">
       <image
         class="hero-image"
@@ -159,6 +162,10 @@ onUnload(() => { active = false; generation++ })
       </button>
     </view>
     <view class="sheet mine-sheet">
+      <view v-if="brand.visible && (brand.displayName !== defaultBrandName || (brand.logoUrl && failedBrandLogo !== brand.logoUrl))" class="mine-brand">
+        <image v-if="brand.logoUrl && failedBrandLogo !== brand.logoUrl" class="mine-brand-logo" :src="mediaUrl(brand.logoUrl)" mode="aspectFit" @error="failedBrandLogo = brand.logoUrl || ''" />
+        <text class="mine-brand-name">{{ brand.displayName }}</text>
+      </view>
       <view
         v-if="LOCAL_TEST"
         class="local-test-tools"
@@ -327,13 +334,18 @@ onUnload(() => { active = false; generation++ })
               size="48rpx"
               color="#17543d"
             />
-          </view><view class="grow"><view class="tile-title">我的邀请码</view><view class="muted small">邀请同学加入有聚点</view></view><text
+          </view><view class="grow"><view class="tile-title">我的邀请码</view><view class="muted small">{{ brand.visible ? '邀请同学加入' + brand.displayName : '邀请同学加入' }}</view></view><text
             class="entry-arrow"
             aria-hidden="true"
           >
             {{ '>' }}
           </text>
         </view>
+        <button v-if="brand.partners.length" class="menu-row row partner-entry" hover-class="menu-pressed" @click="navigate(routes.partners)">
+          <view class="menu-icon"><uni-icons type="link" size="48rpx" color="#17543d" /></view>
+          <view class="grow"><view class="tile-title">合作小程序</view><view class="muted small">查看合作入口</view></view>
+          <text class="entry-arrow" aria-hidden="true">›</text>
+        </button>
         <view
           v-if="canManageMembers"
           class="menu-row row"
@@ -395,6 +407,9 @@ onUnload(() => { active = false; generation++ })
 .edit { display: flex; align-items: center; justify-content: center; gap: 6rpx; flex-shrink: 0; min-height: 88rpx; padding: 14rpx 22rpx; font-size: 24rpx; line-height: 1.4; background: #f0f7f3ed; color: #174e3d; border: 1rpx solid #d5e3db; white-space: nowrap; }
 .identity .edit { position: absolute; right: 32rpx; top: 24rpx; min-height: 88rpx; padding: 14rpx 18rpx; font-size: 23rpx; }
 .mine-sheet { margin-top: 0; min-height: 65vh; padding: 26rpx 32rpx calc(32rpx + env(safe-area-inset-bottom)); border-radius: 46rpx 46rpx 0 0; background: #fdfdfc; }
+.mine-brand { display: flex; align-items: center; gap: 12rpx; margin: 0 0 18rpx; color: #365f4e; font-size: 26rpx; font-weight: 600; }
+.mine-brand-logo { width: 42rpx; height: 42rpx; flex-shrink: 0; }
+.mine-brand-name { overflow-wrap: anywhere; }
 .namecard { min-height: 164rpx; padding: 28rpx 22rpx; border: 1rpx solid #e8e6df; border-radius: 16rpx; background: #fcfbf8; margin-bottom: 22rpx; gap: 18rpx; }
 .namecard-icon { position: relative; width: 142rpx; height: 108rpx; flex-shrink: 0; }
 .namecard-halo { position: absolute; right: 6rpx; top: 0; width: 80rpx; height: 80rpx; border-radius: 50%; background: #f1e4d1; }
@@ -423,6 +438,8 @@ onUnload(() => { active = false; generation++ })
 .menu-row + .menu-row { border-top: 1rpx solid #eaeeeb; }
 .menu-icon { width: 68rpx; flex-shrink: 0; display: flex; justify-content: center; align-items: center; }
 .menu-row .small { line-height: 1.55; }
+.partner-entry { width: 100%; margin: 0; border-radius: 0; text-align: left; background: #f0f6f2; line-height: inherit; }
+.partner-entry::after { border: 0; }
 .tile-pressed, .menu-pressed { background: #f0f6f2; }
 .logout { min-height: 88rpx; margin: 26rpx auto 0; font-size: 24rpx; color: #7b8680; }
 @media (max-width: 350px) {

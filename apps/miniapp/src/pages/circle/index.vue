@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TabHeader from '@/components/base/TabHeader.vue'
+import { usePlatformBrand } from '@/services/platform-brand'
 import HomeAdvertising from '@/components/business/HomeAdvertising.vue'
 import { usePageShare } from '@/services/wechat/page-share'
 import { ref, watch } from 'vue'
@@ -14,6 +15,7 @@ import CircleReadersEntry from '@/components/business/CircleReadersEntry.vue'
 import RequestState from '@/components/base/RequestState.vue'
 import ListMore from '@/components/base/ListMore.vue'
 const adActive = ref(false), adRefresh = ref(0)
+const brand = usePlatformBrand()
 onShow(() => { adActive.value = true }); onHide(() => { adActive.value = false }); onUnload(() => { adActive.value = false })
 onPullDownRefresh(() => { adRefresh.value++ })
 
@@ -32,7 +34,7 @@ onShareTimeline(shareTimeline)
 </script>
 <template>
   <view class="circle-home">
-    <TabHeader title="商友圈" subtitle="商友连接 资源共享" />
+    <TabHeader :title="brand.tabNames.circle" subtitle="商友连接 资源共享" />
     <view
       v-if="shareError"
       class="error"

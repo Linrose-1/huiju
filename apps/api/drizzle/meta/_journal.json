@@ -197,6 +197,13 @@
       "when": 1795005403726,
       "tag": "0027_platform_mcp_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1795010585156,
+      "tag": "0028_platform_brand_appearance",
+      "breakpoints": true
     }
   ]
 }

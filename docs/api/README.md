@@ -20,6 +20,12 @@
 - 登录接口仍有每来源15分钟30次及数据库每账号5次失败锁15分钟。仅显式 `ADMIN_TRUST_LOOPBACK_PROXY=true` 并来自回环连接时采用XFF最右有效IP；部署要求见 `infra/deploy/README.md`，默认不信任转发头。
 - 0018本机已授权执行；服务器尚未应用本轮变更。OpenAPI与客户端由实际路由生成，不能将生成契约视为上线。
 
+## 品牌外观与合作小程序
+
+- `GET /platform/brand` 保留原响应。新 `GET /platform/appearance` 返回品牌展示、四个 Tab 名称和按序公开的启用合作项。
+- 超管 `GET/PUT /admin/platform/brand` 支持可选的 `appearance`，旧调用者省略时保留原配置；保存与审计同事务，沿用版本检查。
+- 超管 `POST /admin/platform/brand/images` 接收 `base64/mimeType/purpose`，用途为 Logo（`logo`）或码图（`code`）。后台预览从同路径加 `/:id` 读取；公开图片 `GET /platform/appearance/images/:id` 只允许当前可公开配置引用的图片。上传保留原始字节。
+
 ## MCP 接入设置（管理端预留）
 
 - `GET /admin/platform/mcp`：仅超管，返回 `{ enabled: false, ready: false }`。本期无总开关写入接口，也无对外 MCP 协议端点。

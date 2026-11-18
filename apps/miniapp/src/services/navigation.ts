@@ -14,6 +14,7 @@ export const routes = {
   leaderboard: '/pages/leaderboard/index',
   communityMembers: '/pages/community/members',
   invitation: '/pages/invitation/index',
+  partners: '/pages/mine/partners',
   activityDraft: '/pages/assistant/activity-draft',
   activitySearch: '/pages/assistant/activity-search',
   editor: '/pages/activity/editor', manage: '/pages/activity/manage', specialInvites: '/pages/activity/special-invites', organizedActivities: '/pages/activity/organized', notifications: '/pages/notification/index',

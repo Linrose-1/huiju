@@ -24,6 +24,12 @@ async function submit() {
   <section class="auth-card panel">
     <div class="brand">
       <template v-if="brand.visible">
+        <img
+          v-if="brand.logoUrl"
+          :src="brand.logoUrl"
+          class="brand-logo"
+          alt=""
+        >
         {{ brand.displayName }}
       </template><span>管理后台</span>
     </div>

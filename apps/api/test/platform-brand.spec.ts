@@ -3,43 +3,50 @@ import type { AddressInfo } from 'node:net'
 import { ValidationPipe, type INestApplication } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { SQL } from 'drizzle-orm'
+import { MySqlDialect } from 'drizzle-orm/mysql-core'
+import sharp from 'sharp'
 import { AdminService } from '../src/admin/service.js'
 import { csrfFor } from '../src/admin/security.js'
 import { adminAccounts, adminSessions } from '../src/database/schema/members.js'
-import { platformBrand, platformBrandAudit, type BrandSnapshot } from '../src/database/schema/platform-brand.js'
+import { platformBrand, platformBrandAudit, platformBrandImages, type BrandSnapshot } from '../src/database/schema/platform-brand.js'
 import { FlowDatabase, SafeExceptionFilter } from '../src/flow/common.js'
-import { AdminBrandController, PublicBrandController } from '../src/platform/brand-controller.js'
+import { AdminBrandController, PublicBrandAppearanceController, PublicBrandController } from '../src/platform/brand-controller.js'
 import { BrandService } from '../src/platform/brand-service.js'
 
 const token = 'a'.repeat(64), origin = 'https://admin.example.test', actorId = 'brand-test-admin'
 const auth = { Cookie: `huiju_admin_session=${token}`, Origin: origin, 'X-CSRF-Token': csrfFor(token) }
 type BrandRow = BrandSnapshot & { id: string }
 type Audit = { actorId: string; before: BrandSnapshot; after: BrandSnapshot }
+type BrandImage = typeof platformBrandImages.$inferInsert
 
 // A transaction-aware storage substitute: exercises the real services/controllers,
 // but deliberately does not claim MySQL locking or database constraint coverage.
 function storage() {
-  const state = { brand: null as BrandRow | null, audits: [] as Audit[], role: 'super_admin', failAudit: false, locks: [] as unknown[] }
-  const rows = (table: unknown) => {
+  const state = { brand: null as BrandRow | null, audits: [] as Audit[], images: [] as BrandImage[], role: 'super_admin', failAudit: false, locks: [] as unknown[] }
+  const dialect = new MySqlDialect()
+  const rows = (table: unknown, ids: unknown[]) => {
     if (table === platformBrand) return state.brand ? [{ ...state.brand }] : []
+    if (table === platformBrandImages) return state.images.filter(image => ids.includes(image.id))
     if (table === adminSessions) return [{ id: 'session', adminAccountId: actorId }]
     if (table === adminAccounts) return [{ account: { id: actorId, displayName: '测试超管', status: 'active', createdAt: new Date(0) }, credential: { username: 'brand-admin', role: state.role } }]
     throw new Error('Unexpected test table')
   }
   const tx = {
     select: () => {
-      let table: unknown
+      let table: unknown, ids: unknown[] = []
       const query = {
         from: (value: unknown) => { table = value; return query },
-        innerJoin: () => query, where: () => query,
-        limit: async () => rows(table),
-        for: async (lock: string) => { state.locks.push([table, lock]); return rows(table) },
-        then: (resolve: (value: unknown) => unknown) => Promise.resolve(rows(table)).then(resolve),
+        innerJoin: () => query, where: (predicate: SQL) => { if (table === platformBrandImages) ids = dialect.sqlToQuery(predicate).params; return query },
+        limit: async () => rows(table, ids),
+        for: async (lock: string) => { state.locks.push([table, lock]); return rows(table, ids) },
+        then: (resolve: (value: unknown) => unknown) => Promise.resolve(rows(table, ids)).then(resolve),
       }
       return query
     },
-    insert: (table: unknown) => ({ values: (value: BrandRow | Audit) => {
+    insert: (table: unknown) => ({ values: (value: BrandRow | Audit | BrandImage) => {
       if (table === platformBrand) return { onDuplicateKeyUpdate: async () => { state.brand ??= { ...value as BrandRow } } }
+      if (table === platformBrandImages) { state.images.push(structuredClone(value as BrandImage)); return Promise.resolve() }
       if (table !== platformBrandAudit) throw new Error('Unexpected test insert')
       if (state.failAudit) throw new Error('simulated audit storage failure')
       state.audits.push(structuredClone(value as Audit))
@@ -51,9 +58,9 @@ function storage() {
     } }) }),
   }
   const db = { ...tx, transaction: async (callback: (value: typeof tx) => Promise<unknown>) => {
-    const previous = structuredClone({ brand: state.brand, audits: state.audits })
+    const previous = structuredClone({ brand: state.brand, audits: state.audits, images: state.images })
     try { return await callback(tx) }
-    catch (error) { state.brand = previous.brand; state.audits = previous.audits; throw error }
+    catch (error) { Object.assign(state, previous); throw error }
   } }
   return { state, database: { db } as unknown as FlowDatabase }
 }
@@ -63,7 +70,7 @@ describe('platform brand HTTP and service boundaries (storage substitute, no dat
   const store = storage()
   beforeAll(async () => {
     vi.stubEnv('ADMIN_ORIGIN', origin)
-    const module = await Test.createTestingModule({ controllers: [PublicBrandController, AdminBrandController], providers: [BrandService, AdminService,
+    const module = await Test.createTestingModule({ controllers: [PublicBrandController, PublicBrandAppearanceController, AdminBrandController], providers: [BrandService, AdminService,
       { provide: FlowDatabase, useValue: store.database },
     ] }).compile()
     app = module.createNestApplication()
@@ -74,11 +81,57 @@ describe('platform brand HTTP and service boundaries (storage substitute, no dat
     base = `http://127.0.0.1:${(app.getHttpServer().address() as AddressInfo).port}/api/v1`
   })
   beforeEach(() => {
-    store.state.brand = null; store.state.audits = []; store.state.role = 'super_admin'; store.state.failAudit = false; store.state.locks = []
+    store.state.brand = null; store.state.audits = []; store.state.images = []; store.state.role = 'super_admin'; store.state.failAudit = false; store.state.locks = []
   })
   afterAll(async () => { await app?.close(); vi.unstubAllEnvs() })
   const put = (body: unknown, headers: Record<string, string> = auth) => fetch(`${base}/admin/platform/brand`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+  })
+  const upload = (body: unknown, headers: Record<string, string> = auth) => fetch(`${base}/admin/platform/brand/images`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+  })
+
+  it('publishes only enabled partner metadata and original image bytes; legacy saves retain appearance', async () => {
+    const bytes = await sharp({ create: { width: 32, height: 48, channels: 3, background: '#618a74' } }).png().toBuffer()
+    const createImage = async (purpose: 'logo' | 'code') => {
+      const res = await upload({ base64: bytes.toString('base64'), purpose, mimeType: 'image/png' })
+      expect(res.status).toBe(201)
+      return ((await res.json()) as { id: string }).id
+    }
+    const logoImageId = await createImage('logo'), codeImageId = await createImage('code'), hiddenCode = await createImage('code')
+    const imagePath = (id: string) => '/platform/appearance/images/' + id
+    expect((await fetch(base + imagePath(codeImageId))).status).toBe(404)
+    expect((await fetch(base + '/admin/platform/brand/images/' + codeImageId, { headers: auth })).status).toBe(200)
+    const option = { description: '合作入口', logoImageId: null }
+    const appearance = { logoImageId, tabNames: { circle: '同行圈', activity: '找活动', assistant: '', mine: '我的' }, partners: [
+      { ...option, name: '后显示', codeImageId, sortOrder: 2, visible: true },
+      { ...option, name: '停用项', codeImageId: hiddenCode, sortOrder: 0, visible: false },
+      { ...option, name: '先显示', codeImageId, sortOrder: 1, visible: true },
+    ] }
+    expect((await put({ displayName: '示例公司', visible: true, version: 0, appearance })).status).toBe(200)
+    expect((await put({ displayName: '示例公司', visible: true, version: 1 })).status).toBe(200)
+    const publicView = await (await fetch(base + '/platform/appearance')).json()
+    expect(publicView).toMatchObject({ displayName: '示例公司', tabNames: { circle: '同行圈', assistant: 'i 助手' }, logoUrl: '/api/v1' + imagePath(logoImageId) })
+    expect(publicView.partners.map((item: { name: string }) => item.name)).toEqual(['先显示', '后显示'])
+    expect(JSON.stringify(publicView)).not.toContain(hiddenCode)
+    expect((await fetch(base + imagePath(hiddenCode))).status).toBe(404)
+    const image = await fetch(base + imagePath(codeImageId))
+    expect(image.headers.get('Content-Type')).toBe('image/png')
+    expect(Buffer.from(await image.arrayBuffer())).toEqual(bytes)
+    expect((await put({ displayName: '示例公司', visible: false, version: 2, appearance: { ...appearance, partners: [] } })).status).toBe(200)
+    expect((await fetch(base + imagePath(codeImageId))).status).toBe(404)
+    expect((await fetch(base + imagePath(logoImageId))).status).toBe(404)
+    expect((await (await fetch(base + '/platform/appearance')).json()).partners).toEqual([])
+  })
+
+  it('rejects forged image input and requires a valid code when enabling a partner', async () => {
+    expect((await upload({ base64: 'YWJj', mimeType: 'image/png', purpose: 'code' }, {})).status).toBe(401)
+    expect((await upload({ base64: 'YWJj', mimeType: 'image/png', purpose: 'code' })).status).toBe(400)
+    const input = { displayName: '示例公司', visible: true, version: 0, appearance: { logoImageId: null,
+      tabNames: { circle: '', activity: '', assistant: '', mine: '' }, partners: [{ name: '合作方', description: '', logoImageId: null, codeImageId: null, sortOrder: 1, visible: true }] } }
+    expect(await (await put(input)).json()).toMatchObject({ code: 'PARTNER_CODE_REQUIRED' })
+    expect(store.state.brand).toBeNull()
+    expect(store.state.audits).toEqual([])
   })
 
   it('serves the public default without creating a singleton, exposes version only to the super admin', async () => {

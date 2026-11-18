@@ -93,6 +93,7 @@ export const api = {
   advertisingBackground: () => request<AdvertisingBackground>('/advertising/background', 'GET', undefined, 'none'),
   platformContent: () => request<import('./types').PlatformContent>('/platform/content'),
   platformBrand: () => request<import('./types').PlatformBrand>('/platform/brand', 'GET', undefined, 'none'),
+  platformAppearance: () => request<import('./types').PlatformAppearance>('/platform/appearance', 'GET', undefined, 'none'),
   savePlatformContent: (input: { activityText: string; assistantText: string }) => request<import('./types').PlatformContent>('/platform/content', 'POST', input, true),
   legalDocuments: () => request<import('./types').LegalDocuments>('/platform/legal', 'GET', undefined, 'none'),
   acceptLegal: (consent: { termsVersion: string; privacyVersion: string }) => request<{ ok: boolean }>('/platform/legal/accept', 'POST', consent, true),
