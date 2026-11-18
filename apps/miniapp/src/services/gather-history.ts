@@ -17,6 +17,7 @@ export type GatherChatSnapshot = {
   descriptionCandidate?: string | null
   confirmedDescription?: string
   imagesDecided?: boolean
+  settingsDecision?: 'saved' | 'skipped' | null
   uncertainCreate: boolean
 }
 

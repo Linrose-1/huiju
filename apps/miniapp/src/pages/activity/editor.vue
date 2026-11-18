@@ -313,13 +313,15 @@ async function load() {
         form.amount = activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : ''
       }
     }
-    if (!id.value && !initialized && fromAi) {
+    if (!initialized && fromAi && (!id.value || optionalOnly.value)) {
       const draft = takeActivityDraft(owner, epoch)
       if (draft) {
-        applyAiDraft(draft.draft)
-        form.consultationContact = draft.consultationContact
+        if (!id.value) {
+          applyAiDraft(draft.draft)
+          form.consultationContact = draft.consultationContact
+        }
         onAiDraftSaved = draft.onSaved
-      } else { aiDraftMissing.value = true; optionalOnly.value = false }
+      } else if (!id.value) { aiDraftMissing.value = true; optionalOnly.value = false }
     }
     const key = manualDraftKey()
     if (!initialized && key) {
@@ -610,7 +612,7 @@ function displayTime(field: 'start' | 'end' | 'deadline') {
   return date && time ? date.replaceAll('-', '.') + ' ' + time : '选择日期和时间'
 }
 function changeStep(value: number) {
-  if (busy.value) return
+  if (busy.value || (optionalOnly.value && value === 2)) return
   step.value = value
   submitError.value = ''
   uni.pageScrollTo({ scrollTop: 0, duration: 0 })
@@ -627,7 +629,7 @@ function switchValue(event: unknown): boolean {
   return (event as { detail: { value: boolean } }).detail.value
 }
 async function submit(publish = false) {
-  if (busy.value || loading.value || error.value || !editable.value || disposed) return
+  if ((optionalOnly.value && publish) || busy.value || loading.value || error.value || !editable.value || disposed) return
   const request = ++generation, token = session.token, epoch = session.epoch
   const current = () => request === generation && !disposed && token === session.token && epoch === session.epoch
   submitError.value = ''
@@ -654,7 +656,7 @@ async function submit(publish = false) {
     questions.value = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
     if (publish) await api.publishActivity(activity.id)
     if (!current()) return
-    if (fromShare) { uni.navigateBack(); return }
+    if (fromShare || optionalOnly.value) { uni.navigateBack(); return }
     navigate(routes.manage + '?id=' + encodeURIComponent(activity.id), true)
   } catch (e) {
     if (!current()) return
@@ -705,10 +707,12 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
         报名设置
       </button>
       <view
+        v-if="!optionalOnly"
         class="step-line"
         :class="{ 'muted-line': step === 0 }"
       />
       <button
+        v-if="!optionalOnly"
         class="step last-step"
         :class="{ current: step === 2 }"
         :disabled="busy"
@@ -812,7 +816,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             :cursor-spacing="130"
           >
         </view>
-        <view class="form-card activity-images-card">
+        <view v-if="!optionalOnly" class="form-card activity-images-card">
           <view class="card-heading"><text>活动图片</text><text class="helper">{{ previewImages.length }} / 9 · 选填</text></view>
           <view class="activity-image-slots">
             <template
@@ -1522,7 +1526,16 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
             {{ step === 2 ? '上一步：报名设置' : optionalOnly ? '上一步：更多设置' : '上一步：基本信息' }}
           </button>
           <button
-            v-if="step < 2"
+            v-if="optionalOnly && step === 1"
+            class="next-button"
+            :loading="busy"
+            :disabled="busy || !editable"
+            @click="submit(false)"
+          >
+            保存设置，查看预览
+          </button>
+          <button
+            v-else-if="step < 2"
             class="next-button"
             :disabled="busy || !editable"
             @click="changeStep(step + 1)"

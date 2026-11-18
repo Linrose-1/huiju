@@ -62,7 +62,7 @@ function makePage(t, storage = new Map()) {
   }
   const page = {}, scope = effectScope()
   scope.run(() => new Function('require','exports','uni', script('../src/pages/assistant/activity-draft.vue',
-    'inputDescription,acceptDescription,selectTime,selectLocation,recordSelection,writeDescription,descriptionCandidate,confirmedDescription,imagesDecided,addGatherImages,removeGatherImage,cropper,inputForPublish,moreSettings,newConversation,checking,canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
+    'inputDescription,acceptDescription,writingDescription,finishImages,skipSettings,stage,settingsDecision,selectDate,selectTime,selectLocation,recordSelection,writeDescription,descriptionCandidate,confirmedDescription,imagesDecided,addGatherImages,removeGatherImage,cropper,inputForPublish,moreSettings,newConversation,checking,canInitiate,invitedFriend,accessError,generate,idea,busy,error,draft,answer,question,publish,createdId,reply,chooseStarter,message,sendMessage,sendCard,writeAnswer,cancelAnswer,customControl,custom,exchanges,previewReady,options,requestQuestion,outgoing,sentIdea,openingFacts,openHistory,resumeHistory,history'))(name=>deps[name]||require(name),page,uni))
   t.after(()=>{lifecycle.unload();scope.stop()})
   return {page,session,api,requests,navigation,lifecycle,decisions,storage,modals,wechat,staged}
 }
@@ -102,6 +102,9 @@ test('complete conversation produces preview, publishes only after confirmation 
   await page.answer('群内联系发起人')
   assert.equal(page.question.value,null)
   page.confirmedDescription.value=page.draft.value.description; page.imagesDecided.value=true
+  assert.equal(page.stage.value,'settings')
+  page.skipSettings()
+  assert.equal(page.stage.value,'preview')
   let creates=0, publishes=0
   api.createActivity=async input=>{creates++;assert.equal(input.location,'线上聚会 · 报名后发会议链接');return {id:'existing'}}
   api.managedActivity=async()=>({lifecycle:'draft'})
@@ -213,20 +216,22 @@ test('chat starter can be edited before sending and the same composer answers th
   assert.equal(requests.length, 1)
 })
 
-test('venue cards offer offline entry with empty suggestions and ask for an address for venue types', async t => {
-  for (const suggestions of [[], ['安静的咖啡馆（填地址）']]) {
-    const {page, requests, lifecycle} = makePage(t)
-    await lifecycle.show()
-    page.idea.value = '想约几位同行聊聊 AI 应用'
-    const generation = page.generate()
-    requests[0].resolve({draft:blankDraft,nextQuestion:{...card('location'),options:suggestions}})
-    await generation
-    const option = suggestions[0] || '线下聚会'
-    assert.deepEqual(page.options.value,[option])
-    await page.answer(option,true)
-    assert.equal(page.custom.value,suggestions.length ? option : 'offline')
-    assert.equal(page.draft.value.location,null)
-  }
+test('venue card hides generic venue suggestions and can open the map before manual entry', async t => {
+  const {page, requests, lifecycle, wechat} = makePage(t)
+  await lifecycle.show()
+  page.idea.value = '想约几位同行聊聊 AI 应用'
+  const generation = page.generate()
+  requests[0].resolve({draft:blankDraft,nextQuestion:{...card('location'),options:['线下聚会','安静的咖啡馆（填地址）','共享会议室']}})
+  await generation
+  assert.deepEqual(page.options.value,[])
+  page.writeAnswer()
+  assert.equal(page.customControl.value,null)
+  let opened = false
+  wechat.chooseActivityLocation = async () => { opened = true; return null }
+  await page.selectLocation()
+  assert.equal(opened,true)
+  assert.equal(page.draft.value.location,null)
+  assert.equal(page.question.value.field,'location')
 })
 
 test('online venue completes location and unsolicited joining details are kept without another card', async t => {
@@ -235,13 +240,11 @@ test('online venue completes location and unsolicited joining details are kept w
   page.idea.value = '明天聊 AI'
   const pending = page.generate()
   requests[0].resolve({ draft:blankDraft,
-    nextQuestion:{field:'location',prompt:'同行们准备在哪里交流 AI？',options:['线下聚会','行业园区']} })
+    nextQuestion:{field:'location',prompt:'同行们准备在哪里交流 AI？',options:['线下聚会','行业园区','线上聚会']} })
   await pending
   assert.equal(page.question.value.field, 'location')
   assert.equal(page.question.value.prompt,'同行们准备在哪里交流 AI？')
-  assert.deepEqual(page.options.value,['线下聚会','行业园区'])
-  await page.answer('线下聚会',true)
-  assert.equal(page.custom.value,'offline')
+  assert.deepEqual(page.options.value,['线上聚会'])
   assert.equal(page.draft.value.location,null)
   const calls = []
   api.interpretActivityReply = async (...args) => {
@@ -250,7 +253,7 @@ test('online venue completes location and unsolicited joining details are kept w
       nextQuestion:calls.length === 1 ? {field:'joining',prompt:'大家怎样进入这次线上交流？',options:['填写会议链接','报名后发会议链接','自己填写']}
         : {field:'fee',prompt:'明天的 AI 沙龙如何收费？',options:['免费参与','收费']} }
   }
-  await page.answer('线上聚会')
+  await page.answer(page.options.value[0],true)
   assert.equal(page.draft.value.location, '线上聚会')
   assert.equal(calls[0][4].known.find(item=>item.field==='location').value,'线上聚会')
   assert.equal(calls[0][4].recent.at(-1).prompt,'同行们准备在哪里交流 AI？')
@@ -411,21 +414,22 @@ test('card and chat keep separate unsent text, including after restoring the con
   await h.lifecycle.show()
   h.page.idea.value = '明天下午交流'
   const pending = h.page.generate()
-  h.requests[0].resolve({draft:blankDraft, nextQuestion:{field:'location',prompt:'在哪里聚会？',options:['创客厅','园区书房']}})
+  h.requests[0].resolve({draft:blankDraft, nextQuestion:card('contact')})
   await pending
   h.page.writeAnswer()
-  h.page.reply.value = '珠江书房'
+  h.page.reply.value = '联系发起人'
   h.page.message.value = '人数改成15人'
-  assert.equal(h.page.reply.value, '珠江书房')
+  assert.equal(h.page.reply.value, '联系发起人')
   h.lifecycle.unload()
   const restored = makePage(t, h.storage)
   await restored.lifecycle.show()
   resumeChat(restored.page, '明天下午交流')
-  assert.equal(restored.page.reply.value, '珠江书房')
+  assert.equal(restored.page.reply.value, '联系发起人')
   assert.equal(restored.page.message.value, '人数改成15人')
   restored.page.sendCard()
+  restored.requests[0].resolve({nextQuestion:card('location')})
   await new Promise(resolve => setImmediate(resolve))
-  assert.equal(restored.page.draft.value.location, '珠江书房')
+  assert.equal(restored.page.draft.value.consultationContact, '联系发起人')
   assert.equal(restored.page.draft.value.capacity, null)
   assert.equal(restored.page.message.value, '人数改成15人')
 })
@@ -440,8 +444,6 @@ test('chat changes capacity while location is pending and again from preview, pr
   await generating
   assert.equal(h.page.question.value.field, 'location')
   const initialState = JSON.parse(JSON.stringify(h.page.draft.value))
-  h.page.writeAnswer()
-  h.page.reply.value = '珠江书房'
   h.api.interpretActivityReply = async (_a,_f,_d,_p,context) => ({
     nextQuestion:card(context.pending[0]),
     draft:{...initial,title:'新主题',description:'新介绍',location:'模型补写的地点',feeType:'paid',feeAmountCents:5000,capacity:15}
@@ -451,8 +453,8 @@ test('chat changes capacity while location is pending and again from preview, pr
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(h.page.draft.value, {...initialState,capacity:15})
   assert.equal(h.page.question.value.field,'location')
-  assert.equal(h.page.reply.value, '珠江书房')
-  h.page.sendCard()
+  h.page.message.value = '地点改到珠江书房'
+  h.page.sendMessage()
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(h.page.draft.value, {...initialState,capacity:15,location:'珠江书房'})
   assert.equal(h.page.question.value.field,'contact')
@@ -597,6 +599,37 @@ function completedDraft() {
   return {...loadGatherService('gather-dialog').createGatherDraft('AI交流', {...blankDraft,startsAt:'2099-12-01T14:00:00+08:00',endsAt:'2099-12-01T16:00:00+08:00',location:'交流中心',feeType:'free'}),consultationContact:'联系发起人'}
 }
 
+test('date and time suggestions stay available until a custom picker is requested', async t => {
+  const {page, requests, lifecycle} = makePage(t)
+  await lifecycle.show()
+  page.idea.value = '想办一场聚会'
+  const generating = page.generate()
+  requests[0].resolve({draft:blankDraft,nextQuestion:{...card('date'),options:['2099-12-01','2099-12-02']}})
+  await generating
+  assert.equal(page.customControl.value,null)
+  assert.deepEqual(page.options.value,['2099-12-01','2099-12-02'])
+  page.writeAnswer()
+  assert.equal(page.customControl.value,'date')
+  await page.selectDate('2099-02-30')
+  assert.equal(page.draft.value.date,'')
+  const selection = page.selectDate('2099-12-03')
+  assert.equal(page.draft.value.date,'2099-12-03')
+  assert.equal(page.draft.value.startsAt,null)
+  assert.equal(page.draft.value.endsAt,null)
+  requests[1].resolve({draft:blankDraft,nextQuestion:{...card('time'),options:['14:00—16:00']}})
+  await selection
+  assert.equal(page.customControl.value,null)
+  page.writeAnswer()
+  assert.equal(page.customControl.value,'time')
+  page.cancelAnswer()
+  assert.equal(page.customControl.value,null)
+  await page.answer(page.options.value[0],true)
+  assert.equal(page.draft.value.startsAt,'2099-12-03T14:00:00+08:00')
+  assert.equal(page.customControl.value,null)
+  page.cancelAnswer()
+  assert.equal(page.draft.value.date,'2099-12-03')
+})
+
 test('native time and map selections preserve unrelated facts and cancellation or stale map cannot overwrite them', async t => {
   const h=makePage(t)
   await h.lifecycle.show()
@@ -620,19 +653,12 @@ test('native time and map selections preserve unrelated facts and cancellation o
   assert.equal(h.page.draft.value,null)
 })
 
-test('AI description stays a candidate until confirmation and images plus review state survive leaving', async t => {
+test('images require continue, then AI introduction and optional settings gate the only preview', async t => {
   const h=makePage(t)
   await h.lifecycle.show()
   h.page.idea.value='AI交流'; h.page.draft.value=completedDraft()
   const before=h.page.draft.value.description
-  const generating=h.page.writeDescription()
-  assert.match(h.requests[0].idea,/不虚构/)
-  h.requests[0].resolve({draft:{...blankDraft,description:'围绕AI应用交流实践经验，欢迎带着实际问题参与讨论。'}})
-  await generating
-  assert.equal(h.page.draft.value.description,before)
-  assert.equal(h.page.confirmedDescription.value,'')
-  await h.page.acceptDescription()
-  assert.match(h.page.draft.value.description,/实践经验/)
+  assert.equal(h.page.stage.value,'images')
   h.wechat.chooseActivityImagePaths=async()=>['one','two']
   h.wechat.readActivityImage=async path=>({base64:path,mimeType:'image/jpeg'})
   h.page.cropper.value={open:async()=> 'cropped',cancel(){}}
@@ -641,7 +667,30 @@ test('AI description stays a candidate until confirmation and images plus review
   await h.page.addGatherImages()
   assert.deepEqual(h.page.draft.value.imageUrls,['/image-2','/image-3'])
   assert.equal(h.page.draft.value.coverSourceUrl,'/image-1')
-  assert.equal(h.page.imagesDecided.value,true)
+  assert.equal(h.page.stage.value,'images')
+  assert.equal(h.requests.length,0)
+  const generating=h.page.finishImages()
+  assert.equal(h.page.stage.value,'description')
+  assert.equal(h.page.writingDescription.value,true)
+  assert.match(h.requests[0].idea,/100–200字/)
+  assert.match(h.requests[0].idea,/不要逐项复述/)
+  assert.doesNotMatch(h.requests[0].idea,/\/image-2|联系发起人/)
+  assert.match(h.requests[0].idea,/"imageCount":2/)
+  h.requests[0].resolve({draft:{...blankDraft,description:'围绕AI应用交流实践经验，欢迎带着实际问题参与讨论。'}})
+  await generating
+  assert.equal(h.page.writingDescription.value,false)
+  const candidate=h.page.descriptionCandidate.value
+  const rewriting=h.page.writeDescription()
+  assert.equal(h.page.writingDescription.value,true)
+  h.requests[1].reject(new Error('生成失败'))
+  await rewriting
+  assert.equal(h.page.writingDescription.value,false)
+  assert.equal(h.page.descriptionCandidate.value,candidate)
+  assert.equal(h.page.draft.value.description,before)
+  await h.page.acceptDescription()
+  assert.match(h.page.draft.value.description,/实践经验/)
+  assert.equal(h.page.stage.value,'settings')
+  assert.equal(h.page.exchanges.value.length,0)
   const payload=h.page.inputForPublish(h.page.draft.value)
   assert.equal(payload.coverUrl,'/image-2')
   h.lifecycle.unload()
@@ -653,6 +702,9 @@ test('AI description stays a candidate until confirmation and images plus review
   next.page.moreSettings(true)
   assert.match(next.navigation[0],/optionalOnly=1/)
   assert.deepEqual(next.staged[0][2].imageUrls,payload.imageUrls)
+  assert.equal(next.page.previewReady.value,false)
+  next.staged[0][4]('saved-draft')
+  assert.equal(next.page.stage.value,'preview')
 })
 
 test('publish requires explicit introduction and image decisions, failed uploads preserve uploaded images', async t => {
@@ -663,7 +715,7 @@ test('publish requires explicit introduction and image decisions, failed uploads
   h.api.createActivity=async()=>{creates++;return {id:'unexpected'}}
   await h.page.publish()
   assert.equal(creates,0)
-  assert.match(h.page.error.value,/确认活动介绍/)
+  assert.equal(h.page.stage.value,'images')
   h.wechat.chooseActivityImagePaths=async()=>['one','bad']
   h.wechat.readActivityImage=async path=>{if(path==='bad')throw new Error('读取失败');return {base64:path,mimeType:'image/jpeg'}}
   h.page.cropper.value={open:async()=> 'cropped',cancel(){}}
@@ -680,11 +732,11 @@ test('editing a confirmed introduction revokes approval and cannot bypass review
   h.page.idea.value='AI交流'; h.page.draft.value=completedDraft()
   h.page.confirmedDescription.value=h.page.draft.value.description;h.page.imagesDecided.value=true
   h.page.inputDescription({detail:{value:'尚未确认的新介绍'}})
-  assert.equal(h.page.confirmedDescription.value,'')
+  assert.equal(h.page.stage.value,'description')
   h.page.moreSettings(true)
   assert.equal(h.navigation.length,0)
   await h.page.publish()
-  assert.match(h.page.error.value,/确认活动介绍/)
+  assert.equal(h.page.previewReady.value,false)
   await h.page.acceptDescription()
   h.page.moreSettings(true)
   assert.equal(h.navigation.length,1)
@@ -695,6 +747,7 @@ test('returning from saved optional settings refreshes the exact server draft be
   const h=makePage(t)
   await h.lifecycle.show()
   h.page.idea.value='AI交流'; h.page.draft.value=completedDraft();h.page.createdId.value='saved'
+  h.page.imagesDecided.value=true;h.page.settingsDecision.value='saved'
   const record={...completedDraft(),title:'服务端草稿',description:'更新后的介绍',lifecycle:'draft',capacity:16,imageUrls:['/saved-cover'],coverUrl:'/saved-cover',coverSourceUrl:'/original',locationLatitude:23.1,locationLongitude:113.2,questions:[]}
   h.api.managedActivity=async()=>record
   await h.lifecycle.show()
@@ -702,7 +755,9 @@ test('returning from saved optional settings refreshes the exact server draft be
   assert.deepEqual(h.page.draft.value.imageUrls,['/saved-cover'])
   assert.equal(h.page.draft.value.latitude,23.1)
   assert.equal(h.page.draft.value.description,'更新后的介绍')
+  assert.equal(h.page.stage.value,'description')
   await h.page.acceptDescription()
   assert.equal(h.page.confirmedDescription.value,'更新后的介绍')
   assert.equal(h.page.imagesDecided.value,true)
+  assert.equal(h.page.stage.value,'preview')
 })

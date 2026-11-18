@@ -62,7 +62,7 @@ function harness({ loadOptions = {}, stagedDraft = null, storage = new Map(), sh
   const page = {}
   new Function('require', 'exports', 'uni', 'Date', code)(
     name => name in dependencies ? dependencies[name] : require(name), page,
-    { getStorageSync: key => storage.get(key), setStorageSync: (key,value) => storage.set(key,value), removeStorageSync: key => storage.delete(key), getWindowInfo: () => windowInfo, getSystemInfoSync: () => windowInfo, pageScrollTo() {}, showModal }, DateClass,
+    { getStorageSync: key => storage.get(key), setStorageSync: (key,value) => storage.set(key,value), removeStorageSync: key => storage.delete(key), getWindowInfo: () => windowInfo, getSystemInfoSync: () => windowInfo, pageScrollTo() {}, navigateBack: () => navigations.push('back'), showModal }, DateClass,
   )
   page.cropper.value = { open: async path => path, cancel() {} }
   function fill() {
@@ -866,7 +866,8 @@ test('AI optional settings carries confirmed required fields, images and map coo
     imageUrls:['/cover.jpg','/extra.jpg'], coverUrl:'/cover.jpg', coverSourceUrl:'/original.jpg',
     latitude:22.53, longitude:113.95,
   }
-  const h = harness({ loadOptions:{aiDraft:'1',optionalOnly:'1'}, stagedDraft:{draft,consultationContact:'组织者微信'} })
+  const saved = []
+  const h = harness({ loadOptions:{aiDraft:'1',optionalOnly:'1'}, stagedDraft:{draft,consultationContact:'组织者微信',onSaved:id=>saved.push(id)} })
   await h.page.load()
   assert.equal(h.page.optionalOnly.value,true)
   assert.equal(h.page.form.title,draft.title)
@@ -879,6 +880,15 @@ test('AI optional settings carries confirmed required fields, images and map coo
   assert.equal(input.locationLatitude,22.53)
   assert.equal(input.locationLongitude,113.95)
   assert.equal(input.description,draft.description)
+  h.page.changeStep(1)
+  h.page.changeStep(2)
+  assert.equal(h.page.step.value,1)
+  await h.page.submit(true)
+  assert.equal(h.creates.length,0)
+  assert.deepEqual(h.publishes,[])
+  await h.page.submit(false)
+  assert.deepEqual(saved,['activity-a'])
+  assert.deepEqual(h.navigations,['back'])
   h.unload()
 })
 
