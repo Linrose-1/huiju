@@ -26,7 +26,7 @@ export class RecommendationCandidatesService {
       location ? sql`instr(${activities.location}, ${location.value}) > 0` : undefined,
       time ? and(gte(activities.startsAt, new Date(time.from)), sql`${activities.startsAt} < ${new Date(time.to)}`) : undefined,
       feeType ? eq(activities.feeType, feeType.value) : undefined,
-      ...(themes ?? []).map(theme => sql`(instr(${activities.title}, ${theme.value}) > 0 or instr(${activities.description}, ${theme.value}) > 0)`)))
+      ...(themes ?? []).map(theme => sql`(instr(lower(${activities.title}), lower(${theme.value})) > 0 or instr(lower(${activities.description}), lower(${theme.value})) > 0)`)))
       .orderBy(asc(activities.startsAt), asc(activities.id)).limit(limit)
     return rows.map(row => ({ ...row, startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString() }))
   }

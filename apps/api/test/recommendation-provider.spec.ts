@@ -25,6 +25,20 @@ describe('recommendation parsing and public matching', () => {
     expect(matchesHardConditions(candidate, { ...parsed, hard: { feeType: { value: 'free', evidence: '只看免费' } } })).toBe(false)
     expect(parsed.summary).toContain('偏好：最好免费')
   })
+  it('looks up the topic rather than the wording “related” and checks the public quote across letter case', async () => {
+    const message = '帮我找ai相关的聚会'
+    const parsed = validateParsedSearch({
+      ...empty, hard: { themes: [{ value: 'ai相关', evidence: 'ai相关' }] },
+    }, [message])
+    const event = { ...candidate, title: 'AI 智能体在外贸与出海行业的实效应用交流会' }
+    expect(parsed.hard.themes).toEqual([{ value: 'ai', evidence: 'ai相关' }])
+    expect(parsed.summary).toBe('必选：ai相关')
+    expect(matchesHardConditions(event, parsed)).toBe(true)
+    expect(matchesHardConditions(candidate, parsed)).toBe(false)
+    const proof = { field: 'title', quote: 'AI 智能体在外贸与出海行业' }
+    network.mockResolvedValueOnce(response({ items: [{ id: 'c1', evidence: proof, themes: [{ ...proof, value: 'ai' }] }] }))
+    await expect(new RecommendationProvider().rank([message], parsed, [event])).resolves.toMatchObject([{ id: event.id }])
+  })
   it('rejects invented evidence, invalid time ranges and unsupported hard keys', () => {
     expect(() => validateParsedSearch({ ...empty, hard: { location: { value: '北京', evidence: '北京' } } }, ['深圳'])).toThrow()
     expect(() => validateParsedSearch({ ...empty, hard: { budget: 100 } }, ['不超过100元'])).toThrow()

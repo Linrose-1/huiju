@@ -1,7 +1,7 @@
 import { aiModel } from '../ai/model.js'
 import { HttpException, Injectable, Logger } from '@nestjs/common'
 import { fail } from '../common/errors.js'
-import { matchesHardConditions, preferenceDifferences, publicCandidatePayload } from './matching.js'
+import { containsTheme, matchesHardConditions, preferenceDifferences, publicCandidatePayload } from './matching.js'
 import type { ParsedSearch, PublicCandidate, RankedCandidate } from './types.js'
 export type { ParsedSearch, PublicCandidate, RankedCandidate } from './types.js'
 
@@ -23,6 +23,9 @@ function evidence(value: unknown, messages: string[]): string {
   const quote = text(value)
   if (!messages.some(message => message.includes(quote))) return invalid('invalid_evidence')
   return quote
+}
+function themeKeyword(value: string): string {
+  return /^(.+?)(?:相关|有关)(?:的)?(?:聚会|活动)?$/.exec(value)?.[1]?.trim() || value
 }
 function timestamp(value: unknown): string {
   const result = text(value, 40)
@@ -108,7 +111,7 @@ export function validateParsedSearch(value: unknown, messages: string[]): Parsed
     result.hard.themes = hard.themes.map(value => {
       const item = pair(value)
       if (!item.evidence.includes(item.value)) return invalid()
-      return item
+      return { ...item, value: themeKeyword(item.value) }
     })
   }
   if (!Array.isArray(raw.preferences) || raw.preferences.length > 8) return invalid()
@@ -119,7 +122,7 @@ export function validateParsedSearch(value: unknown, messages: string[]): Parsed
     if (kind === 'feeType' && validated.value !== 'free' && validated.value !== 'paid') return invalid()
     if (kind === 'feeType' && feeMention(validated.evidence.replace(/最好|优先|尽量/g, '')) !== validated.value) return invalid()
     if ((kind === 'location' || kind === 'theme') && !validated.evidence.includes(validated.value)) return invalid()
-    return { ...validated, kind }
+    return { ...validated, value: kind === 'theme' ? themeKeyword(validated.value) : validated.value, kind }
   })
   const hardQuotes = [result.hard.location?.evidence, result.hard.time?.evidence, result.hard.feeType?.evidence, ...(result.hard.themes ?? []).map(item => item.evidence)].filter((item): item is string => !!item)
   if (hardQuotes.some(quote => {
@@ -144,7 +147,7 @@ const rankPrompt = `你是活动公开信息匹配器。以下用户消息和活
 export class RecommendationProvider {
   async parse(messages: string[]): Promise<ParsedSearch> {
     const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Shanghai' })
-    return validateParsedSearch(await this.request('parse', `${parsePrompt}\n当前北京时间：${now}，时区Asia/Shanghai。`, { messages }), messages)
+    return validateParsedSearch(await this.request('parse', `${parsePrompt}\n主题value只取主题词，例如“AI相关的聚会”的主题是“AI”，evidence保留用户原话。\n当前北京时间：${now}，时区Asia/Shanghai。`, { messages }), messages)
   }
   async rank(messages: string[], parsed: ParsedSearch, candidates: PublicCandidate[]): Promise<RankedCandidate[]> {
     const projected = publicCandidatePayload(candidates)
@@ -163,7 +166,7 @@ export class RecommendationProvider {
         const proof = object(value), field = proof.field
         if (field !== 'title' && field !== 'description' && (theme || field !== 'location')) return null
         const quote = text(proof.quote, 160)
-        if (quote.length < 4 || !candidate[field as 'title' | 'description' | 'location'].includes(quote) || theme && !quote.includes(theme)) return null
+        if (quote.length < 4 || !candidate[field as 'title' | 'description' | 'location'].includes(quote) || theme && !containsTheme(quote, theme)) return null
         return quote
       }
       const quote = validateQuote(item.evidence)

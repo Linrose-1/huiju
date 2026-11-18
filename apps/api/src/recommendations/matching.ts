@@ -4,12 +4,17 @@ import type { ParsedSearch, PublicCandidate } from './types.js'
 export const MAX_RECOMMENDATION_CANDIDATES = 60
 export const MAX_RECOMMENDATION_TEXT_CHARS = 60000
 
+export function containsTheme(text: string, theme: string): boolean {
+  return text.toLowerCase().includes(theme.toLowerCase())
+}
+
 export function matchesHardConditions(candidate: PublicCandidate, parsed: ParsedSearch): boolean {
-  const { location, time, feeType } = parsed.hard
+  const { location, time, feeType, themes } = parsed.hard
   const start = Date.parse(candidate.startsAt)
   return !parsed.clarify && (!location || candidate.location.includes(location.value))
     && (!time || (start >= Date.parse(time.from) && start < Date.parse(time.to)))
     && (!feeType || candidate.feeType === feeType.value)
+    && (!themes || themes.every(theme => containsTheme(candidate.title, theme.value) || containsTheme(candidate.description, theme.value)))
 }
 
 // Rebuild every object, including its identifier: callers may pass richer database rows.
@@ -30,7 +35,7 @@ export function preferenceDifferences(candidate: PublicCandidate, parsed: Parsed
       return candidate.feeType === preference.value ? '' : candidate.feeType === 'paid' ? '该活动收费，未满足免费偏好' : '该活动免费，与收费偏好不同'
     }
     if (preference.kind === 'location' && candidate.location.includes(preference.value)) return ''
-    if (preference.kind === 'theme' && `${candidate.title}\n${candidate.description}`.includes(preference.value)) return ''
+    if (preference.kind === 'theme' && (containsTheme(candidate.title, preference.value) || containsTheme(candidate.description, preference.value))) return ''
     return `请核对偏好“${preference.evidence}”，活动公开信息尚不能确认满足`
   }).filter(Boolean)
 }
