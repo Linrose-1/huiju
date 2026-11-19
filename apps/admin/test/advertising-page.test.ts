@@ -6,7 +6,7 @@ import { session } from '../src/services/admin'
 import { useRequestScope } from '../src/services/request-scope'
 const scopes: vue.EffectScope[] = []
 const confirmation = vi.fn<() => Promise<unknown>>()
-const network = { ads: vi.fn(), introductions: vi.fn(), createAd: vi.fn(), updateAd: vi.fn(), adStatus: vi.fn(), introductionStatus: vi.fn(), updateIntroduction: vi.fn(), saveBackground: vi.fn() }
+const network = { ads: vi.fn(), introductions: vi.fn(), introduction: vi.fn(), createAd: vi.fn(), updateAd: vi.fn(), adStatus: vi.fn(), introductionStatus: vi.fn(), updateIntroduction: vi.fn(), saveBackground: vi.fn() }
 function page(path: string, exported: string, props: object = {}) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]
   const code = ts.transpileModule(`${source}\nexport { ${exported} };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -26,17 +26,34 @@ beforeEach(() => { vi.resetAllMocks(); confirmation.mockResolvedValue(true); ses
 afterEach(() => scopes.splice(0).forEach(s => s.stop()))
 describe('advertising page request boundaries', () => {
   it('maps activity and assistant to tall images and circle to wide images without previewing deselected placements', () => {
-    const p = page('../src/modules/advertising/AdEditor.vue', 'form,needsWide,needsTall,previewImage', { initial: { placements: ['activity'], wideImageUrl: '/wide.jpg', tallImageUrl: '/tall.jpg' } }) as { form: vue.Ref<{ placements: string[] }>; needsWide: vue.ComputedRef<boolean>; needsTall: vue.ComputedRef<boolean>; previewImage: vue.ComputedRef<{ url: string; ratio: string } | null> }
+    const p = page('../src/modules/advertising/AdEditor.vue', 'form,previews', { initial: { placements: ['activity'], wideImageUrl: '/wide.jpg', tallImageUrl: '/tall.jpg' } }) as {
+      form: vue.Ref<{ placements: string[] }>
+      previews: vue.ComputedRef<{ url: string; ratio: number }[]>
+    }
     for (const placement of ['activity', 'assistant']) {
       p.form.value.placements = [placement]
-      expect(p.needsTall.value).toBe(true); expect(p.needsWide.value).toBe(false)
-      expect(p.previewImage.value).toEqual({ url: '/tall.jpg', ratio: '2' })
+      expect(p.previews.value).toMatchObject([{ url: '/tall.jpg', ratio: 2 }])
     }
     p.form.value.placements = ['circle']
-    expect(p.needsWide.value).toBe(true); expect(p.needsTall.value).toBe(false)
-    expect(p.previewImage.value).toEqual({ url: '/wide.jpg', ratio: '3' })
+    expect(p.previews.value).toMatchObject([{ url: '/wide.jpg', ratio: 3 }])
+    p.form.value.placements = ['activity', 'assistant', 'circle']
+    expect(p.previews.value).toMatchObject([{ url: '/tall.jpg', ratio: 2 }, { url: '/wide.jpg', ratio: 3 }])
     p.form.value.placements = []
-    expect(p.previewImage.value).toBeNull()
+    expect(p.previews.value).toEqual([])
+  })
+  it('blocks ad publication before confirmation when its introduction is not published', async () => {
+    network.introduction.mockResolvedValue({ status: 'draft' })
+    const p = page('../src/modules/advertising/AdvertisingPage.vue', 'changeStatus,changing,error') as {
+      changeStatus(row: object): Promise<void>
+      changing: vue.Ref<boolean>
+      error: vue.Ref<string>
+    }
+    await p.changeStatus({ id: 'ad', introductionId: 'intro', version: 1, status: 'draft' })
+    expect(network.introduction).toHaveBeenCalledWith('intro')
+    expect(confirmation).not.toHaveBeenCalled()
+    expect(network.adStatus).not.toHaveBeenCalled()
+    expect(p.error.value).toContain('请先上架关联介绍内容')
+    expect(p.changing.value).toBe(false)
   })
   it('uses applied filters for subsequent pages, avoiding offset against an unsubmitted query', async () => {
     network.ads.mockResolvedValue({ items: [], total: 45, hasMore: true })

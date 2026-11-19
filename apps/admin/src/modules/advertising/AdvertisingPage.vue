@@ -17,6 +17,7 @@ const backgroundRef = ref<InstanceType<typeof BackgroundSettings>>(), adEditorRe
 const begin = useRequestScope(), beginAction = useRequestScope()
 const applied = ref({ q: '', status: 'all' as 'all' | AdStatus, placement: 'all' as 'all' | Placement })
 const labels = { draft: '草稿', published: '已上架', offline: '已下架' }, positions = { activity: '活动', circle: '学友圈', assistant: '助手' }
+const statusTypes = { draft: 'info', published: 'success', offline: 'info' } as const
 async function load(reset = false) {
   if (reset) { displayedOffset.value = 0; ads.value = []; introductions.value = []; total.value = 0; offset.value = 0; applied.value = { q: q.value.trim(), status: status.value, placement: placement.value } }
   if (tab.value === 'background') return
@@ -39,7 +40,18 @@ async function changeStatus(row: AdvertisingAd | AdvertisingIntroduction) {
   const current = beginAction(), selectedTab = tab.value, id = row.id, version = row.version
   changing.value = true; error.value = ''
   try {
-    try { await ElMessageBox.confirm(next === 'published' ? '确认上架？内容和商务联系方式将公开展示。' : '确认下架？介绍下架后，关联广告也将停止展示。', next === 'published' ? '上架内容' : '下架内容', { type: 'warning' }) } catch { return }
+    if (selectedTab === 'ads' && next === 'published' && 'introductionId' in row) {
+      const introduction = await advertisingApi.introduction(row.introductionId)
+      if (!current()) return
+      if (introduction.status !== 'published') {
+        error.value = '请先上架关联介绍内容，再上架广告。'
+        return
+      }
+    }
+    const message = selectedTab === 'ads'
+      ? next === 'published' ? '上架后，轮播图片将在所选首页展示。' : '下架后，轮播图片将停止展示，关联介绍保留。'
+      : next === 'published' ? '确认上架？内容和商务联系方式将公开展示。' : '确认下架？介绍下架后，关联广告也将停止展示。'
+    try { await ElMessageBox.confirm(message, next === 'published' ? '上架内容' : '下架内容', { type: 'warning' }) } catch { return }
     if (!current()) return
     if (selectedTab === 'ads') await advertisingApi.adStatus(id, version, next); else await advertisingApi.introductionStatus(id, version, next)
     if (current()) { ElMessage.success(next === 'published' ? '已上架' : '已下架'); void load() }
@@ -72,22 +84,88 @@ onMounted(() => { void load() })
     </div>
     <div class="ad-tabs">
       <el-button
-        :type="tab === 'ads' ? 'primary' : 'default'"
+        text
+        :class="{ 'active-tab': tab === 'ads' }"
+        :aria-pressed="tab === 'ads'"
         @click="selectTab('ads')"
       >
         轮播广告
       </el-button><el-button
-        :type="tab === 'introductions' ? 'primary' : 'default'"
+        text
+        :class="{ 'active-tab': tab === 'introductions' }"
+        :aria-pressed="tab === 'introductions'"
         @click="selectTab('introductions')"
       >
         介绍内容
       </el-button><el-button
-        :type="tab === 'background' ? 'primary' : 'default'"
+        text
+        :class="{ 'active-tab': tab === 'background' }"
+        :aria-pressed="tab === 'background'"
         @click="selectTab('background')"
       >
         我的背景图
       </el-button>
     </div>
+    <form
+      v-if="tab === 'ads'"
+      class="panel ad-filters"
+      @submit.prevent="load(true)"
+    >
+      <div class="ad-filter">
+        <label for="ad-search">搜索广告</label>
+        <el-input
+          id="ad-search"
+          v-model="q"
+          :maxlength="100"
+          placeholder="搜索标题 / 项目 / 企业名称"
+          clearable
+        />
+      </div>
+      <div class="ad-filter">
+        <label for="ad-placement">展示位置</label>
+        <el-select
+          id="ad-placement"
+          v-model="placement"
+        >
+          <el-option
+            label="全部位置"
+            value="all"
+          />
+          <el-option
+            v-for="(label, key) in positions"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
+        </el-select>
+      </div>
+      <div class="ad-filter">
+        <label for="ad-status">状态</label>
+        <el-select
+          id="ad-status"
+          v-model="status"
+        >
+          <el-option
+            label="全部状态"
+            value="all"
+          />
+          <el-option
+            v-for="(label, key) in labels"
+            :key="key"
+            :label="label"
+            :value="key"
+          />
+        </el-select>
+      </div>
+      <el-button
+        type="primary"
+        native-type="submit"
+        :loading="loading"
+        :disabled="changing"
+      >
+        查询
+      </el-button>
+    </form>
     <BackgroundSettings
       v-if="tab === 'background'"
       ref="backgroundRef"
@@ -95,8 +173,13 @@ onMounted(() => { void load() })
     <div
       v-else
       class="panel"
+      :class="{ 'ad-list': tab === 'ads' }"
     >
+      <h2 v-if="tab === 'ads'">
+        轮播广告列表
+      </h2>
       <form
+        v-else
         class="filters"
         @submit.prevent="load(true)"
       >
@@ -106,21 +189,6 @@ onMounted(() => { void load() })
           placeholder="搜索标题 / 项目 / 企业名称"
           style="width:260px"
         /><el-select
-          v-if="tab === 'ads'"
-          v-model="placement"
-          style="width:160px"
-          aria-label="展示位置"
-        >
-          <el-option
-            label="全部位置"
-            value="all"
-          /><el-option
-            v-for="(label, key) in positions"
-            :key="key"
-            :label="label"
-            :value="key"
-          />
-        </el-select><el-select
           v-model="status"
           style="width:150px"
           aria-label="状态"
@@ -158,21 +226,32 @@ onMounted(() => { void load() })
         v-if="tab === 'ads'"
         v-loading="loading"
         :data="ads"
-        :empty-text="q || status !== 'all' || placement !== 'all' ? '没有匹配的广告，请调整筛选' : '暂无广告，点击新建广告创建第一条'"
+        :empty-text="applied.q || applied.status !== 'all' || applied.placement !== 'all' ? '没有匹配的广告，请调整筛选' : '暂无广告，点击新建广告创建第一条'"
       >
         <el-table-column
-          label="图片 / 标题"
-          min-width="200"
+          label="图片"
+          width="148"
         >
           <template #default="{ row }">
             <img
               v-if="row.wideImageUrl || row.tallImageUrl"
               :src="row.wideImageUrl || row.tallImageUrl"
               class="thumbnail"
+              :class="{ 'thumbnail-wide': row.wideImageUrl }"
               alt="广告图片"
-            ><p>{{ row.title }}</p>
+            >
+            <span
+              v-else
+              class="muted"
+            >未配置图片</span>
           </template>
         </el-table-column>
+        <el-table-column
+          prop="title"
+          label="标题"
+          min-width="180"
+          show-overflow-tooltip
+        />
         <el-table-column
           label="展示位置"
           min-width="160"
@@ -185,7 +264,9 @@ onMounted(() => { void load() })
           width="100"
         >
           <template #default="{ row }">
-            {{ labels[row.status as AdStatus] }}
+            <el-tag :type="statusTypes[row.status as AdStatus]">
+              {{ labels[row.status as AdStatus] }}
+            </el-tag>
           </template>
         </el-table-column><el-table-column
           prop="sortOrder"
@@ -193,23 +274,27 @@ onMounted(() => { void load() })
           width="90"
         /><el-table-column
           label="操作"
-          min-width="220"
+          width="210"
+          fixed="right"
         >
           <template #default="{ row }">
             <el-button
-              text
+              link
+              type="primary"
               :disabled="changing || loading"
               @click="openAd(row)"
             >
               编辑
             </el-button><el-button
-              text
+              link
+              type="primary"
               :disabled="changing || loading"
               @click="openPreview(row.introductionId)"
             >
               预览介绍
             </el-button><el-button
-              text
+              link
+              :type="row.status === 'published' ? 'danger' : 'primary'"
               :disabled="changing || loading"
               @click="changeStatus(row)"
             >
@@ -342,4 +427,45 @@ onMounted(() => { void load() })
     </el-dialog>
   </section>
 </template>
-<style scoped>.ad-tabs{display:flex;gap:8px;margin-bottom:20px}.filters{margin-bottom:20px}.thumbnail{width:108px;height:54px;object-fit:contain;background:#f3f7f4;border-radius:5px}.intro-preview img{width:100%;height:auto;border-radius:8px}.intro-preview .preview-cover{aspect-ratio:2;object-fit:cover}.intro-preview p{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.9}.intro-preview h2{margin-top:20px}</style>
+<style scoped>
+.ad-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--el-border-color-light);
+}
+.ad-tabs .el-button {
+  margin: 0;
+  padding: 12px 16px;
+  height: auto;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+}
+.ad-tabs .active-tab { color: var(--el-color-primary); border-bottom-color: currentColor; font-weight: 600; }
+.ad-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) minmax(140px, 1fr) minmax(140px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.ad-filter { display: grid; gap: 8px; min-width: 0; }
+.ad-filter label { font-size: 13px; font-weight: 600; }
+.ad-list { display: grid; min-width: 0; gap: 14px; }
+.ad-list h2 { margin: 0; font-size: 18px; }
+.ad-list :deep(.el-table) { --el-table-header-bg-color: var(--el-fill-color-light); }
+.filters { margin-bottom: 20px; }
+.thumbnail { display: block; width: 120px; aspect-ratio: 2; object-fit: contain; border-radius: 5px; }
+.thumbnail-wide { aspect-ratio: 3; }
+.intro-preview img { width: 100%; height: auto; border-radius: 8px; }
+.intro-preview .preview-cover { aspect-ratio: 2; object-fit: cover; }
+.intro-preview p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.9; }
+.intro-preview h2 { margin-top: 20px; }
+@media (max-width: 900px) {
+  .ad-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .ad-filters { grid-template-columns: minmax(0, 1fr); }
+}
+</style>

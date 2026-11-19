@@ -295,6 +295,36 @@ describe('pagination and authorization regression coverage', () => {
     const offsets = request.mock.calls.map(args => method === 'activities' ? args[0].offset : method === 'feedback' ? args[2] : args[0])
     expect(offsets).toEqual([0,size,size]); expect(p.offset.value).toBe(size); expect(p.hasMore.value).toBe(false)
   })
+  it('validates the feedback hide reason and keeps the confirmation open after a failed request', async () => {
+    const hide = vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue({ ok: true })
+    const feedback = vi.fn().mockResolvedValue({ items: [], total: 0, hasMore: false })
+    const p = view<{
+      openHide(item: {id: string; kind: string; hiddenAt: string | null}): void
+      hide(): Promise<void>; reason: vue.Ref<string>; dialogError: vue.Ref<string>; dialogOpen: vue.Ref<boolean>
+      kind: vue.Ref<'comment' | 'review'>
+    }>('feedback/FeedbackPage', 'openHide,hide,reason,dialogError,dialogOpen,kind', { hide, feedback })
+    p.openHide({ id: 'already-hidden', kind: 'comment', hiddenAt: '2026-11-19' })
+    expect(p.dialogOpen.value).toBe(false)
+    p.kind.value = 'review'
+    p.openHide({ id: 'review-id', kind: 'review', hiddenAt: null })
+    p.reason.value = '   '
+    await p.hide()
+    expect(p.dialogError.value).toBe('请填写隐藏原因。')
+    p.reason.value = '字'.repeat(501)
+    await p.hide()
+    expect(p.dialogError.value).toBe('隐藏原因最多 500 字。')
+    expect(hide).not.toHaveBeenCalled()
+    const maxLengthReason = '字'.repeat(500)
+    p.reason.value = maxLengthReason
+    await p.hide()
+    expect(p.dialogOpen.value).toBe(true)
+    expect(p.reason.value).toBe(maxLengthReason)
+    expect(p.dialogError.value).toBe('network')
+    await p.hide()
+    expect(hide).toHaveBeenLastCalledWith('review', 'review-id', maxLengthReason)
+    expect(p.dialogOpen.value).toBe(false)
+    expect(feedback).toHaveBeenCalledWith('review', 'visible', 0)
+  })
   it('member query retries failed pages and restores its original search after viewing invitees', async () => {
     const members = vi.fn()
       .mockResolvedValueOnce({ items: [{ id: 'first' }], total: 41, hasMore: true })

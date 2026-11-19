@@ -20,7 +20,10 @@ const begin = useRequestScope(), beginSearch = useRequestScope()
 const appliedQuery = ref('')
 const needsWide = computed(() => form.value.placements.includes('circle'))
 const needsTall = computed(() => form.value.placements.some(p => p === 'activity' || p === 'assistant'))
-const previewImage = computed(() => needsTall.value && tall.value.url ? { url: tall.value.url, ratio: '2' } : needsWide.value && wide.value.url ? { url: wide.value.url, ratio: '3' } : null)
+const previews = computed(() => [
+  { label: '活动 / 助手 · 2:1', ratio: 2, url: tall.value.url, visible: needsTall.value },
+  { label: '学友圈 · 3:1', ratio: 3, url: wide.value.url, visible: needsWide.value },
+].filter(preview => preview.visible))
 function image(kind: 'wide' | 'tall', value: AdvertisingImage) { form.value[kind === 'wide' ? 'wideImageId' : 'tallImageId'] = value.id; (kind === 'wide' ? wide : tall).value = { url: value.url, sourceUrl: value.sourceImageUrl || '', sourceId: value.sourceImageId || '' } }
 async function search(reset = false) {
   if (reset) { offset.value = 0; appliedQuery.value = query.value.trim() }
@@ -36,6 +39,10 @@ async function save() {
   if (saving.value || uploading.value) return
   error.value = ''
   if (!form.value.title.trim() || !form.value.placements.length || !form.value.introductionId) { error.value = '请填写广告标题、展示位置并选择介绍内容。'; return }
+  if (initial?.status === 'published' && selected.value && selected.value.status !== 'published') {
+    error.value = '请先上架关联介绍内容，再保存已上架广告。'
+    return
+  }
   const current = begin(); saving.value = true
   try {
   if (initial?.status === 'published') { try { await ElMessageBox.confirm('保存后立即更新已上架广告，是否继续？', '更新广告', { type: 'warning' }) } catch { return } }
@@ -46,14 +53,25 @@ async function save() {
 }
 function beforeUnload(event: BeforeUnloadEvent) { if (dirty.value || saving.value || uploading.value) { event.preventDefault(); event.returnValue = '' } }
 window.addEventListener('beforeunload', beforeUnload); onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
-onMounted(async () => { void search(); if (!form.value.introductionId) return; const current = begin(); try { const value = await advertisingApi.introduction(form.value.introductionId); if (current()) selected.value = value } catch (e) { if (current()) error.value = errorMessage(e) } })
+onMounted(async () => {
+  void search()
+  const id = form.value.introductionId
+  if (!id) return
+  const current = begin()
+  try {
+    const value = await advertisingApi.introduction(id)
+    if (current() && form.value.introductionId === id) selected.value = value
+  } catch (e) {
+    if (current() && form.value.introductionId === id) error.value = errorMessage(e)
+  }
+})
 defineExpose({ dirty, close, locked: computed(() => saving.value || uploading.value || newIntroduction.value) })
 </script>
 <template>
   <el-dialog
     :model-value="true"
     :title="initial ? '编辑广告' : '新建广告'"
-    width="1050px"
+    width="min(1080px, 94vw)"
     :close-on-click-modal="false"
     :before-close="close"
   >
@@ -129,7 +147,7 @@ defineExpose({ dirty, close, locked: computed(() => saving.value || uploading.va
             v-if="selected"
             class="selected"
           >
-            已选择：{{ selected.name }} · {{ selected.companyName }}
+            {{ selected.name }} · {{ selected.companyName }}
           </p>
           <div class="filters">
             <el-input
@@ -202,21 +220,53 @@ defineExpose({ dirty, close, locked: computed(() => saving.value || uploading.va
             </el-button>
           </div>
         </div><aside class="preview">
-          <h3>展示预览</h3><img
-            v-if="previewImage"
-            :src="previewImage.url"
-            alt="广告图片预览"
-            :style="{ aspectRatio: previewImage.ratio }"
-          ><p class="muted">
-            点击广告后进入：
-          </p><h3>{{ selected?.name || '请先选择介绍内容' }}</h3><p>{{ selected?.companyName }}</p><p class="muted">
-            {{ selected?.summary }}
-          </p><p
-            v-if="selected && selected.status !== 'published'"
+          <h3>展示预览</h3>
+          <p
+            v-if="!previews.length"
             class="muted"
           >
-            关联介绍尚未上架，须先在“介绍内容”列表上架，再上架广告。
+            请选择展示位置。
           </p>
+          <figure
+            v-for="preview in previews"
+            :key="preview.ratio"
+          >
+            <figcaption>{{ preview.label }}</figcaption>
+            <img
+              v-if="preview.url"
+              :src="preview.url"
+              :alt="preview.label + '广告图片预览'"
+              :style="{ aspectRatio: preview.ratio }"
+            >
+            <div
+              v-else
+              class="preview-placeholder muted"
+              :style="{ aspectRatio: preview.ratio }"
+            >
+              暂未上传图片
+            </div>
+          </figure>
+          <div class="preview-introduction">
+            <p class="muted">
+              点击广告后进入
+            </p>
+            <h4>{{ selected?.name || '请先选择介绍内容' }}</h4>
+            <p v-if="selected">
+              {{ selected.companyName }}
+            </p>
+            <p
+              v-if="selected?.summary"
+              class="muted"
+            >
+              {{ selected.summary }}
+            </p>
+          </div>
+          <el-alert
+            v-if="selected && selected.status !== 'published'"
+            title="请先上架关联介绍内容，再上架广告。"
+            type="warning"
+            :closable="false"
+          />
         </aside>
       </div>
     </el-form>
@@ -242,4 +292,28 @@ defineExpose({ dirty, close, locked: computed(() => saving.value || uploading.va
     @saved="created"
   />
 </template>
-<style scoped>.ad-grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:24px}.preview{padding:16px;background:#f2f7f3;border-radius:8px;height:max-content}.preview h3{margin-top:0}.preview img{width:100%;object-fit:cover;border-radius:8px}.preview p{font-size:13px;overflow-wrap:anywhere}.selected{padding:12px;background:#eaf3ee;border-radius:8px;font-size:13px}.filters{margin-bottom:12px}@media(max-width:760px){.ad-grid{grid-template-columns:1fr}}</style>
+<style scoped>
+.ad-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
+.preview { min-width: 0; padding-left: 24px; border-left: 1px solid var(--el-border-color-light); }
+.preview h3 { margin: 0 0 14px; }
+.preview figure { margin: 0 0 18px; }
+.preview figcaption { margin-bottom: 8px; font-weight: 600; }
+.preview img,
+.preview-placeholder { display: block; width: 100%; border-radius: 8px; object-fit: cover; }
+.preview-placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--el-fill-color-light);
+  border: 1px dashed var(--el-border-color);
+}
+.preview-introduction { margin: 18px 0 14px; padding-top: 12px; border-top: 1px solid var(--el-border-color-light); }
+.preview h4,
+.preview p { margin: 4px 0; overflow-wrap: anywhere; }
+.preview p { font-size: 13px; }
+.selected { padding: 12px; background: var(--el-color-primary-light-9); border-radius: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.filters { margin-bottom: 12px; }
+@media (max-width: 760px) {
+  .ad-grid { grid-template-columns: minmax(0, 1fr); }
+  .preview { padding: 18px 0 0; border-left: 0; border-top: 1px solid var(--el-border-color-light); }
+}
+</style>
