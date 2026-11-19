@@ -7,6 +7,7 @@ import { useRequestScope } from '../../services/request-scope'
 const categories: Record<CircleCategory, string> = { all: '全部类别', park: '园区资源', operation: '运营资源', service: '服务资源', store: '门店' }
 const subtypes: Record<string, string> = { rent: '出租', sale: '出售', transfer: '转让', seek_rent: '寻租', buy: '购买' }
 const states: Record<string, string> = { open: '公开中', ended: '已结束', removed: '已下架' }
+const stateTypes = { open: 'success', ended: 'info', removed: 'danger' } as const
 const category = ref<CircleCategory>('all'), appliedCategory = ref<CircleCategory>('all')
 const items = ref<CirclePost[]>([]), offset = ref(0), hasMore = ref(false), loading = ref(false), error = ref('')
 const detail = ref<CirclePost | null>(null)
@@ -78,33 +79,34 @@ onMounted(() => load())
   <section>
     <h1>学友圈管理</h1>
     <p class="page-description">
-      查看资源帖，填写原因后下架或恢复。恢复已结束的帖子仍保留结束状态。
+      查看资源帖与处置记录。
     </p>
-    <div class="panel">
-      <div class="toolbar">
-        <div class="filters">
-          <el-select
-            v-model="category"
-            aria-label="帖子类别"
-            style="width: 160px"
-            :disabled="submitting"
-            @change="load(true)"
-          >
-            <el-option
-              v-for="(label, value) in categories"
-              :key="value"
-              :label="label"
-              :value="value"
-            />
-          </el-select>
-        </div>
-        <el-button
-          :disabled="loading || submitting"
-          @click="load()"
+    <div class="panel circle-toolbar">
+      <div class="circle-category">
+        <label for="circle-category">帖子类别</label>
+        <el-select
+          id="circle-category"
+          v-model="category"
+          :disabled="submitting"
+          @change="load(true)"
         >
-          刷新
-        </el-button>
+          <el-option
+            v-for="(label, value) in categories"
+            :key="value"
+            :label="label"
+            :value="value"
+          />
+        </el-select>
       </div>
+      <el-button
+        :disabled="loading || submitting"
+        @click="load()"
+      >
+        刷新
+      </el-button>
+    </div>
+    <section class="panel circle-list">
+      <h2>帖子列表</h2>
       <el-alert
         v-if="error"
         class="form-error"
@@ -141,12 +143,7 @@ onMounted(() => load())
           min-width="130"
         >
           <template #default="{ row }">
-            {{ categories[row.category as CircleCategory] }}<p
-              v-if="row.subtype"
-              class="muted"
-            >
-              {{ subtypes[row.subtype] }}
-            </p>
+            {{ categories[row.category as CircleCategory] }}{{ row.subtype ? ' · ' + subtypes[row.subtype] : '' }}
           </template>
         </el-table-column>
         <el-table-column
@@ -154,7 +151,7 @@ onMounted(() => load())
           width="110"
         >
           <template #default="{ row }">
-            <el-tag :type="row.state === 'removed' ? 'danger' : row.state === 'ended' ? 'info' : 'success'">
+            <el-tag :type="stateTypes[row.state as keyof typeof stateTypes]">
               {{ states[row.state] }}
             </el-tag>
           </template>
@@ -175,6 +172,7 @@ onMounted(() => load())
           <template #default="{ row }">
             <el-button
               text
+              type="primary"
               :disabled="loading || submitting"
               @click="openDetail(row)"
             >
@@ -191,22 +189,24 @@ onMounted(() => load())
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination">
-        <span>第 {{ offset / 20 + 1 }} 页 · 本页 {{ items.length }} 条{{ !loading && !error && !hasMore ? ' · 没有更多' : '' }}</span>
-        <el-button
-          :disabled="loading || submitting || offset === 0"
-          @click="changePage(true)"
-        >
-          上一页
-        </el-button>
-        <el-button
-          :disabled="loading || submitting || !hasMore"
-          @click="changePage(false)"
-        >
-          下一页
-        </el-button>
+      <div class="circle-pagination">
+        <span class="muted">第 {{ offset / 20 + 1 }} 页 · 本页 {{ items.length }} 条{{ !loading && !error && !hasMore ? ' · 没有更多' : '' }}</span>
+        <div>
+          <el-button
+            :disabled="loading || submitting || offset === 0"
+            @click="changePage(true)"
+          >
+            上一页
+          </el-button>
+          <el-button
+            :disabled="loading || submitting || !hasMore"
+            @click="changePage(false)"
+          >
+            下一页
+          </el-button>
+        </div>
       </div>
-    </div>
+    </section>
     <el-dialog
       v-model="dialogOpen"
       :title="selected?.state === 'removed' ? '恢复帖子' : '下架帖子'"
@@ -215,17 +215,27 @@ onMounted(() => load())
       :close-on-press-escape="!submitting"
       :show-close="!submitting"
     >
-      <p class="post-title">
+      <p class="post-title circle-action-title">
         {{ selected?.title }}
       </p>
-      <p class="muted">
-        {{ selected?.state === 'removed' ? '请先核对帖子内容。恢复不会重新开放作者已结束的帖子。' : '下架后公开链接只显示下架状态，不再接受新意向；历史意向保留。' }}
-      </p>
+      <el-alert
+        class="circle-impact"
+        :type="selected?.state === 'removed' ? 'success' : 'warning'"
+        :title="selected?.state === 'removed' ? '已结束的帖子恢复后仍为已结束。' : '下架后，公开链接只显示下架状态，不再接收新意向。历史意向保留。'"
+        :closable="false"
+      />
+      <label
+        class="circle-reason"
+        for="circle-action-reason"
+      >
+        {{ selected?.state === 'removed' ? '恢复原因' : '下架原因' }}（必填）
+      </label>
       <el-input
+        id="circle-action-reason"
         v-model="reason"
         type="textarea"
-        aria-label="帖子操作原因"
-        placeholder="填写操作原因（必填）"
+        aria-required="true"
+        :placeholder="selected?.state === 'removed' ? '填写恢复原因' : '填写下架原因'"
         :rows="4"
         :maxlength="1000"
         show-word-limit
@@ -254,25 +264,26 @@ onMounted(() => load())
         </el-button>
       </template>
     </el-dialog>
-    <el-dialog
+    <el-drawer
       :model-value="!!detail"
       title="帖子详情与操作记录"
-      width="min(860px, 94vw)"
+      size="min(690px, 100%)"
       @update:model-value="closeDetail()"
     >
       <template v-if="detail">
-        <h2 class="post-title">
-          {{ detail.title }}
-        </h2>
+        <div class="circle-detail-title">
+          <h2 class="post-title">
+            {{ detail.title }}
+          </h2>
+          <el-tag :type="stateTypes[detail.state]">
+            {{ states[detail.state] }}
+          </el-tag>
+        </div>
         <el-descriptions
-          :column="2"
-          border
+          :column="1"
         >
           <el-descriptions-item label="发布者">
             {{ detail.author?.displayName || '未设置名称' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="状态">
-            {{ states[detail.state] }}
           </el-descriptions-item>
           <el-descriptions-item label="类别">
             {{ categories[detail.category as CircleCategory] }}{{ detail.subtype ? ' · ' + subtypes[detail.subtype] : '' }}
@@ -303,7 +314,7 @@ onMounted(() => load())
         </el-descriptions>
         <el-alert
           v-if="detail.removalReason"
-          class="form-error"
+          class="circle-removal"
           :title="'下架原因：' + detail.removalReason"
           type="warning"
           :closable="false"
@@ -335,7 +346,9 @@ onMounted(() => load())
         >
           下架图片受访问限制，当前不可预览。
         </p>
-        <h3>操作记录</h3>
+        <h3 class="circle-record-heading">
+          操作记录
+        </h3>
         <el-alert
           v-if="historyError"
           :title="historyError"
@@ -366,35 +379,72 @@ onMounted(() => load())
           :key="item.id"
           class="operation"
         >
-          <strong>{{ ({ remove: '下架', restore: '恢复' } as Record<string, string>)[item.action] || item.action }} · {{ item.actorName || '管理员' }}</strong>
+          <div class="circle-record-title">
+            <strong>{{ ({ remove: '下架', restore: '恢复' } as Record<string, string>)[item.action] || item.action }} · {{ item.actorName || '管理员' }}</strong>
+            <span class="muted">{{ formatDate(item.createdAt) }}</span>
+          </div>
           <p class="post-body">
             {{ item.reason }}
-          </p><span class="muted">{{ formatDate(item.createdAt) }}</span>
+          </p>
         </article>
-        <div class="pagination">
-          <span>第 {{ historyOffset / 20 + 1 }} 页</span>
-          <el-button
-            :disabled="historyLoading || historyOffset === 0"
-            @click="changeHistory(true)"
-          >
-            上一页
-          </el-button>
-          <el-button
-            :disabled="historyLoading || !historyMore"
-            @click="changeHistory(false)"
-          >
-            下一页
-          </el-button>
+        <div class="circle-pagination circle-record-pagination">
+          <span class="muted">第 {{ historyOffset / 20 + 1 }} 页</span>
+          <div>
+            <el-button
+              :disabled="historyLoading || historyOffset === 0"
+              @click="changeHistory(true)"
+            >
+              上一页
+            </el-button>
+            <el-button
+              :disabled="historyLoading || !historyMore"
+              @click="changeHistory(false)"
+            >
+              下一页
+            </el-button>
+          </div>
         </div>
       </template>
-    </el-dialog>
+    </el-drawer>
   </section>
 </template>
 
 <style scoped>
 .post-title, .post-body { overflow-wrap: anywhere; }
 .post-body { white-space: pre-wrap; }
+.circle-toolbar,
+.circle-category,
+.circle-pagination,
+.circle-detail-title,
+.circle-record-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.circle-toolbar,
+.circle-pagination,
+.circle-record-title { justify-content: space-between; }
+.circle-toolbar { margin-bottom: 16px; }
+.circle-category label,
+.circle-reason { font-weight: 600; }
+.circle-category .el-select { width: min(270px, 58vw); }
+.circle-list { display: grid; gap: 14px; min-width: 0; }
+.circle-list h2,
+.circle-detail-title h2 { margin: 0; }
+.circle-list h2 { font-size: 18px; }
+.circle-detail-title { margin-bottom: 14px; }
+.circle-detail-title h2 { font-size: 22px; }
+.circle-list :deep(.el-table) { --el-table-header-bg-color: var(--el-fill-color-light); }
+.circle-list .post-title + p { margin: 3px 0 0; }
+.circle-action-title { margin: 0 0 14px; color: var(--el-text-color-primary); font-size: 16px; font-weight: 600; }
+.circle-impact { margin-bottom: 16px; }
+.circle-reason { display: block; margin-bottom: 8px; }
+.circle-removal { margin: 12px 0 18px; }
+.circle-record-heading { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--huiju-border); }
+.circle-record-pagination { margin-top: 16px; }
 .post-images { display: flex; flex-wrap: wrap; gap: 12px; }
 .post-images .el-image { width: 130px; height: 100px; border-radius: 8px; }
-.operation { padding: 12px 0; border-bottom: 1px solid var(--huiju-border); }
+.operation { margin-bottom: 8px; padding: 12px; border: 1px solid var(--huiju-border); border-radius: 8px; }
+.operation p { margin: 6px 0 0; }
 </style>
