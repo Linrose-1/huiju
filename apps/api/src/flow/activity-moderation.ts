@@ -5,9 +5,17 @@ import { activities, activityOperations } from '../database/schema/activities.js
 import { adminAccounts, members } from '../database/schema/members.js'
 import { NotificationDelivery } from '../notifications/delivery.js'
 import { fail, type FlowDatabase } from './common.js'
-import { AdminActivityQuery } from './activity-moderation-dto.js'
+import { type AdminActivityDto, type AdminActivityQuery } from './activity-moderation-dto.js'
 
 type Transaction = Parameters<Parameters<FlowDatabase['db']['transaction']>[0]>[0]
+function activitySummary({ activity: row, organizerName }: { activity: typeof activities.$inferSelect; organizerName: string | null }): AdminActivityDto {
+  return {
+    id: row.id, title: row.title, description: row.description, location: row.location, organizerName,
+    startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString(), lifecycle: row.lifecycle,
+    moderation: row.moderation, activeRegistrationCount: row.activeRegistrationCount,
+    feeType: row.feeType, feeAmountCents: row.feeAmountCents,
+  }
+}
 
 @Injectable()
 export class ActivityModerationService {
@@ -22,12 +30,15 @@ export class ActivityModerationService {
       .innerJoin(members, eq(members.id, activities.organizerMemberId)).where(where)
       .orderBy(desc(activities.createdAt), desc(activities.id)).limit(20).offset(query.offset)
     return { total: Number(total!.value), hasMore: query.offset + rows.length < Number(total!.value),
-      items: rows.map(({ activity: row, organizerName }) => ({
-        id: row.id, title: row.title, description: row.description, location: row.location, organizerName,
-        startsAt: row.startsAt.toISOString(), endsAt: row.endsAt.toISOString(), lifecycle: row.lifecycle,
-        moderation: row.moderation, activeRegistrationCount: row.activeRegistrationCount,
-        feeType: row.feeType, feeAmountCents: row.feeAmountCents,
-      })) }
+      items: rows.map(activitySummary) }
+  }
+
+  async detail(tx: Transaction, id: string) {
+    const [row] = await tx.select({ activity: activities, organizerName: members.displayName }).from(activities)
+      .innerJoin(members, eq(members.id, activities.organizerMemberId))
+      .where(and(eq(activities.id, id), ne(activities.lifecycle, 'draft'))).limit(1)
+    if (!row) fail('NOT_FOUND', '活动不存在', 404)
+    return activitySummary(row)
   }
 
   async history(tx: Transaction, id: string, offset: number) {

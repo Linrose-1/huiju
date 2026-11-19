@@ -31,7 +31,10 @@ function app() {
     './services/admin': admin,
     './services/brand': { brand: vue.reactive({ displayName: '有聚点', visible: true }), refreshBrand: async () => {} },
     './router': { router, allowedRoute },
-    'vue-router': { useRoute: () => ({ get path() { return router.currentRoute.value.path } }) },
+    'vue-router': { useRoute: () => ({
+      get path() { return router.currentRoute.value.path },
+      get fullPath() { return router.currentRoute.value.fullPath },
+    }) },
     'element-plus': { ElMessage: { error: vi.fn() } },
   }) as { restore(): Promise<void>; ready: vue.Ref<boolean>; startupError: vue.Ref<string> }
 }
@@ -51,7 +54,7 @@ describe('admin page navigation and filtering', () => {
     expect(root.ready.value).toBe(true)
     expect(router.currentRoute.value.path).toBe('/members')
   })
-  it.each(['/members', '/activities', '/circle', '/password', '/analytics', '/engagement', '/content'])('preserves direct %s while restoring a valid cookie', async path => {
+  it.each(['/members', '/activities', '/activities/example?status=removed&page=2', '/activities/example/registrations', '/circle', '/password', '/analytics', '/engagement', '/content'])('preserves direct %s while restoring a valid cookie', async path => {
     await router.push(path)
     const root = app()
     let resolve!: () => void
@@ -60,11 +63,11 @@ describe('admin page navigation and filtering', () => {
     }))
     const pending = root.restore()
     expect(root.ready.value).toBe(false)
-    expect(router.currentRoute.value.path).toBe(path)
+    expect(router.currentRoute.value.fullPath).toBe(path)
     resolve()
     await pending
     expect(root.ready.value).toBe(true)
-    expect(router.currentRoute.value.path).toBe(path)
+    expect(router.currentRoute.value.fullPath).toBe(path)
   })
   it('keeps the target through startup network failure and retry, then guards logout and operator routes', async () => {
     await router.push('/accounts')
@@ -154,11 +157,17 @@ describe('admin page navigation and filtering', () => {
   })
   it('pages and refreshes applied activity filters until a new query is submitted', async () => {
     const requests = vi.spyOn(adminApi, 'activities').mockResolvedValue({ items: [], total: 60, hasMore: true })
-    const page = pageScript('../src/modules/activities/ActivitiesPage.vue', 'keyword, status, load, changePage, offset', {
+    const replace = vi.fn()
+    const page = pageScript('../src/modules/activities/ActivitiesPage.vue', 'keyword, status, load, changePage, offset, listQuery', {
       '../../services/admin': admin,
       '../../services/request-scope': { useRequestScope },
-      'element-plus': { ElMessage: { success: vi.fn() } },
-    }) as { keyword: vue.Ref<string>; status: vue.Ref<string>; offset: vue.Ref<number>; load(reset?: boolean): Promise<void>; changePage(back: boolean): void }
+      'vue-router': { useRoute: () => ({ query: { status: 'removed', q: '原关键词', page: '2' } }), useRouter: () => ({ replace }) },
+    }) as { keyword: vue.Ref<string>; status: vue.Ref<string>; offset: vue.Ref<number>; load(reset?: boolean): Promise<void>; changePage(back: boolean): void; listQuery(): object }
+    await page.load()
+    expect(requests).toHaveBeenLastCalledWith({ status: 'removed', q: '原关键词', offset: 20 })
+    expect(page.listQuery()).toEqual({ status: 'removed', q: '原关键词', page: '2' })
+    expect(replace).toHaveBeenLastCalledWith({ name: 'activity-list', query: page.listQuery() })
+    page.status.value = 'all'
     page.keyword.value = '原关键词'
     await page.load(true)
     page.keyword.value = '新关键词'
@@ -268,7 +277,7 @@ describe('pagination and authorization regression coverage', () => {
     return pageScript('../src/modules/' + path + '.vue', exported, {
       '../../services/admin': { ...admin, adminApi: network, isSuperAdmin: { value: true } },
       '../../services/request-scope': { useRequestScope },
-      'vue-router': { useRoute: () => ({ query: {} }) },
+      'vue-router': { useRoute: () => ({ query: {}, params: { id: 'activity' } }), useRouter: () => ({ replace: vi.fn() }) },
       'element-plus': { ElMessage: { success: vi.fn() } },
     }) as T
   }
@@ -296,9 +305,10 @@ describe('pagination and authorization regression coverage', () => {
   it('activity registration and operation lists retain failed pages and retry their targets', async () => {
     const make = () => vi.fn().mockResolvedValueOnce({items:[{id:'first'}],total:100,hasMore:true}).mockRejectedValueOnce(new Error('network')).mockResolvedValue({items:[],total:100,hasMore:false})
     const registrations=make(),history=make()
-    const p=view<{detail:vue.Ref<unknown>;loadRegistrations():Promise<void>;registrationPage(back:boolean):void;loadHistory():Promise<void>;changeHistory(back:boolean):void;registrationOffset:vue.Ref<number>;historyOffset:vue.Ref<number>;registrations:vue.Ref<unknown[]>;history:vue.Ref<unknown[]>}>('activities/ActivitiesPage','detail,loadRegistrations,registrationPage,loadHistory,changeHistory,registrationOffset,historyOffset,registrations,history',{activityRegistrations:registrations,activityOperations:history})
-    p.detail.value={id:'activity'};await p.loadRegistrations();p.registrationPage(false);await tick();expect(p.registrationOffset.value).toBe(0);expect(p.registrations.value).toHaveLength(1);await p.loadRegistrations();expect(registrations.mock.calls.map(a=>a[1])).toEqual([0,40,40])
-    await p.loadHistory();p.changeHistory(false);await tick();expect(p.historyOffset.value).toBe(0);expect(p.history.value).toHaveLength(1);await p.loadHistory();expect(history.mock.calls.map(a=>a[1])).toEqual([0,20,20])
+    const roster = view<{loadRegistrations():Promise<void>;registrationPage(back:boolean):void;registrationOffset:vue.Ref<number>;registrations:vue.Ref<unknown[]>}>('activities/ActivityRegistrationsPage','loadRegistrations,registrationPage,registrationOffset,registrations',{activityRegistrations:registrations})
+    const detail = view<{loadHistory():Promise<void>;changeHistory(back:boolean):void;historyOffset:vue.Ref<number>;history:vue.Ref<unknown[]>}>('activities/ActivityDetailPage','loadHistory,changeHistory,historyOffset,history',{activityOperations:history})
+    await roster.loadRegistrations();roster.registrationPage(false);await tick();expect(roster.registrationOffset.value).toBe(0);expect(roster.registrations.value).toHaveLength(1);await roster.loadRegistrations();expect(registrations.mock.calls.map(a=>a[1])).toEqual([0,40,40])
+    await detail.loadHistory();detail.changeHistory(false);await tick();expect(detail.historyOffset.value).toBe(0);expect(detail.history.value).toHaveLength(1);await detail.loadHistory();expect(history.mock.calls.map(a=>a[1])).toEqual([0,20,20])
   })
   it('content list completion cannot be invalidated by a failed concurrent grant', async () => {
     let finish!: (value: unknown) => void

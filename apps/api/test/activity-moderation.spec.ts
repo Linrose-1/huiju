@@ -161,6 +161,25 @@ describe('activity moderation HTTP with real AdminService and domain service', (
     return fetch(`${base}/${id}/remove`, { method: 'POST', headers: { 'Content-Type': 'application/json', cookie, origin: context.origin, 'x-csrf-token': context.csrfToken, ...extra }, body: JSON.stringify(body) })
   }
 
+  it.each(['operator', 'super_admin'] as const)('allows %s to load removed and cancelled activity detail without private contact', async role => {
+    current = fixture([...authRows(role), [{ activity: { ...activity(), lifecycle: 'cancelled', moderation: 'removed' }, organizerName: '发起人' }]])
+    const response = await fetch(`${base}/${id}`, { headers: { cookie } })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const body = await response.json()
+    expect(body).toMatchObject({ id, organizerName: '发起人', lifecycle: 'cancelled', moderation: 'removed' })
+    expect(body).not.toHaveProperty('consultationContact')
+    expect(new MySqlDialect().sqlToQuery(current.filters.at(-1)!).params).toEqual([id, 'draft'])
+  })
+
+  it('rejects anonymous detail reads and returns 404 when the activity is unavailable', async () => {
+    current = fixture()
+    expect((await fetch(`${base}/${id}`)).status).toBe(401)
+    expect(current.transaction).not.toHaveBeenCalled()
+    current = fixture([...authRows('operator'), []])
+    expect((await fetch(`${base}/${id}`, { headers: { cookie } })).status).toBe(404)
+  })
+
   it.each(['operator', 'super_admin'] as const)('allows %s through cookie, origin, CSRF, session and activity locks', async role => {
     current = fixture([...authRows(role), [activity()], [{ memberId: 'registered' }]])
     const response = await post({ reason: '测试原因' })

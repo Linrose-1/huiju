@@ -7706,6 +7706,101 @@
         ]
       }
     },
+    "/api/v1/admin/activities/{id}": {
+      "get": {
+        "operationId": "AdminActivityController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminActivityDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-activities"
+        ]
+      }
+    },
     "/api/v1/admin/activities/{id}/operations": {
       "get": {
         "operationId": "AdminActivityController_history",

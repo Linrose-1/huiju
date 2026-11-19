@@ -1,155 +1,116 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { adminApi, errorMessage, formatDate, type AdminActivity, type ActivityOperation, type ActivityReport, type ActivityRegistration } from '../../services/admin'
+import { useRoute, useRouter } from 'vue-router'
+import { adminApi, errorMessage, formatDate, type AdminActivity } from '../../services/admin'
 import { useRequestScope } from '../../services/request-scope'
+import ActivityStatus from './ActivityStatus.vue'
 
-const status = ref<'all' | 'normal' | 'removed'>('all')
-const keyword = ref('')
-const applied = ref({ status: status.value, q: '' })
-let requestedOffset = 0
+const route = useRoute()
+const router = useRouter()
+const pageSize = 20
+const query = route.query
+const status = ref<'all' | 'normal' | 'removed'>(query.status === 'normal' || query.status === 'removed' ? query.status : 'all')
+const keyword = ref(typeof query.q === 'string' ? query.q.trim().slice(0, 100) : '')
+const applied = ref({ status: status.value, q: keyword.value })
+const queryPage = typeof query.page === 'string' ? Number(query.page) : 1
+let requestedOffset = Number.isInteger(queryPage) && queryPage >= 1 && queryPage <= 50001 ? (queryPage - 1) * pageSize : 0
 const offset = ref(0)
 const items = ref<AdminActivity[]>([])
 const total = ref(0)
 const hasMore = ref(false)
 const loading = ref(false)
 const error = ref('')
-const selected = ref<AdminActivity | null>(null)
-const reason = ref('')
-const dialogError = ref('')
-const submitting = ref(false)
-const dialogOpen = ref(false)
-const detail = ref<AdminActivity | null>(null)
-const history = ref<ActivityOperation[]>([])
-let requestedHistoryOffset = 0, requestedRegistrationOffset = 0
-const historyOffset = ref(0)
-const historyMore = ref(false)
-const historyLoading = ref(false)
-const historyError = ref('')
-const report = ref<ActivityReport | null>(null), reportLoading = ref(false), reportError = ref('')
-const registrations = ref<ActivityRegistration[]>([]), registrationOffset = ref(0), registrationTotal = ref(0), registrationMore = ref(false), registrationLoading = ref(false), registrationError = ref('')
-const registrationStatus = ref<'all' | 'active' | 'cancelled'>('all')
-const beginReport = useRequestScope(), beginRegistrations = useRequestScope()
-async function loadReport() {
-  if (!detail.value) return
-  const current = beginReport(); reportLoading.value = true; reportError.value = ''; report.value = null
-  try { const result = await adminApi.activityReport(detail.value.id); if (current()) report.value = result }
-  catch (e) { if (current()) reportError.value = errorMessage(e) }
-  finally { if (current()) reportLoading.value = false }
-}
-async function loadRegistrations(reset = false) {
-  if (!detail.value) return
-  if (reset) { requestedRegistrationOffset = 0; registrationOffset.value = 0; registrations.value = []; registrationTotal.value = 0; registrationMore.value = false }
-  const targetOffset = requestedRegistrationOffset
-  const current = beginRegistrations(); registrationLoading.value = true; registrationError.value = ''
-  try { const result = await adminApi.activityRegistrations(detail.value.id, targetOffset, registrationStatus.value); if (current()) { registrationOffset.value = targetOffset; registrations.value = result.items; registrationTotal.value = result.total; registrationMore.value = result.hasMore } }
-  catch (e) { if (current()) registrationError.value = errorMessage(e) }
-  finally { if (current()) registrationLoading.value = false }
-}
-function registrationPage(back: boolean) { requestedRegistrationOffset = Math.max(0, registrationOffset.value + (back ? -40 : 40)); void loadRegistrations() }
 const begin = useRequestScope()
-const beginHistory = useRequestScope()
+
+function listQuery() {
+  return {
+    q: applied.value.q || undefined,
+    status: applied.value.status !== 'all' ? applied.value.status : undefined,
+    page: offset.value ? String(offset.value / pageSize + 1) : undefined,
+  }
+}
 
 async function load(reset = false) {
-  if (submitting.value) return
   if (reset) {
-    requestedOffset = 0; offset.value = 0; items.value = []; total.value = 0; hasMore.value = false
+    requestedOffset = 0
+    offset.value = 0
+    items.value = []
+    total.value = 0
+    hasMore.value = false
     applied.value = { status: status.value, q: keyword.value.trim() }
   }
-  const targetOffset = requestedOffset
   const current = begin()
+  const target = requestedOffset
   loading.value = true
   error.value = ''
   try {
-    const result = await adminApi.activities({ ...applied.value, offset: targetOffset })
+    let result = await adminApi.activities({ ...applied.value, offset: target })
     if (!current()) return
-    offset.value = targetOffset
+    const last = Math.max(0, Math.ceil(result.total / pageSize) - 1) * pageSize
+    if (target > last) {
+      requestedOffset = last
+      result = await adminApi.activities({ ...applied.value, offset: last })
+      if (!current()) return
+    }
+    offset.value = requestedOffset
     items.value = result.items
     total.value = result.total
     hasMore.value = result.hasMore
-  } catch (value) { if (current()) error.value = errorMessage(value) }
-  finally { if (current()) loading.value = false }
+    void router.replace({ name: 'activity-list', query: listQuery() })
+  } catch (value) {
+    if (current()) error.value = errorMessage(value)
+  } finally {
+    if (current()) loading.value = false
+  }
 }
-function openAction(item: AdminActivity) {
-  if (submitting.value || loading.value) return
-  selected.value = item
-  reason.value = ''
-  dialogError.value = ''
-  dialogOpen.value = true
+
+function changePage(back: boolean) {
+  requestedOffset = Math.max(0, offset.value + (back ? -pageSize : pageSize))
+  void load()
 }
-async function applyAction() {
-  if (submitting.value || !selected.value) return
-  if (!reason.value.trim()) { dialogError.value = '请填写操作原因。'; return }
-  const current = begin()
-  const item = selected.value
-  submitting.value = true
-  dialogError.value = ''
-  try {
-    if (item.moderation === 'removed') await adminApi.restoreActivity(item.id, reason.value.trim())
-    else await adminApi.removeActivity(item.id, reason.value.trim())
-    if (!current()) return
-    dialogOpen.value = false
-    selected.value = null
-    reason.value = ''
-    ElMessage.success('活动状态已更新，已保存操作记录并生成站内通知。')
-  } catch (value) { if (current()) dialogError.value = errorMessage(value) }
-  finally { if (current()) submitting.value = false }
-  if (current() && !dialogOpen.value) await load(true)
+
+function resetFilters() {
+  keyword.value = ''
+  status.value = 'all'
+  void load(true)
 }
-async function loadHistory() {
-  if (!detail.value) return
-  const targetOffset = requestedHistoryOffset
-  const current = beginHistory()
-  historyLoading.value = true
-  historyError.value = ''
-  try {
-    const result = await adminApi.activityOperations(detail.value.id, targetOffset)
-    if (!current()) return
-    historyOffset.value = targetOffset
-    history.value = result.items
-    historyMore.value = result.hasMore
-  } catch (value) { if (current()) historyError.value = errorMessage(value) }
-  finally { if (current()) historyLoading.value = false }
-}
-function openDetail(item: AdminActivity) {
-  detail.value = item
-  requestedHistoryOffset = 0; historyOffset.value = 0; history.value = []; historyMore.value = false
-  registrationStatus.value = 'all'
-  void loadReport(); void loadRegistrations(true); void loadHistory()
-}
-function closeDetail() { beginReport(); beginRegistrations(); report.value = null; registrations.value = []; reportLoading.value = false; registrationLoading.value = false; beginHistory(); detail.value = null; history.value = []; historyLoading.value = false }
-function changePage(back: boolean) { requestedOffset = Math.max(0, offset.value + (back ? -20 : 20)); void load() }
-function changeHistory(back: boolean) { requestedHistoryOffset = Math.max(0, historyOffset.value + (back ? -20 : 20)); void loadHistory() }
+
 onMounted(() => load())
 </script>
 
 <template>
-  <section>
-    <h1>活动管理</h1>
-    <p class="page-description">
-      查看已发布与已取消活动，按原因下架或恢复。恢复不改变原报名时间和名额。
-    </p>
-    <div class="panel">
-      <div class="toolbar">
-        <div class="filters">
+  <section class="activity-admin">
+    <header class="activity-page-header">
+      <div>
+        <h1>活动管理</h1>
+        <p class="page-description">
+          查看活动展示状态与报名情况。
+        </p>
+      </div>
+    </header>
+    <div class="panel activity-table-panel">
+      <div class="toolbar activity-toolbar">
+        <form
+          class="filters"
+          @submit.prevent="load(true)"
+        >
           <el-input
             v-model="keyword"
             placeholder="搜索活动标题"
             aria-label="活动标题"
             :maxlength="100"
-            :disabled="submitting"
-            style="width: 240px"
-            @keyup.enter="load(true)"
+            :disabled="loading"
+            class="activity-search"
           />
           <el-select
             v-model="status"
             aria-label="活动展示状态"
-            :disabled="submitting"
-            style="width: 140px"
+            class="activity-select"
+            :disabled="loading"
             @change="load(true)"
           >
             <el-option
-              label="全部状态"
+              label="全部展示状态"
               value="all"
             />
             <el-option
@@ -163,362 +124,117 @@ onMounted(() => load())
           </el-select>
           <el-button
             type="primary"
-            :disabled="loading || submitting"
-            @click="load(true)"
+            native-type="submit"
+            :disabled="loading"
           >
             查询
           </el-button>
-        </div>
+          <el-button
+            :disabled="loading"
+            @click="resetFilters"
+          >
+            重置
+          </el-button>
+        </form>
         <el-button
-          :disabled="loading || submitting"
+          :loading="loading"
           @click="load()"
         >
           刷新
         </el-button>
       </div>
-      <el-alert
+      <div
         v-if="error"
-        class="form-error"
-        :title="error"
-        type="error"
-        :closable="false"
-      />
+        class="activity-list-error"
+      >
+        <el-alert
+          :title="error"
+          type="error"
+          :closable="false"
+        />
+        <el-button
+          :disabled="loading"
+          @click="load()"
+        >
+          重试
+        </el-button>
+      </div>
       <el-table
         v-loading="loading"
         :data="items"
         row-key="id"
-        empty-text="暂无符合条件的活动"
+        :empty-text="error ? '活动列表暂未加载' : '暂无符合条件的活动'"
       >
         <el-table-column
           label="活动 / 发起人"
-          min-width="250"
+          min-width="208"
         >
           <template #default="{ row }">
-            <strong>{{ row.title }}</strong><p class="muted">
+            <strong>{{ row.title }}</strong>
+            <p class="muted activity-secondary">
               {{ row.organizerName || '—' }}
             </p>
           </template>
         </el-table-column>
         <el-table-column
-          label="开始 / 结束时间"
-          min-width="210"
+          label="活动时间"
+          min-width="173"
         >
           <template #default="{ row }">
-            {{ formatDate(row.startsAt) }}<p class="muted">
-              {{ formatDate(row.endsAt) }}
+            {{ formatDate(row.startsAt) }}
+            <p class="muted activity-secondary">
+              至 {{ formatDate(row.endsAt) }}
             </p>
           </template>
         </el-table-column>
         <el-table-column
-          label="状态"
-          min-width="130"
+          prop="location"
+          label="地点"
+          min-width="160"
+        />
+        <el-table-column
+          label="展示状态"
+          min-width="210"
         >
           <template #default="{ row }">
-            <el-tag :type="row.moderation === 'removed' ? 'danger' : 'success'">
-              {{ row.moderation === 'removed' ? '已下架' : '正常展示' }}
-            </el-tag>
-            <p
-              v-if="row.lifecycle === 'cancelled'"
-              class="muted"
-            >
-              发起人已取消
-            </p>
+            <ActivityStatus :activity="row" />
           </template>
         </el-table-column>
         <el-table-column
           label="操作"
-          width="200"
+          width="116"
           fixed="right"
         >
           <template #default="{ row }">
-            <el-button
-              text
-              :disabled="loading || submitting"
-              @click="openDetail(row)"
+            <router-link
+              class="activity-link"
+              :to="{ name: 'activity-detail', params: { id: row.id }, query: listQuery() }"
+              :aria-label="'查看详情：' + row.title"
             >
-              详情与记录
-            </el-button>
-            <el-button
-              text
-              :type="row.moderation === 'removed' ? 'primary' : 'danger'"
-              :disabled="loading || submitting"
-              @click="openAction(row)"
-            >
-              {{ row.moderation === 'removed' ? '恢复' : '下架' }}
-            </el-button>
+              查看详情 <span aria-hidden="true">›</span>
+            </router-link>
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination">
-        <span>共 {{ total }} 条</span>
-        <el-button
-          :disabled="offset === 0 || loading || submitting"
-          @click="changePage(true)"
-        >
-          上一页
-        </el-button>
-        <el-button
-          :disabled="!hasMore || loading || submitting"
-          @click="changePage(false)"
-        >
-          下一页
-        </el-button>
+      <div class="pagination activity-pagination">
+        <span>共 {{ total }} 条 · 第 {{ offset / pageSize + 1 }} 页</span>
+        <div class="actions">
+          <el-button
+            :disabled="!offset || loading"
+            @click="changePage(true)"
+          >
+            上一页
+          </el-button>
+          <el-button
+            :disabled="!hasMore || loading"
+            @click="changePage(false)"
+          >
+            下一页
+          </el-button>
+        </div>
       </div>
     </div>
-    <el-dialog
-      v-model="dialogOpen"
-      :title="selected?.moderation === 'removed' ? '恢复活动' : '下架活动'"
-      width="520px"
-      :close-on-click-modal="false"
-      :close-on-press-escape="!submitting"
-      :show-close="!submitting"
-      destroy-on-close
-      @closed="selected = null; reason = ''"
-    >
-      <strong>{{ selected?.title }}</strong>
-      <p class="muted">
-        {{ selected?.moderation === 'removed' ? '恢复只重新展示活动。原已截止或取消的活动不会重新开放报名。' : '下架后停止公开展示、报名和新增评论点评，保留历史记录。' }} 当前有效报名者会收到站内通知。
-      </p>
-      <el-alert
-        v-if="dialogError"
-        class="form-error"
-        :title="dialogError"
-        type="error"
-        :closable="false"
-      />
-      <el-form
-        label-position="top"
-        @submit.prevent="applyAction"
-      >
-        <el-form-item label="操作原因（必填）">
-          <el-input
-            v-model="reason"
-            type="textarea"
-            :rows="4"
-            :maxlength="1000"
-            show-word-limit
-            :disabled="submitting"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button
-          :disabled="submitting"
-          @click="dialogOpen = false"
-        >
-          取消
-        </el-button>
-        <el-button
-          :type="selected?.moderation === 'removed' ? 'primary' : 'danger'"
-          :loading="submitting"
-          @click="applyAction"
-        >
-          确认{{ selected?.moderation === 'removed' ? '恢复' : '下架' }}
-        </el-button>
-      </template>
-    </el-dialog>
-    <el-dialog
-      :model-value="Boolean(detail)"
-      title="活动详情与操作记录"
-      width="1000px"
-      @close="closeDetail"
-    >
-      <template v-if="detail">
-        <h2>{{ detail.title }}</h2>
-        <p class="feedback-content">
-          {{ detail.description }}
-        </p>
-        <p class="muted detail-meta">
-          地点：{{ detail.location }} · {{ detail.feeType === 'free' ? '免费活动' : `收费活动 ¥${((detail.feeAmountCents ?? 0) / 100).toFixed(2)}` }}
-        </p>
-        <h3>活动统计</h3>
-        <p
-          v-if="reportLoading"
-          role="status"
-        >
-          正在加载统计…
-        </p><el-alert
-          v-if="reportError"
-          :title="reportError"
-          type="error"
-          :closable="false"
-        /><el-button
-          v-if="reportError"
-          @click="loadReport"
-        >
-          重试
-        </el-button>
-        <el-descriptions
-          v-if="report"
-          :column="3"
-          border
-        >
-          <el-descriptions-item label="浏览次数">
-            {{ report.views }}
-          </el-descriptions-item><el-descriptions-item label="浏览人数">
-            {{ report.visitors }}
-          </el-descriptions-item><el-descriptions-item label="当前有效报名">
-            {{ report.activeRegistrations }}
-          </el-descriptions-item><el-descriptions-item label="到场人数">
-            {{ report.attendedMembers }}
-          </el-descriptions-item><el-descriptions-item label="报名 / 浏览人数">
-            {{ report.conversionRate === null ? '暂无浏览' : report.conversionRate.toFixed(1) + '%' }}
-          </el-descriptions-item><el-descriptions-item label="点评评分">
-            {{ report.averageScore === null ? '暂无评分' : report.averageScore.toFixed(1) }}（{{ report.reviewCount }} 条）
-          </el-descriptions-item><el-descriptions-item label="咨询联系方式">
-            {{ report.consultationContact }}
-          </el-descriptions-item>
-        </el-descriptions>
-        <h3>报名名单</h3><el-select
-          v-model="registrationStatus"
-          style="width: 160px"
-          aria-label="报名状态"
-          :disabled="registrationLoading"
-          @change="loadRegistrations(true)"
-        >
-          <el-option
-            value="all"
-            label="全部报名记录"
-          /><el-option
-            value="active"
-            label="当前有效报名"
-          /><el-option
-            value="cancelled"
-            label="已取消报名"
-          />
-        </el-select>
-        <el-alert
-          v-if="registrationError"
-          :title="registrationError"
-          type="error"
-          :closable="false"
-        /><el-button
-          v-if="registrationError"
-          @click="loadRegistrations()"
-        >
-          重试
-        </el-button>
-        <el-table
-          v-loading="registrationLoading"
-          :data="registrations"
-          empty-text="暂无报名记录"
-        >
-          <el-table-column type="expand">
-            <template #default="{ row }">
-              <div class="registration-answers">
-                <p
-                  v-for="answer in row.answers"
-                  :key="answer.questionId"
-                >
-                  <strong>{{ answer.prompt }}</strong>：{{ Array.isArray(answer.answer) ? answer.answer.join('、') : answer.answer }}
-                </p><p
-                  v-if="!row.answers.length"
-                  class="muted"
-                >
-                  未设置自定义问题
-                </p><p>报名：{{ formatDate(row.registeredAt) }}<span v-if="row.cancelledAt"> · 取消：{{ formatDate(row.cancelledAt) }}</span><span v-if="row.attendedAt"> · 到场：{{ formatDate(row.attendedAt) }}</span></p>
-              </div>
-            </template>
-          </el-table-column><el-table-column
-            prop="memberNumber"
-            label="用户编号"
-            min-width="170"
-          /><el-table-column
-            prop="displayName"
-            label="用户名称"
-            min-width="120"
-          /><el-table-column
-            prop="contactPhone"
-            label="本次联系手机号"
-            min-width="140"
-          /><el-table-column
-            label="报名状态"
-            width="120"
-          >
-            <template #default="{ row }">
-              {{ row.status === 'active' ? '有效报名' : '已取消' }}
-            </template>
-          </el-table-column><el-table-column
-            label="到场状态"
-            width="100"
-          >
-            <template #default="{ row }">
-              {{ row.attended ? '已到场' : '未到场' }}
-            </template>
-          </el-table-column>
-        </el-table>
-        <div class="pagination">
-          <span>共 {{ registrationTotal }} 条</span><el-button
-            :disabled="registrationLoading || !registrationOffset"
-            @click="registrationPage(true)"
-          >
-            上一页
-          </el-button><el-button
-            :disabled="registrationLoading || !registrationMore"
-            @click="registrationPage(false)"
-          >
-            下一页
-          </el-button>
-        </div>
-        <h3>操作记录</h3>
-        <el-alert
-          v-if="historyError"
-          :title="historyError"
-          type="error"
-          :closable="false"
-        />
-        <el-button
-          v-if="historyError"
-          :disabled="historyLoading"
-          @click="loadHistory"
-        >
-          重试
-        </el-button>
-        <p
-          v-if="historyLoading"
-          role="status"
-        >
-          正在加载记录…
-        </p>
-        <p
-          v-else-if="!historyError && !history.length"
-          class="muted"
-        >
-          暂无操作记录
-        </p>
-        <article
-          v-for="item in history"
-          :key="item.id"
-          class="operation"
-        >
-          <strong>{{ ({ remove: '下架', restore: '恢复', cancel: '取消', publish: '发布', update_consultation_contact: '修改咨询联系方式' } as Record<string, string>)[item.action] || item.action }} · {{ item.actorName || '管理员' }}</strong>
-          <p class="feedback-content">
-            {{ item.reason }}
-          </p>
-          <span class="muted">{{ formatDate(item.createdAt) }}</span>
-        </article>
-        <div class="pagination">
-          <el-button
-            :disabled="historyOffset === 0 || historyLoading"
-            @click="changeHistory(true)"
-          >
-            上一页
-          </el-button>
-          <el-button
-            :disabled="!historyMore || historyLoading"
-            @click="changeHistory(false)"
-          >
-            下一页
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
-<style scoped>
-.operation { padding: 12px 0; border-bottom: 1px solid var(--huiju-border); }
-.operation:last-of-type { border-bottom: 0; }
-.registration-answers { padding: 0 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.detail-meta { margin: 4px 0 0; }
-</style>
+<style src="./activity-admin.css"></style>

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Header, HttpCode, Param, ParseUUIDPipe, Post, Qu
 import { ApiCookieAuth, ApiHeader, ApiOkResponse, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { ErrorDto, OkDto } from '../flow/dto.js'
 import { ActivityModerationService } from '../flow/activity-moderation.js'
-import { ActivityModerationHistoryDto, ActivityModerationInput, AdminActivityListDto, AdminActivityQuery } from '../flow/activity-moderation-dto.js'
+import { ActivityModerationHistoryDto, ActivityModerationInput, AdminActivityDto, AdminActivityListDto, AdminActivityQuery } from '../flow/activity-moderation-dto.js'
 import { AdminService } from './service.js'
 import { ActivityReportService } from './activity-report-service.js'
 import { ActivityRegistrationListDto, ActivityRegistrationQuery, ActivityReportDto } from './activity-report-dto.js'
@@ -30,6 +30,11 @@ export class AdminActivityController {
   @Get() @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: AdminActivityListDto })
   list(@Query() query: AdminActivityQuery, @Req() request: AdminRequest) {
     return this.admin.withSession({ cookie: request.headers.cookie }, tx => this.activities.list(tx, query))
+  }
+
+  @Get(':id') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: AdminActivityDto })
+  detail(@Param('id', ParseUUIDPipe) id: string, @Req() request: AdminRequest) {
+    return this.admin.withSession({ cookie: request.headers.cookie }, tx => this.activities.detail(tx, id))
   }
 
   @Get(':id/operations') @Header('Cache-Control', 'no-store') @ApiOkResponse({ type: ActivityModerationHistoryDto })

@@ -141,7 +141,7 @@
 
 ### 后台活动下架与恢复
 
-两类后台角色均可调用，会员会话不可替代后台 Cookie。`GET /admin/activities?status=all|normal|removed&q=标题&offset=0` 每页 20 条，返回非草稿活动的内容、状态、总数和后续页标识。`GET /admin/activities/:id/operations?offset=0` 每页 20 条返回下架/恢复原因、操作者和时间。查询不写数据库。
+两类后台角色均可调用，会员会话不可替代后台 Cookie。`GET /admin/activities?status=all|normal|removed&q=标题&offset=0` 每页 20 条，返回非草稿活动的内容、状态、总数和后续页标识。`GET /admin/activities/:id` 按 ID 返回同样的活动摘要，支持详情直达，草稿或不存在时返回 404。`GET /admin/activities/:id/operations?offset=0` 每页 20 条，返回活动操作及其原因、操作者和时间。
 
 `POST /admin/activities/:id/remove` 与 `/restore` 均提交 `{reason}`（去空白后 1–1000 字），要求 Cookie、正确 Origin 和 `X-CSRF-Token`。后台服务核对账号与会话，活动模块锁活动行后只修改 moderation 轴，同事务写操作记录及当前有效报名者的站内通知。重复目标状态不重复留痕/通知；草稿拒绝；恢复不修改生命周期、时间、名额或报名记录。后台不增加签到或代取消权限。接口/替身测试属于 L1，真实数据库及浏览器验收另行记录。
 

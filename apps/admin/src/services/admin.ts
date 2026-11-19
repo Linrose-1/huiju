@@ -106,6 +106,7 @@ export const adminApi = {
   members: (query: { q?: string; profile?: 'all' | 'complete' | 'incomplete'; inviterId?: string; offset: number }) => unwrap(client.GET('/api/v1/admin/members', { ...options(), params: { query } })),
   member: (id: string) => unwrap(client.GET('/api/v1/admin/members/{id}', { ...options(), params: { path: { id } } })),
   activities: (query: { status: 'all' | 'normal' | 'removed'; q?: string; offset: number }) => unwrap(client.GET('/api/v1/admin/activities', { ...options(), params: { query } })),
+  activityDetail: (id: string) => unwrap(client.GET('/api/v1/admin/activities/{id}', { ...options(), params: { path: { id } } })),
   activityOperations: (id: string, offset: number) => unwrap(client.GET('/api/v1/admin/activities/{id}/operations', { ...options(), params: { path: { id }, query: { offset } } })),
   removeActivity: (id: string, reason: string) => unwrap(client.POST('/api/v1/admin/activities/{id}/remove', {
     ...options(), params: { path: { id }, header: csrfHeader() }, body: { reason },

@@ -1,0 +1,33 @@
+.activity-admin { max-width: 1660px; margin: 0 auto; }
+.activity-admin h1 { font-size: 28px; font-weight: 700; overflow-wrap: anywhere; }
+.activity-admin .page-description { margin: 5px 0 0; }
+.activity-page-header { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 0 0 20px; }
+.activity-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; font-size: 13px; }
+.activity-link { color: var(--huiju-green); font-weight: 600; text-decoration: none; }
+.activity-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.activity-link:focus-visible { outline: 2px solid var(--huiju-green); outline-offset: 3px; border-radius: 2px; }
+.activity-status { display: flex; flex-wrap: wrap; gap: 5px 8px; align-items: center; }
+.activity-secondary { font-size: 12px; overflow-wrap: anywhere; }
+.activity-admin .activity-table-panel { padding: 0; overflow: hidden; }
+.activity-toolbar { padding: 14px 16px; margin-bottom: 0; }
+.activity-toolbar .filters { flex: 1 1 520px; min-width: 0; }
+.activity-search { width: min(245px, 100%); }
+.activity-select { width: 145px; }
+.activity-toolbar .filters .el-button + .el-button, .activity-pagination .el-button + .el-button { margin-left: 0; }
+.activity-admin .el-table td { padding: 10px 0; }
+.activity-admin .el-table th:first-child .cell, .activity-admin .el-table td:first-child .cell { padding-left: 16px; }
+.activity-list-error { display: flex; align-items: center; gap: 10px; padding: 10px 16px; }
+.activity-admin .activity-pagination { justify-content: space-between; padding: 12px 16px; margin: 0; border-top: 1px solid var(--huiju-border); flex-wrap: wrap; }
+.activity-report { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 0 16px; padding: 0; }
+.activity-report > div { padding: 16px 18px; min-width: 0; }
+.activity-report > div + div { border-left: 1px solid var(--huiju-border); }
+.activity-report strong { display: block; font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.activity-report span { display: block; margin-top: 4px; font-size: 13px; color: var(--huiju-muted); }
+.activity-state { margin-bottom: 16px; }
+.activity-state .el-button { margin-top: 8px; }
+@media (max-width: 680px) {
+  .activity-admin h1 { font-size: 23px; }
+  .activity-report { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .activity-report > div:nth-child(odd) { border-left: 0; }
+  .activity-report > div:nth-child(n + 3) { border-top: 1px solid var(--huiju-border); }
+}

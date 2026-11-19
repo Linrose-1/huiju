@@ -1156,6 +1156,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/activities/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminActivityController_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/activities/{id}/operations": {
         parameters: {
             query?: never;
@@ -8434,6 +8450,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminActivityListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminActivityController_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminActivityDto"];
                 };
             };
             400: {
