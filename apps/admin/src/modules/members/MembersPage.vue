@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { adminApi, errorMessage, formatDate, type MemberSummary, type MemberDetail } from '../../services/admin'
 import { useRequestScope } from '../../services/request-scope'
+const pageSize = 40
 const query = ref('')
 const profile = ref<'all' | 'complete' | 'incomplete'>('all')
 const inviterId = ref<string>()
@@ -9,6 +10,8 @@ const inviterName = ref('')
 const applied = ref({ q: '', profile: 'all' as 'all' | 'complete' | 'incomplete', inviterId: undefined as string | undefined })
 const items = ref<MemberSummary[]>([])
 const offset = ref(0)
+let requestedOffset = 0
+let previousSearch: { q: string; profile: typeof profile.value; offset: number } | undefined
 const total = ref(0)
 const hasMore = ref(false)
 const loading = ref(false)
@@ -20,13 +23,20 @@ const detailError = ref('')
 const selectedId = ref('')
 const beginList = useRequestScope()
 const beginDetail = useRequestScope()
-async function load(reset = false) {
-  if (reset) { offset.value = 0; applied.value = { q: query.value.trim(), profile: profile.value, inviterId: inviterId.value } }
+async function load(reset = false, startOffset = 0) {
+  if (reset) {
+    requestedOffset = startOffset
+    offset.value = startOffset
+    applied.value = { q: query.value.trim(), profile: profile.value, inviterId: inviterId.value }
+    items.value = []; total.value = 0; hasMore.value = false
+  }
+  const targetOffset = requestedOffset
   const current = beginList()
-  loading.value = true; error.value = ''; items.value = []; total.value = 0; hasMore.value = false
+  loading.value = true; error.value = ''
   try {
-    const result = await adminApi.members({ ...applied.value, offset: offset.value })
+    const result = await adminApi.members({ ...applied.value, offset: targetOffset })
     if (!current()) return
+    offset.value = targetOffset
     items.value = result.items; total.value = result.total; hasMore.value = result.hasMore
   } catch (value) { if (current()) error.value = errorMessage(value) }
   finally { if (current()) loading.value = false }
@@ -41,11 +51,25 @@ async function showMember(id: string) {
 function closeDetail() { beginDetail(); detail.value = null; detailLoading.value = false }
 function invitedMembers() {
   if (!detail.value) return
+  previousSearch ??= { q: applied.value.q, profile: applied.value.profile, offset: offset.value }
   inviterId.value = detail.value.id; inviterName.value = detail.value.displayName || detail.value.memberNumber
   query.value = ''; profile.value = 'all'; detailOpen.value = false; closeDetail(); void load(true)
 }
-function reset() { query.value = ''; profile.value = 'all'; inviterId.value = undefined; inviterName.value = ''; void load(true) }
-function page(back: boolean) { offset.value = Math.max(0, offset.value + (back ? -40 : 40)); void load() }
+function reset() { query.value = ''; profile.value = 'all'; inviterId.value = undefined; inviterName.value = ''; previousSearch = undefined; void load(true) }
+function returnToMemberQuery() {
+  const search = previousSearch
+  if (!search) return
+  previousSearch = undefined
+  inviterId.value = undefined
+  inviterName.value = ''
+  query.value = search.q
+  profile.value = search.profile
+  void load(true, search.offset)
+}
+function page(back: boolean) {
+  requestedOffset = Math.max(0, offset.value + (back ? -pageSize : pageSize))
+  void load()
+}
 onMounted(() => load(true))
 </script>
 
@@ -55,69 +79,99 @@ onMounted(() => load(true))
     <p class="page-description">
       查看会员资料与邀请关系。
     </p>
-    <div class="panel">
-      <div class="toolbar">
-        <form
-          class="filters member-search"
-          @submit.prevent="load(true)"
+    <el-button
+      v-if="inviterId"
+      class="member-return"
+      link
+      type="primary"
+      @click="returnToMemberQuery"
+    >
+      ‹ 返回会员查询
+    </el-button>
+    <form
+      class="panel member-search"
+      @submit.prevent="load(true)"
+    >
+      <div class="member-filter">
+        <label for="member-keyword">搜索会员</label>
+        <el-input
+          id="member-keyword"
+          v-model="query"
+          placeholder="用户编号、用户名称、真实姓名或手机号"
+          :maxlength="100"
+          clearable
+        />
+      </div>
+      <div class="member-filter">
+        <label for="member-profile">资料状态</label>
+        <el-select
+          id="member-profile"
+          v-model="profile"
         >
-          <el-input
-            v-model="query"
-            aria-label="搜索会员"
-            placeholder="用户编号、用户名称、真实姓名或手机号"
-            :maxlength="100"
-            clearable
+          <el-option
+            label="全部资料状态"
+            value="all"
           />
-          <el-select
-            v-model="profile"
-            aria-label="资料完善情况"
-          >
-            <el-option
-              label="全部资料状态"
-              value="all"
-            />
-            <el-option
-              label="资料已完善"
-              value="complete"
-            />
-            <el-option
-              label="资料未完善"
-              value="incomplete"
-            />
-          </el-select>
-          <el-button
-            type="primary"
-            native-type="submit"
-            :loading="loading"
-          >
-            查询
-          </el-button>
-          <el-button
-            :disabled="loading"
-            @click="reset"
-          >
-            重置
-          </el-button>
-        </form>
+          <el-option
+            label="资料已完善"
+            value="complete"
+          />
+          <el-option
+            label="资料未完善"
+            value="incomplete"
+          />
+        </el-select>
+      </div>
+      <div class="member-search-actions">
+        <el-button
+          type="primary"
+          native-type="submit"
+          :loading="loading"
+        >
+          查询
+        </el-button>
+        <el-button
+          :disabled="loading"
+          @click="reset"
+        >
+          重置
+        </el-button>
+      </div>
+    </form>
+    <section class="panel member-results">
+      <header class="member-results-header">
+        <div class="member-results-title">
+          <h2>{{ inviterId ? '直接受邀会员' : '会员列表' }}</h2>
+          <span class="muted">共 {{ total }} 位会员</span>
+        </div>
         <el-button
           :disabled="loading"
           @click="load()"
         >
           刷新
         </el-button>
-      </div>
-      <p
+      </header>
+      <div
         v-if="inviterId"
-        class="muted"
+        class="member-inviter-filter"
       >
-        邀请来源：{{ inviterName }}（直接邀请）
-      </p>
+        <el-tag type="success">
+          邀请来源：{{ inviterName }}（直接邀请）
+        </el-tag>
+      </div>
       <el-alert
         v-if="error"
         :title="error"
         type="error"
         :closable="false"
       />
+      <el-button
+        v-if="error"
+        :disabled="loading"
+        @click="load()"
+      >
+        重试
+      </el-button>
       <el-table
         v-loading="loading"
         :data="items"
@@ -173,10 +227,11 @@ onMounted(() => load(true))
         <el-table-column
           label="操作"
           width="110"
+          fixed="right"
         >
           <template #default="{ row }">
             <el-button
-              text
+              link
               type="primary"
               @click="showMember(row.id)"
             >
@@ -185,20 +240,25 @@ onMounted(() => load(true))
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination">
-        <span>共 {{ total }} 位会员</span><el-button
-          :disabled="loading || offset === 0"
-          @click="page(true)"
-        >
-          上一页
-        </el-button><el-button
-          :disabled="loading || !hasMore"
-          @click="page(false)"
-        >
-          下一页
-        </el-button>
-      </div>
-    </div>
+      <footer class="member-pagination">
+        <span class="muted">每页 {{ pageSize }} 条</span>
+        <div class="member-page-controls">
+          <el-button
+            :disabled="loading || offset === 0"
+            @click="page(true)"
+          >
+            上一页
+          </el-button>
+          <span class="muted">第 {{ Math.floor(offset / pageSize) + 1 }} / {{ Math.max(1, Math.ceil(total / pageSize)) }} 页</span>
+          <el-button
+            :disabled="loading || !hasMore"
+            @click="page(false)"
+          >
+            下一页
+          </el-button>
+        </div>
+      </footer>
+    </section>
     <el-drawer
       v-model="detailOpen"
       title="会员详情"
@@ -221,81 +281,162 @@ onMounted(() => load(true))
         </el-button>
       </template>
       <template v-else-if="detail">
-        <el-avatar
-          v-if="detail.avatarUrl"
-          :src="detail.avatarUrl"
-          :size="64"
-          aria-label="会员头像"
-        />
-        <h2>{{ detail.displayName || '—' }}</h2>
-        <el-descriptions
-          :column="1"
-          border
-          class="member-details"
-        >
-          <el-descriptions-item label="用户编号">
-            {{ detail.memberNumber }}
-          </el-descriptions-item>
-          <el-descriptions-item label="真实姓名">
-            {{ detail.realName || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="绑定手机号">
-            {{ detail.boundPhone || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="邮箱">
-            {{ detail.email || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="家乡">
-            {{ detail.hometown || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="个人简介">
-            {{ detail.bio || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="资源">
-            {{ detail.resources || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="需求">
-            {{ detail.needs || '—' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="资料状态">
-            {{ detail.profileComplete ? '已完善' : '未完善' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="入会时间">
-            {{ formatDate(detail.createdAt) }}
-          </el-descriptions-item>
-          <el-descriptions-item label="邀请码">
-            {{ detail.inviteCode }}
-          </el-descriptions-item>
-        </el-descriptions>
-        <h3>邀请关系</h3>
-        <p v-if="detail.inviter?.kind === 'platform_root'">
-          邀请来源：平台
-        </p>
-        <p v-else-if="detail.inviter">
-          直接邀请人：<el-button
-            text
-            type="primary"
-            @click="showMember(detail.inviter.id)"
+        <div class="member-identity">
+          <el-avatar
+            :src="detail.avatarUrl || undefined"
+            :size="52"
+            aria-label="会员头像"
           >
-            {{ detail.inviter.displayName || detail.inviter.memberNumber }}
-          </el-button>
-        </p>
-        <p v-else>
-          暂无邀请来源
-        </p>
-        <el-button
-          :disabled="!detail.inviteeCount"
-          @click="invitedMembers"
-        >
-          查看直接受邀会员（{{ detail.inviteeCount }}）
-        </el-button>
+            {{ Array.from(detail.displayName || '会')[0] }}
+          </el-avatar>
+          <div>
+            <div class="member-results-title">
+              <h2>{{ detail.displayName || '未设置名称' }}</h2>
+              <el-tag :type="detail.profileComplete ? 'success' : 'info'">
+                {{ detail.profileComplete ? '已完善' : '未完善' }}
+              </el-tag>
+            </div>
+            <p class="muted">
+              用户编号 {{ detail.memberNumber }}
+            </p>
+          </div>
+        </div>
+        <section class="member-detail-section">
+          <h3>邀请关系</h3>
+          <div class="member-invitations">
+            <div class="member-relation-row">
+              <span>直接邀请人</span>
+              <span v-if="detail.inviter?.kind === 'platform_root'">邀请来源：平台</span>
+              <el-button
+                v-else-if="detail.inviter"
+                link
+                type="primary"
+                class="member-relation-link"
+                @click="showMember(detail.inviter.id)"
+              >
+                {{ detail.inviter.displayName ? detail.inviter.displayName + ' · ' + detail.inviter.memberNumber : detail.inviter.memberNumber }} ›
+              </el-button>
+              <span
+                v-else
+                class="muted"
+              >暂无邀请来源</span>
+            </div>
+            <div class="member-relation-row">
+              <span>直接受邀会员</span>
+              <el-button
+                plain
+                type="primary"
+                :disabled="!detail.inviteeCount"
+                @click="invitedMembers"
+              >
+                查看直接受邀会员（{{ detail.inviteeCount }}）
+              </el-button>
+            </div>
+          </div>
+        </section>
+        <section class="member-detail-section">
+          <h3>会员资料</h3>
+          <el-descriptions
+            :column="1"
+            border
+            class="member-details"
+          >
+            <el-descriptions-item label="真实姓名">
+              {{ detail.realName || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="绑定手机号">
+              {{ detail.boundPhone || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="邮箱">
+              {{ detail.email || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="家乡">
+              {{ detail.hometown || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="入会时间">
+              {{ formatDate(detail.createdAt) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="邀请码">
+              {{ detail.inviteCode }}
+            </el-descriptions-item>
+          </el-descriptions>
+          <el-descriptions
+            :column="1"
+            border
+            class="member-details"
+          >
+            <el-descriptions-item label="个人简介">
+              {{ detail.bio || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="资源">
+              {{ detail.resources || '—' }}
+            </el-descriptions-item>
+            <el-descriptions-item label="需求">
+              {{ detail.needs || '—' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </section>
       </template>
     </el-drawer>
   </section>
 </template>
 
 <style scoped>
-.member-search .el-input { width: min(320px, 100%); }
-.member-search .el-select { width: 160px; }
+.member-return { margin-bottom: 14px; }
+.member-search {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.7fr) minmax(152px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.member-filter { display: grid; gap: 8px; min-width: 0; }
+.member-filter label { font-size: 13px; font-weight: 600; }
+.member-search-actions,
+.member-results-header,
+.member-results-title,
+.member-inviter-filter,
+.member-pagination,
+.member-page-controls,
+.member-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.member-search-actions .el-button + .el-button { margin-left: 0; }
+.member-results { display: grid; min-width: 0; gap: 14px; }
+.member-results-header,
+.member-pagination { justify-content: space-between; }
+.member-results-title h2 { margin: 0; font-size: 18px; }
+.member-results :deep(.el-table) { --el-table-header-bg-color: var(--el-fill-color-light); }
+.member-identity h2 { font-size: 22px; }
+.member-identity p { margin: 5px 0 0; }
+.member-identity .el-avatar {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+.member-detail-section { display: grid; gap: 12px; margin-top: 22px; }
+.member-detail-section h3 { margin: 0; }
+.member-invitations { border: 1px solid var(--el-border-color-light); border-radius: 8px; padding: 0 12px; }
+.member-relation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 10px 0;
+}
+.member-relation-row + .member-relation-row { border-top: 1px solid var(--el-border-color-light); }
+.member-relation-link { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .member-details { white-space: pre-wrap; overflow-wrap: anywhere; }
+.member-details :deep(.el-descriptions__label) { width: 108px; }
+
+@media (max-width: 900px) {
+  .member-search { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .member-search { grid-template-columns: minmax(0, 1fr); }
+}
 </style>

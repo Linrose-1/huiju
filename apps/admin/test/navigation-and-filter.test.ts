@@ -295,6 +295,36 @@ describe('pagination and authorization regression coverage', () => {
     const offsets = request.mock.calls.map(args => method === 'activities' ? args[0].offset : method === 'feedback' ? args[2] : args[0])
     expect(offsets).toEqual([0,size,size]); expect(p.offset.value).toBe(size); expect(p.hasMore.value).toBe(false)
   })
+  it('member query retries failed pages and restores its original search after viewing invitees', async () => {
+    const members = vi.fn()
+      .mockResolvedValueOnce({ items: [{ id: 'first' }], total: 41, hasMore: true })
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: [{ id: 'last' }], total: 41, hasMore: false })
+      .mockResolvedValue({ items: [{ id: 'invitee' }], total: 1, hasMore: false })
+    const member = vi.fn().mockResolvedValue({ id: 'inviter', displayName: '邀请人' })
+    const p = view<{
+      load(reset?: boolean): Promise<void>; page(back: boolean): void; showMember(id: string): Promise<void>
+      invitedMembers(): void; returnToMemberQuery(): void; detailOpen: vue.Ref<boolean>
+      query: vue.Ref<string>; profile: vue.Ref<string>; offset: vue.Ref<number>; items: vue.Ref<{id: string}[]>
+    }>('members/MembersPage', 'load,page,showMember,invitedMembers,returnToMemberQuery,detailOpen,query,profile,offset,items', { members, member })
+    p.query.value = '关键词'
+    p.profile.value = 'complete'
+    await p.load(true)
+    p.page(false); await tick()
+    expect(p.offset.value).toBe(0)
+    expect(p.items.value).toEqual([{ id: 'first' }])
+    await p.load()
+    expect(members.mock.calls.map(([query]) => query.offset)).toEqual([0, 40, 40])
+    await p.showMember('inviter')
+    p.invitedMembers(); await tick()
+    expect(p.detailOpen.value).toBe(false)
+    expect(members).toHaveBeenLastCalledWith({ q: '', profile: 'all', inviterId: 'inviter', offset: 0 })
+    p.returnToMemberQuery(); await tick()
+    expect(p.query.value).toBe('关键词')
+    expect(p.profile.value).toBe('complete')
+    expect(p.offset.value).toBe(40)
+    expect(members).toHaveBeenLastCalledWith({ q: '关键词', profile: 'complete', inviterId: undefined, offset: 40 })
+  })
   it('engagement and member events retain their committed pages after failed forward loads', async () => {
     const request = () => vi.fn().mockResolvedValueOnce({ items: [{ id:'first' }], total: 100, hasMore: true }).mockRejectedValueOnce(new Error('network')).mockResolvedValue({ items:[{id:'second'}],total:100,hasMore:false })
     const engagement=request(), events=request()
