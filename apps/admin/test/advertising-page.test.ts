@@ -55,6 +55,29 @@ describe('advertising page request boundaries', () => {
     expect(p.error.value).toContain('请先上架关联介绍内容')
     expect(p.changing.value).toBe(false)
   })
+  it('keeps edits made after a lost introduction response when the server already saved the previous draft', async () => {
+    const initial = {
+      id: 'intro', status: 'draft', version: 1, name: '共学计划', companyName: '向学空间',
+      contactName: '林禾', phone: '020-00000000', wechatId: '', summary: '原简介',
+      coverImageId: 'cover', blocks: [{ type: 'text', text: '正文' }],
+    }
+    network.updateIntroduction.mockRejectedValueOnce(new Error('网络连接失败，请检查网络后重试。'))
+      .mockResolvedValueOnce({ ...initial, version: 3, summary: '随后填写' })
+    network.introduction.mockResolvedValue({ ...initial, version: 2, summary: '已提交' })
+    const p = page('../src/modules/advertising/IntroductionEditor.vue', 'save,reconcile,form,uncertain', { initial }) as {
+      save(): Promise<void>; reconcile(): Promise<void>; form: vue.Ref<{ summary: string }>; uncertain: vue.Ref<unknown>
+    }
+    p.form.value.summary = '已提交'
+    await p.save()
+    p.form.value.summary = '随后填写'
+    await p.save()
+    expect(network.updateIntroduction).toHaveBeenCalledTimes(1)
+    await p.reconcile()
+    expect(p.uncertain.value).toBeUndefined()
+    expect(p.form.value.summary).toBe('随后填写')
+    await p.save()
+    expect(network.updateIntroduction).toHaveBeenLastCalledWith('intro', expect.objectContaining({ version: 2, summary: '随后填写' }))
+  })
   it('uses applied filters for subsequent pages, avoiding offset against an unsubmitted query', async () => {
     network.ads.mockResolvedValue({ items: [], total: 45, hasMore: true })
     const p = page('../src/modules/advertising/AdvertisingPage.vue', 'load,q,offset') as { load(reset?: boolean): Promise<void>; q: vue.Ref<string>; offset: vue.Ref<number> }

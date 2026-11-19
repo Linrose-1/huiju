@@ -7,6 +7,7 @@ const form = ref({ activityText: '', assistantText: '' })
 const loaded = ref(false)
 const loading = ref(false), saving = ref(false), error = ref('')
 const history = ref<ContentHistory[]>([]), editors = ref<ContentEditor[]>([]), candidates = ref<MemberSummary[]>([])
+const editorPermissions = ref(new Map<string, boolean>())
 const historyOffset = ref(0), editorOffset = ref(0), searchOffset = ref(0)
 const historyMore = ref(false), editorMore = ref(false), searchMore = ref(false)
 const historyLoading = ref(false), editorLoading = ref(false), searchLoading = ref(false)
@@ -40,7 +41,15 @@ async function loadEditors() {
   if (!isSuperAdmin.value) return
   const targetOffset = requestedEditorOffset
   const current = beginEditors(); editorLoading.value = true; editorError.value = ''
-  try { const value = await adminApi.contentEditors(targetOffset); if (current()) { editorOffset.value = targetOffset; editors.value = value.items; editorMore.value = value.hasMore } }
+  try {
+    const value = await adminApi.contentEditors(targetOffset)
+    if (!current()) return
+    editorOffset.value = targetOffset
+    editors.value = value.items
+    editorMore.value = value.hasMore
+    if (targetOffset === 0 && !value.hasMore) editorPermissions.value.clear()
+    for (const editor of value.items) editorPermissions.value.set(editor.memberId, editor.enabled)
+  }
   catch (e) { if (current()) editorError.value = errorMessage(e) }
   finally { if (current()) editorLoading.value = false }
 }
@@ -57,10 +66,18 @@ async function grant(memberId: string, enabled: boolean) {
   if (changing.value || !isSuperAdmin.value) return
   changing.value = memberId; editorError.value = ''
   const current = beginAction()
-  try { await adminApi.setContentEditor(memberId, enabled); if (current()) { ElMessage.success(enabled ? '已授予编辑权限' : '已撤销编辑权限'); requestedEditorOffset = 0 } }
+  try {
+    await adminApi.setContentEditor(memberId, enabled)
+    if (!current()) return
+    editorPermissions.value.set(memberId, enabled)
+    ElMessage.success(enabled ? '已授予编辑权限' : '已撤销编辑权限')
+    requestedEditorOffset = 0
+    requestedHistoryOffset = 0
+    void loadEditors()
+    void loadHistory()
+  }
   catch (e) { if (current()) editorError.value = errorMessage(e) }
   finally { if (current()) changing.value = '' }
-  if (current() && !editorError.value) void loadEditors()
 }
 function page(kind: 'history' | 'editors' | 'search', back: boolean) {
   const offset = kind === 'history' ? historyOffset : kind === 'editors' ? editorOffset : searchOffset
@@ -236,12 +253,14 @@ onMounted(() => { void load(); void loadHistory(); void loadEditors() })
         /><el-table-column label="授权">
           <template #default="{ row }">
             <el-button
+              v-if="!editorPermissions.get(row.id)"
               :disabled="Boolean(changing)"
               :loading="changing === row.id"
               @click="grant(row.id, true)"
             >
               授予编辑权限
             </el-button>
+            <span v-else>已授权</span>
           </template>
         </el-table-column>
       </el-table>

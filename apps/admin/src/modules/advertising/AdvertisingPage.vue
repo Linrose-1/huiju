@@ -13,13 +13,14 @@ const displayedOffset = ref(0)
 const offset = ref(0), total = ref(0), loading = ref(false), changing = ref(false), error = ref('')
 const ads = ref<AdvertisingAd[]>([]), introductions = ref<AdvertisingIntroduction[]>([])
 const adEditor = ref(false), introEditor = ref(false), editAd = ref<AdvertisingAd>(), editIntro = ref<AdvertisingIntroduction>(), preview = ref<AdvertisingIntroduction>()
+const savedIntroId = ref('')
 const backgroundRef = ref<InstanceType<typeof BackgroundSettings>>(), adEditorRef = ref<InstanceType<typeof AdEditor>>(), introEditorRef = ref<InstanceType<typeof IntroductionEditor>>()
 const begin = useRequestScope(), beginAction = useRequestScope()
 const applied = ref({ q: '', status: 'all' as 'all' | AdStatus, placement: 'all' as 'all' | Placement })
 const labels = { draft: '草稿', published: '已上架', offline: '已下架' }, positions = { activity: '活动', circle: '学友圈', assistant: '助手' }
 const statusTypes = { draft: 'info', published: 'success', offline: 'info' } as const
 async function load(reset = false) {
-  if (reset) { displayedOffset.value = 0; ads.value = []; introductions.value = []; total.value = 0; offset.value = 0; applied.value = { q: q.value.trim(), status: status.value, placement: placement.value } }
+  if (reset) { displayedOffset.value = 0; ads.value = []; introductions.value = []; total.value = 0; offset.value = 0; savedIntroId.value = ''; applied.value = { q: q.value.trim(), status: status.value, placement: placement.value } }
   if (tab.value === 'background') return
   const current = begin(); loading.value = true; error.value = ''
   try { const query = { q: applied.value.q, status: applied.value.status, offset: offset.value, limit: 20 }; if (tab.value === 'ads') { const result = await advertisingApi.ads({ ...query, placement: applied.value.placement }); if (current()) { ads.value = result.items; total.value = result.total; displayedOffset.value = query.offset } } else { const result = await advertisingApi.introductions(query); if (current()) { introductions.value = result.items; total.value = result.total; displayedOffset.value = query.offset } } }
@@ -34,6 +35,17 @@ async function selectTab(value: 'ads' | 'introductions' | 'background') {
 function openAd(value?: AdvertisingAd) { editAd.value = value; adEditor.value = true }
 function openIntro(value?: AdvertisingIntroduction) { editIntro.value = value; introEditor.value = true }
 function saved() { adEditor.value = false; introEditor.value = false; void load() }
+function introductionSaved(value: AdvertisingIntroduction) {
+  introEditor.value = false
+  savedIntroId.value = value.id
+  offset.value = displayedOffset.value
+  void load()
+}
+function clearIntroductionSearch() {
+  q.value = ''
+  status.value = 'all'
+  void load(true)
+}
 async function changeStatus(row: AdvertisingAd | AdvertisingIntroduction) {
   if (changing.value || loading.value) return
   const next = row.status === 'published' ? 'offline' : 'published'
@@ -180,36 +192,71 @@ onMounted(() => { void load() })
       </h2>
       <form
         v-else
-        class="filters"
+        class="intro-filters"
         @submit.prevent="load(true)"
       >
-        <el-input
-          v-model="q"
-          :maxlength="100"
-          placeholder="搜索标题 / 项目 / 企业名称"
-          style="width:260px"
-        /><el-select
-          v-model="status"
-          style="width:150px"
-          aria-label="状态"
-        >
-          <el-option
-            label="全部状态"
-            value="all"
-          /><el-option
-            v-for="(label, key) in labels"
-            :key="key"
-            :label="label"
-            :value="key"
+        <div class="ad-filter">
+          <label for="intro-search">搜索介绍</label>
+          <el-input
+            id="intro-search"
+            v-model="q"
+            :maxlength="100"
+            placeholder="搜索项目 / 企业名称"
+            clearable
           />
-        </el-select><el-button
+        </div>
+        <div class="ad-filter">
+          <label for="intro-status">状态</label>
+          <el-select
+            id="intro-status"
+            v-model="status"
+          >
+            <el-option
+              label="全部状态"
+              value="all"
+            /><el-option
+              v-for="(label, key) in labels"
+              :key="key"
+              :label="label"
+              :value="key"
+            />
+          </el-select>
+        </div>
+        <el-button
+          type="primary"
           native-type="submit"
           :loading="loading"
           :disabled="changing"
         >
           查询
         </el-button>
+        <el-button
+          :disabled="loading || changing"
+          @click="clearIntroductionSearch"
+        >
+          清除
+        </el-button>
       </form>
+      <div
+        v-if="tab === 'introductions'"
+        class="intro-list-heading"
+      >
+        <h2>介绍内容列表</h2>
+        <div
+          v-if="savedIntroId"
+          class="intro-saved"
+        >
+          <span role="status">已保存</span>
+          <el-button
+            link
+            type="primary"
+            :disabled="changing"
+            @click="openPreview(savedIntroId)"
+          >
+            查看已保存内容
+          </el-button>
+        </div>
+      </div>
       <el-alert
         v-if="error"
         :title="error"
@@ -307,7 +354,10 @@ onMounted(() => { void load() })
         v-else
         v-loading="loading"
         :data="introductions"
-        :empty-text="q || status !== 'all' ? '没有匹配的介绍内容，请调整筛选' : '暂无介绍内容，请先新建'"
+        :empty-text="applied.q || applied.status !== 'all' ? '没有匹配的介绍内容，请调整筛选' : '暂无介绍内容，请先新建'"
+        class="intro-list"
+        row-key="id"
+        :row-class-name="({ row }: { row: AdvertisingIntroduction }) => row.id === savedIntroId ? 'intro-saved-row' : ''"
       >
         <el-table-column
           prop="name"
@@ -326,7 +376,9 @@ onMounted(() => { void load() })
           width="100"
         >
           <template #default="{ row }">
-            {{ labels[row.status as AdStatus] }}
+            <el-tag :type="statusTypes[row.status as AdStatus]">
+              {{ labels[row.status as AdStatus] }}
+            </el-tag>
           </template>
         </el-table-column><el-table-column
           label="更新时间"
@@ -349,11 +401,12 @@ onMounted(() => { void load() })
             </el-button><el-button
               text
               :disabled="changing || loading"
-              @click="preview = row"
+              @click="openPreview(row.id)"
             >
               预览
             </el-button><el-button
-              text
+              link
+              :type="row.status === 'published' ? 'danger' : 'primary'"
               :disabled="changing || loading"
               @click="changeStatus(row)"
             >
@@ -388,7 +441,7 @@ onMounted(() => { void load() })
       ref="introEditorRef"
       :initial="editIntro"
       @close="introEditor = false"
-      @saved="saved"
+      @saved="introductionSaved"
     />
     <el-dialog
       :model-value="Boolean(preview)"
@@ -455,7 +508,19 @@ onMounted(() => { void load() })
 .ad-list { display: grid; min-width: 0; gap: 14px; }
 .ad-list h2 { margin: 0; font-size: 18px; }
 .ad-list :deep(.el-table) { --el-table-header-bg-color: var(--el-fill-color-light); }
-.filters { margin-bottom: 20px; }
+.intro-filters {
+  display: grid;
+  grid-template-columns: minmax(160px, 2fr) minmax(120px, 1fr) auto auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.intro-filters .el-button + .el-button { margin-left: 0; }
+.intro-list-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.intro-list-heading h2 { margin: 0; font-size: 18px; }
+.intro-saved { color: var(--el-color-primary); }
+.intro-list { --el-table-header-bg-color: var(--el-fill-color-light); }
+.intro-list :deep(.intro-saved-row > td) { background: var(--el-color-primary-light-9); }
 .thumbnail { display: block; width: 120px; aspect-ratio: 2; object-fit: contain; border-radius: 5px; }
 .thumbnail-wide { aspect-ratio: 3; }
 .intro-preview img { width: 100%; height: auto; border-radius: 8px; }
@@ -463,7 +528,7 @@ onMounted(() => { void load() })
 .intro-preview p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.9; }
 .intro-preview h2 { margin-top: 20px; }
 @media (max-width: 900px) {
-  .ad-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ad-filters, .intro-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
   .ad-filters { grid-template-columns: minmax(0, 1fr); }

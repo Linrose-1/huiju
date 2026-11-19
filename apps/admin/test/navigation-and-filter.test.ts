@@ -370,6 +370,23 @@ describe('pagination and authorization regression coverage', () => {
     await roster.loadRegistrations();roster.registrationPage(false);await tick();expect(roster.registrationOffset.value).toBe(0);expect(roster.registrations.value).toHaveLength(1);await roster.loadRegistrations();expect(registrations.mock.calls.map(a=>a[1])).toEqual([0,40,40])
     await detail.loadHistory();detail.changeHistory(false);await tick();expect(detail.historyOffset.value).toBe(0);expect(detail.history.value).toHaveLength(1);await detail.loadHistory();expect(history.mock.calls.map(a=>a[1])).toEqual([0,20,20])
   })
+  it('content search reflects each successful permission change and both lists refresh', async () => {
+    const setContentEditor = vi.fn().mockResolvedValue({ ok: true })
+    const contentEditors = vi.fn()
+      .mockResolvedValueOnce({ items: [{ memberId: 'member', enabled: true }], hasMore: false })
+      .mockResolvedValueOnce({ items: [], hasMore: false })
+    const contentHistory = vi.fn().mockResolvedValue({ items: [], hasMore: false })
+    const p = view<{
+      grant(id: string, enabled: boolean): Promise<void>; editorPermissions: vue.Ref<Map<string, boolean>>
+    }>('content/ContentPage', 'grant,editorPermissions', { setContentEditor, contentEditors, contentHistory })
+    await p.grant('member', true)
+    expect(p.editorPermissions.value.get('member')).toBe(true)
+    await p.grant('member', false)
+    expect(p.editorPermissions.value.get('member')).toBeFalsy()
+    expect(setContentEditor.mock.calls).toEqual([['member', true], ['member', false]])
+    expect(contentEditors.mock.calls).toEqual([[0], [0]])
+    expect(contentHistory.mock.calls).toEqual([[0], [0]])
+  })
   it('content list completion cannot be invalidated by a failed concurrent grant', async () => {
     let finish!: (value: unknown) => void
     const contentEditors=vi.fn(()=>new Promise(resolve=>{finish=resolve})),setContentEditor=vi.fn().mockRejectedValue(new Error('grant failed'))
