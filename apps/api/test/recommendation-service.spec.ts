@@ -55,6 +55,8 @@ describe('recommendation orchestration without database or real provider', () =>
     const [upcoming, ...historical] = filters.map(filter => new MySqlDialect().sqlToQuery(filter))
     expect(upcoming!.sql).toMatch(/registration_deadline/)
     expect(upcoming!.sql).toContain('registrations')
+    expect(upcoming!.sql).toContain('registration_scope')
+    expect(upcoming!.sql).toContain('`community_members`.`community_id` = `activities`.`community_id`')
     expect(upcoming!.params).toContain(member)
     expect(historical).toHaveLength(2)
     for (const { sql, params } of historical) {

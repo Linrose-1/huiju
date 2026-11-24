@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Header, Headers, HttpCode, Param, ParseUUIDPipe, Post, Query, StreamableFile } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { AvatarInput } from './dto.js'
-import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, CancelActivityInput, CoverUploadDto, ManagedActivityDto, ManagedActivityListDto, OrganizerRosterDto } from './organizer-dto.js'
+import { ActivityCreateInput, ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, CancelActivityInput, CoverUploadDto, ManagedActivityDto, ManagedActivityListDto, OrganizerRosterDto } from './organizer-dto.js'
 import { OrganizerService } from './organizer.js'
 import { MyActivityQuery, PageQuery, RosterQuery } from './pagination.js'
 
@@ -22,7 +22,7 @@ export class OrganizerController {
   }
 
   @Post('activities') @HttpCode(200) @ApiOkResponse({ type: ManagedActivityDto })
-  create(@Body() body: ActivityWriteInput, @Headers('authorization') header?: string) { return this.organizer.create(body, header) }
+  create(@Body() body: ActivityCreateInput, @Headers('authorization') header?: string) { return this.organizer.create(body, header) }
 
   @Post('activities/:id/edit') @HttpCode(200) @ApiOkResponse({ type: ManagedActivityDto })
   edit(@Param('id', ParseUUIDPipe) id: string, @Body() body: ActivityWriteInput, @Headers('authorization') header?: string) { return this.organizer.edit(id, body, header) }

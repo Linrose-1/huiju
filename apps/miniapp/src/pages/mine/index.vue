@@ -20,7 +20,7 @@ const startLabel = computed(() => {
 })
 const unreadCount = ref(0)
 const canEditContent = ref(false)
-const canManageMembers = ref(false)
+const canViewRoster = ref(false)
 const backgroundUrl = ref(''), backgroundError = ref(''), backgroundFailed = ref(false)
 let backgroundGeneration = 0
 async function loadBackground() {
@@ -66,7 +66,7 @@ async function load() {
   const isCurrent = () => current === generation && token === session.token && epoch === session.epoch
   summary.value = null; unreadCount.value = 0; error.value = ''; loading.value = false
   canEditContent.value = false
-  canManageMembers.value = false
+  canViewRoster.value = false
   loading.value = true
   try {
     await bootstrapIdentity()
@@ -74,7 +74,7 @@ async function load() {
     token = session.token; epoch = session.epoch
     if (!session.member?.profileComplete) return
     void Promise.resolve().then(() => api.communityAccess()).then(access => {
-      if (isCurrent()) canManageMembers.value = access.isAdmin
+      if (isCurrent()) canViewRoster.value = access.canViewRoster
     }).catch(() => undefined)
     void Promise.resolve().then(() => api.platformContent()).then(content => { if (isCurrent()) canEditContent.value = content.canEdit }).catch(() => undefined)
     const [activities, notifications] = await Promise.all([api.myActivitySummary(), api.notifications()])
@@ -102,7 +102,7 @@ finally {
     session.clear()
     summary.value = null
 } }
-watch(() => [session.token, session.epoch], () => { summary.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false; canManageMembers.value = false }, { flush: 'sync' })
+watch(() => [session.token, session.epoch], () => { summary.value = null; unreadCount.value = 0; loading.value = false; canEditContent.value = false; canViewRoster.value = false }, { flush: 'sync' })
 onShow(() => { active = true; void load() })
 onHide(() => { active = false; generation++ })
 onUnload(() => { active = false; generation++ })
@@ -347,13 +347,13 @@ onUnload(() => { active = false; generation++ })
           <text class="entry-arrow" aria-hidden="true">›</text>
         </button>
         <view
-          v-if="canManageMembers"
+          v-if="canViewRoster"
           class="menu-row row"
           hover-class="menu-pressed"
           @click="openMemberPage(routes.communityMembers)"
         >
           <view class="menu-icon"><uni-icons type="staff" size="48rpx" color="#17543d" /></view>
-          <view class="grow"><view class="tile-title">社群成员管理</view><view class="muted small">认定学加社群在册会员</view></view>
+          <view class="grow"><view class="tile-title">社群成员管理</view><view class="muted small">查看学加社群成员名单</view></view>
           <text class="entry-arrow" aria-hidden="true">›</text>
         </view>
         <view

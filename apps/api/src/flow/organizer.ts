@@ -14,7 +14,7 @@ import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService, validAvatar } from './identity.js'
 import { requireGatheringMembership } from './community-roster.js'
 import { AvatarInput } from './dto.js'
-import { ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
+import { ActivityCreateInput, ActivityQuestionHistoryDto, ActivityWriteInput, AttendanceDto, ManagedActivityDto } from './organizer-dto.js'
 import { PageQuery, MyActivityQuery, RosterQuery, activityStatusSql, activityCounts, answersForRegistrations } from './pagination.js'
 import { activityDescription, activityRegistrationNotice } from './activity-description.js'
 import { activityImages, activityImageValues, activityCoverSource, type ActivityImageData } from './activity-images.js'
@@ -60,7 +60,7 @@ export function activityValues(input: ActivityWriteInput) {
     }
   }
   return {
-    audienceTypes, audienceOther,
+    audienceTypes, audienceOther, registrationScope: input.registrationScope ?? 'all',
     hostOrganization: input.hostOrganization?.trim() || null,
     organizingOrganization: input.organizingOrganization?.trim() || null,
     sponsorOrganization: input.sponsorOrganization?.trim() || null,
@@ -81,6 +81,7 @@ export function validateActivityEdit(activity: Activity, questions: Question[], 
   const preserveCoordinates = input.locationLatitude === undefined && input.locationLongitude === undefined && input.location.trim() === activity.location
   const nextCover = input.imageUrls !== undefined ? input.imageUrls[0] ?? null : input.coverUrl === undefined ? activity.coverUrl : input.coverUrl
   const values = activityValues({ ...input,
+    registrationScope: input.registrationScope ?? activity.registrationScope,
     audienceTypes: input.audienceTypes === undefined ? activity.audienceTypes ?? [] : input.audienceTypes,
     audienceOther: input.audienceOther === undefined ? activity.audienceOther : input.audienceOther,
     hostOrganization: input.hostOrganization === undefined ? activity.hostOrganization : input.hostOrganization,
@@ -206,6 +207,7 @@ export class OrganizerService {
     const [organizer] = await db.select({ memberId: members.id, avatarUrl: members.avatarUrl, displayName: members.displayName }).from(members).where(eq(members.id, activity.organizerMemberId))
     return {
       id: activity.id, title: activity.title, description: activity.description, coverUrl: activity.coverUrl,
+      registrationScope: activity.registrationScope,
       audienceTypes: activity.audienceTypes ?? [], audienceOther: activity.audienceOther ?? null,
       hostOrganization: activity.hostOrganization ?? null, organizingOrganization: activity.organizingOrganization ?? null,
       sponsorOrganization: activity.sponsorOrganization ?? null,
@@ -223,11 +225,15 @@ export class OrganizerService {
     }
   }
 
+  private async readOwnedActivity(id: string, memberId: string) {
+    const [activity] = await this.database.db.select().from(activities).where(eq(activities.id, id))
+    requireOrganizer(activity, memberId)
+    return activity
+  }
+
   async detail(id: string, header?: string) {
     const member = (await this.identity.require(header))!
-    const [activity] = await this.database.db.select().from(activities).where(eq(activities.id, id))
-    requireOrganizer(activity, member.id)
-    return this.present(activity)
+    return this.present(await this.readOwnedActivity(id, member.id))
   }
 
   async list(header?: string, query: MyActivityQuery = new MyActivityQuery()) {
@@ -270,17 +276,18 @@ export class OrganizerService {
     })))
   }
 
-  async create(input: ActivityWriteInput, header?: string) {
+  async create(input: ActivityCreateInput, header?: string) {
     const member = (await this.identity.require(header))!
     const values = activityValues(input)
-    await this.checkImages(values, member.id)
+    const original = input.repeatOfActivityId ? await this.readOwnedActivity(input.repeatOfActivityId, member.id) : undefined
+    await this.checkImages(values, member.id, original)
     if (values.startsAt <= new Date()) fail('INVALID_ACTIVITY_TIME', '开始时间须晚于当前时间')
     if (input.questions.some(q => q.id)) fail('INVALID_QUESTIONS', '新活动不能使用已有问题编号')
     const id = randomUUID()
     await this.database.db.transaction(async tx => {
       await this.profile(tx, member.id)
-      await requireGatheringMembership(tx, member.id)
-      await tx.insert(activities).values({ id, organizerMemberId: member.id, ...values })
+      await requireGatheringMembership(tx, member.id, original?.communityId)
+      await tx.insert(activities).values({ id, organizerMemberId: member.id, communityId: original?.communityId, ...values })
       await this.questions(tx, id, input)
     })
     return this.detail(id, header)
@@ -295,7 +302,7 @@ export class OrganizerService {
     const member = (await this.identity.require(header))!
     await this.database.db.transaction(async tx => {
       const activity = await this.owner(tx, id, member.id)
-      if (activity.lifecycle === 'draft') await requireGatheringMembership(tx, member.id)
+      if (activity.lifecycle === 'draft') await requireGatheringMembership(tx, member.id, activity.communityId)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
       const { values, sameQuestions } = validateActivityEdit(activity, questions, input)
       await this.checkImages(values, member.id, activity)
@@ -333,7 +340,7 @@ export class OrganizerService {
       if (activity.moderation === 'removed' || activity.lifecycle === 'cancelled') fail('ACTIVITY_UNAVAILABLE', '活动已取消或下架，不能发布', 409)
       if (activity.lifecycle === 'published') return
       await this.profile(tx, member.id)
-      await requireGatheringMembership(tx, member.id)
+      await requireGatheringMembership(tx, member.id, activity.communityId)
       const questions = await tx.select().from(registrationQuestions).where(eq(registrationQuestions.activityId, id)).orderBy(asc(registrationQuestions.sortOrder))
       activityValues({ ...activity, audienceTypes: activity.audienceTypes ?? [], imageUrls: activityImages(activity), coverSourceUrl: activityCoverSource(activity), startsAt: activity.startsAt.toISOString(), endsAt: activity.endsAt.toISOString(), registrationDeadline: activity.registrationDeadline?.toISOString() ?? null, questions })
       if (activity.startsAt <= new Date()) fail('INVALID_ACTIVITY_TIME', '开始时间已过，请先修改活动时间')

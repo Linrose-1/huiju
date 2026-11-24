@@ -16,7 +16,7 @@ import { applyGatherAnswer, createGatherDraft, pendingGatherFields, gatherContex
 import { applyGatherEdit } from '@/services/gather-edits'
 import type { GatherDraft, GatherField, GatherQuestion, GatherTurn } from '@/services/gather-dialog'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
-import { activityTimeRangeWeekday, feeDisclaimer } from '@/services/presentation'
+import { activityTimeRangeWeekday, feeDisclaimer, registrationScopeText } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
 
 const session = useSessionStore()
@@ -204,7 +204,7 @@ async function checkProfile() {
         Object.assign(draft.value, {title:record.title, description:record.description, location:record.location,
           startsAt:record.startsAt, endsAt:record.endsAt, date:new Date(Date.parse(record.startsAt)+8*3600000).toISOString().slice(0,10),
           feeType:record.feeType,feeAmountCents:record.feeAmountCents,consultationContact:record.consultationContact,
-          capacity:record.capacity,registrationDeadline:record.registrationDeadline,questions:record.questions,
+          capacity:record.capacity,registrationDeadline:record.registrationDeadline,registrationScope:record.registrationScope,questions:record.questions,
           imageUrls:record.imageUrls,coverUrl:record.coverUrl,coverSourceUrl:record.coverSourceUrl,
           latitude:record.locationLatitude,longitude:record.locationLongitude})
       }
@@ -567,7 +567,7 @@ function inputForPublish(d: GatherDraft): ActivityWriteInput {
   })
   return {title:d.title, description:d.description, location:d.location, consultationContact:d.consultationContact,
     startsAt:d.startsAt, endsAt:d.endsAt, feeType:d.feeType, feeAmountCents:d.feeAmountCents,
-    capacity:d.capacity, registrationDeadline:d.registrationDeadline, questions,
+    capacity:d.capacity, registrationDeadline:d.registrationDeadline, registrationScope:d.registrationScope ?? 'all', questions,
     imageUrls:d.imageUrls, coverUrl:d.imageUrls?.[0], coverSourceUrl:d.coverSourceUrl,
     locationLatitude:d.latitude, locationLongitude:d.longitude}
 }
@@ -710,7 +710,7 @@ onUnload(() => { cropper.value?.cancel(); persist(); disposed = true; globalThis
       </view>
       <view v-else-if="draft && stage === 'settings'" id="settings-review" class="question-card">
         <view class="question-title">还需要设置报名规则吗？</view>
-        <text class="helper">人数上限、报名截止、报名问题</text>
+        <text class="helper">报名范围、人数上限、报名截止、报名问题</text>
         <view class="review-actions">
           <button class="utility-button" :disabled="busy || checking" @click="moreSettings(true)">设置报名细节</button>
           <button class="utility-button retry-primary" :disabled="busy || checking" @click="skipSettings">跳过，查看预览</button>
@@ -820,6 +820,9 @@ onUnload(() => { cropper.value?.cancel(); persist(); disposed = true; globalThis
               @click="edit(row.field)"
             >
               <text class="info-label">{{ row.label }}</text><text class="info-value">{{ row.value }}</text><text class="chevron">›</text>
+            </button>
+            <button class="info-row" :disabled="busy || checking" @click="moreSettings(true)">
+              <text class="info-label">报名范围</text><text class="info-value">{{ registrationScopeText(draft.registrationScope) }}</text><text class="chevron">›</text>
             </button>
             <view
               v-if="questionNames"

@@ -7,7 +7,7 @@ import { onShareAppMessage, onShareTimeline, onLoad, onShow, onHide, onUnload, o
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, PublicMember, Registration, ReadingList } from '@/services/api/types'
 import { mediaUrl } from '@/services/api/environment'
-import { dateTime, fee, stateText, feeNotice, feeDisclaimer, activityTimeRangeWeekday, audienceText } from '@/services/presentation'
+import { dateTime, fee, stateText, feeNotice, feeDisclaimer, activityTimeRangeWeekday, audienceText, registrationScopeText } from '@/services/presentation'
 import { navigate, routes, requireProfile } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import { createReadingVisit } from '@/services/reading'
@@ -29,6 +29,7 @@ async function loadScene() {
 }
 let rosterOffset = 0, readersOffset = 0, registrationGeneration = 0
 const session = useSessionStore()
+const outsideRegistrationScope = computed(() => session.member?.profileComplete && activity.value?.registrationScopeEligible === false)
 let generation = 0
 let alive = true, shown = true
 
@@ -144,6 +145,7 @@ async function register() { if (busy.value || registrationLoading.value || (sess
         navigate(routes.result + '?id=' + id.value)
         return
     }
+    if (activity.value?.registrationState !== 'open' || outsideRegistrationScope.value) return
     const target = routes.form + '?id=' + id.value + (recommendationToken.value ? '&recommendationToken=' + encodeURIComponent(recommendationToken.value) : '')
     if (await requireProfile(target))
         navigate(target)
@@ -220,6 +222,8 @@ onShareTimeline(shareTimeline)
             type="staff"
             size="36rpx"
           /><text>{{ activity.capacity?'限额 '+activity.capacity+' 人':'不限人数' }}｜已报名 {{ activity.activeRegistrationCount }} 人</text>
+        </view><view class="meta">
+          <uni-icons type="personadd" size="36rpx" /><text>报名范围：{{ registrationScopeText(activity.registrationScope) }}</text>
         </view><view
           v-if="audience"
           class="meta"
@@ -444,11 +448,11 @@ onShareTimeline(shareTimeline)
           /> 分享
         </button><button
           class="primary"
-          :disabled="busy || registrationLoading || (!!session.token && !registrationKnown) || (registration?.status!=='active' && activity.registrationState!=='open')"
+          :disabled="busy || registrationLoading || (!!session.token && !registrationKnown) || (registration?.status!=='active' && (activity.registrationState!=='open' || outsideRegistrationScope))"
           :loading="busy"
           @click="register"
         >
-          {{ registrationLoading ? '正在确认报名…' : (session.token && !registrationKnown) ? '报名状态待确认' : registration?.status==='active'?'查看我的报名':activity.registrationState==='open'?'立即报名':stateText(activity.registrationState) }}
+          {{ registrationLoading ? '正在确认报名…' : (session.token && !registrationKnown) ? '报名状态待确认' : registration?.status==='active'?'查看我的报名':activity.registrationState!=='open'?stateText(activity.registrationState):outsideRegistrationScope?'不符合报名范围':'立即报名' }}
         </button>
       </view>
     </template>

@@ -1,7 +1,8 @@
 import type { AiActivityDraft } from './api/types'
+import type { RegistrationScope } from './presentation'
 
 export type GatherField = 'title' | 'description' | 'date' | 'time' | 'location' | 'fee' | 'amount' | 'contact' | 'capacity' | 'joining'
-export type GatherDraft = AiActivityDraft & { consultationContact: string; date: string; period: string; latitude?:number|null; longitude?:number|null; imageUrls?:string[]; coverUrl?:string|null; coverSourceUrl?:string|null }
+export type GatherDraft = AiActivityDraft & { consultationContact: string; date: string; period: string; registrationScope?: RegistrationScope; latitude?:number|null; longitude?:number|null; imageUrls?:string[]; coverUrl?:string|null; coverSourceUrl?:string|null }
 export type GatherQuestion = { field: GatherField; prompt: string; options: string[] }
 const day = 86400000
 const digits = '零一二三四五六七八九'

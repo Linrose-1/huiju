@@ -106,7 +106,7 @@ test('complete conversation produces preview, publishes only after confirmation 
   page.skipSettings()
   assert.equal(page.stage.value,'preview')
   let creates=0, publishes=0
-  api.createActivity=async input=>{creates++;assert.equal(input.location,'线上聚会 · 报名后发会议链接');return {id:'existing'}}
+  api.createActivity=async input=>{creates++;assert.equal(input.location,'线上聚会 · 报名后发会议链接');assert.equal(input.registrationScope,'all');return {id:'existing'}}
   api.managedActivity=async()=>({lifecycle:'draft'})
   api.publishActivity=async()=>{if (++publishes===1) throw new Error('稍后再试')}
   decisions.push(false,true,true)
@@ -705,6 +705,14 @@ test('images require continue, then AI introduction and optional settings gate t
   assert.equal(next.page.previewReady.value,false)
   next.staged[0][4]('saved-draft')
   assert.equal(next.page.stage.value,'preview')
+  next.api.managedActivity = async () => ({ ...payload, registrationScope:'unregistered', lifecycle:'draft' })
+  await next.lifecycle.show()
+  assert.equal(next.page.draft.value.registrationScope,'unregistered')
+  const publications = []
+  next.api.publishActivity = async id => publications.push(id)
+  next.decisions.push(true)
+  await next.page.publish()
+  assert.deepEqual(publications,['saved-draft'])
 })
 
 test('publish requires explicit introduction and image decisions, failed uploads preserve uploaded images', async t => {

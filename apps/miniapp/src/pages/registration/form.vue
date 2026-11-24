@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { onLoad, onShow, onHide, onUnload } from '@dcloudio/uni-app'
 import { api, ApiError, errorMessage } from '@/services/api'
 import type { Activity, RegistrationInput } from '@/services/api/types'
-import { canEdit, feeNotice, feeDisclaimer } from '@/services/presentation'
+import { canEdit, feeNotice, feeDisclaimer, registrationScopeText } from '@/services/presentation'
 import { navigate, routes, requireProfile, loginPage } from '@/services/navigation'
 import { useSessionStore } from '@/stores/session'
 import ActivitySummary from '@/components/business/ActivitySummary.vue'
@@ -85,7 +85,7 @@ async function load() { if (!id.value)
             allowed.value = canEdit(activity.value, registration)
         }
         else {
-            allowed.value = activity.value.registrationState === 'open'
+            allowed.value = activity.value.registrationState === 'open' && activity.value.registrationScopeEligible !== false
         }
         initialized = true
     }
@@ -95,7 +95,7 @@ async function load() { if (!id.value)
         allowed.value = canEdit(activity.value, registration)
     }
     else {
-        allowed.value = activity.value.registrationState === 'open'
+        allowed.value = activity.value.registrationState === 'open' && activity.value.registrationScopeEligible !== false
     }
 }
 catch (e) {
@@ -168,6 +168,11 @@ onUnload(() => { alive = false; generation++; loadGeneration++; verification++ }
       @retry="load"
     /><template v-if="activity && !loading && !error">
       <ActivitySummary :activity="activity" />
+      <view v-if="!editing && activity.registrationScopeEligible === false" class="notice">
+        本活动报名范围为「{{ registrationScopeText(activity.registrationScope) }}」，你的在册身份不符合当前报名范围。
+      </view>
+    </template>
+    <template v-if="activity && !loading && !error && (editing || activity.registrationScopeEligible !== false)">
       <view
         v-if="!editing && (activity.feeType==='paid' || inviteCode)"
         class="card"

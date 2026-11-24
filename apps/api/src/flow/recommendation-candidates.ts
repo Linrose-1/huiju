@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { and, asc, desc, eq, gt, gte, lte, inArray, ne, sql } from 'drizzle-orm'
 import { FlowDatabase } from './common.js'
 import { activities } from '../database/schema/activities.js'
+import { communityMembers } from '../database/schema/communities.js'
 import { registrations } from '../database/schema/registrations.js'
 import type { ParsedSearch, PublicCandidate } from '../recommendations/types.js'
 
@@ -16,6 +17,10 @@ export class RecommendationCandidatesService {
     const visible = and(eq(activities.lifecycle, 'published'), eq(activities.moderation, 'normal'))
     if (historical) return and(visible, lte(activities.endsAt, now))
     return and(visible, ne(activities.organizerMemberId, memberId),
+      sql`(${activities.registrationScope} = 'all' or ${activities.registrationScope} =
+        case when exists (select 1 from ${communityMembers}
+          where ${communityMembers.communityId} = ${activities.communityId} and ${communityMembers.memberId} = ${memberId}
+          and ${communityMembers.isRegistered} = true) then 'registered' else 'unregistered' end)`,
       gt(activities.startsAt, now), sql`(${activities.registrationDeadline} is null or ${activities.registrationDeadline} > ${now})`,
       sql`(${activities.capacity} is null or ${activities.activeRegistrationCount} < ${activities.capacity})`,
       sql`not exists (select 1 from ${registrations} where ${registrations.activityId} = ${activities.id} and ${registrations.memberId} = ${memberId} and ${registrations.status} = 'active')`)

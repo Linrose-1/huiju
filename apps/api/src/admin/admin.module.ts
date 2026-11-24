@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common'
 import { DatabaseModule } from '../database/database.module.js'
+import { IdentityModule } from '../flow/identity.module.js'
+import { AdminCommunityPermissionsController } from './community-permissions-controller.js'
 import { ActivitiesModule } from '../flow/activities.module.js'
 import { FeedbackModule } from '../flow/feedback.module.js'
 import { AdminController } from './controller.js'
@@ -14,7 +16,7 @@ import { AnalyticsController } from './analytics-controller.js'
 import { AnalyticsService } from './analytics-service.js'
 import { ActivityReportService } from './activity-report-service.js'
 
-@Module({ imports: [DatabaseModule, ActivitiesModule, FeedbackModule, CircleModule],
-  controllers: [AdminController, AdminModerationController, AdminMemberController, AdminActivityController, AdminCircleController, AnalyticsController],
+@Module({ imports: [DatabaseModule, ActivitiesModule, FeedbackModule, CircleModule, IdentityModule],
+  controllers: [AdminController, AdminModerationController, AdminMemberController, AdminCommunityPermissionsController, AdminActivityController, AdminCircleController, AnalyticsController],
   providers: [AdminService, AdminMemberService, AnalyticsService, ActivityReportService], exports: [AdminService] })
 export class AdminModule {}

@@ -104,6 +104,13 @@ export const adminApi = {
     clearSession()
   },
   members: (query: { q?: string; profile?: 'all' | 'complete' | 'incomplete'; inviterId?: string; offset: number }) => unwrap(client.GET('/api/v1/admin/members', { ...options(), params: { query } })),
+  communityPermissions: (memberId: string, offset: number) => unwrap(client.GET('/api/v1/admin/members/{memberId}/community-permissions', {
+    ...options(), params: { path: { memberId }, query: { offset, limit: 20 } },
+  })),
+  setCommunityPermissions: (memberId: string, communityId: string, canViewRoster: boolean, canRecognizeMembers: boolean) =>
+    unwrap(client.PUT('/api/v1/admin/members/{memberId}/community-permissions/{communityId}', {
+      ...options(), params: { path: { memberId, communityId }, header: csrfHeader() }, body: { canViewRoster, canRecognizeMembers },
+    })),
   member: (id: string) => unwrap(client.GET('/api/v1/admin/members/{id}', { ...options(), params: { path: { id } } })),
   activities: (query: { status: 'all' | 'normal' | 'removed'; q?: string; offset: number }) => unwrap(client.GET('/api/v1/admin/activities', { ...options(), params: { query } })),
   activityDetail: (id: string) => unwrap(client.GET('/api/v1/admin/activities/{id}', { ...options(), params: { path: { id } } })),

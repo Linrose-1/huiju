@@ -23,7 +23,7 @@ function previewCode(url: string) {
   const source = mediaUrl(url)
   previewing = true
   uni.previewImage({
-    current: source, urls: [source],
+    current: source, urls: [source], showmenu: true,
     fail: () => uni.showToast({ title: '暂时无法放大，请稍后再试', icon: 'none' }),
     complete: () => { previewing = false },
   })
@@ -55,6 +55,7 @@ onPullDownRefresh(async () => { try { await load() } finally { uni.stopPullDownR
             class="partner-code"
             :src="mediaUrl(partner.codeUrl)"
             mode="aspectFit"
+            :show-menu-by-longpress="true"
             :aria-label="partner.name + '小程序码'"
             @click="previewCode(partner.codeUrl)"
             @error="markFailed(partner.codeUrl)"
@@ -70,6 +71,7 @@ onPullDownRefresh(async () => { try { await load() } finally { uni.stopPullDownR
           class="preview-button"
           @click="previewCode(partner.codeUrl)"
         >放大小程序码</button>
+        <text v-if="!failedCodes.includes(partner.codeUrl)" class="code-hint">放大后长按识别，进入{{ partner.name }}</text>
       </view>
     </view>
   </view>
@@ -86,5 +88,6 @@ onPullDownRefresh(async () => { try { await load() } finally { uni.stopPullDownR
 .partner-code { display: block; width: 100%; height: 100%; }
 .preview-button, .retry-button { min-height: 88rpx; margin: 0; padding: 0 40rpx; border: 1rpx solid #21684d; border-radius: 16rpx; background: #fff; color: #175b40; font-size: 29rpx; line-height: 88rpx; }
 .preview-button::after, .retry-button::after { border: 0; }
+.code-hint { margin-top: 16rpx; color: #526d5e; font-size: 26rpx; text-align: center; }
 .partner-status { display: flex; flex-direction: column; align-items: center; gap: 24rpx; padding: 90rpx 24rpx; color: #526d5e; font-size: 29rpx; text-align: center; }
 </style>

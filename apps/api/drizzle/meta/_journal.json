@@ -204,6 +204,20 @@
       "when": 1795010585156,
       "tag": "0028_platform_brand_appearance",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1795519513243,
+      "tag": "0029_activity_registration_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1795522617047,
+      "tag": "0030_community_roster_permissions",
+      "breakpoints": true
     }
   ]
 }

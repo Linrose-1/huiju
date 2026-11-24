@@ -4,7 +4,7 @@ import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsISO8601, 
 import { ActivityDto, ActivityCountsDto, PublicMemberDto, RegistrationDto } from './dto.js'
 import type { DescriptionDelta } from './activity-description.js'
 import { DescriptionDeltaDto } from './activity-description-dto.js'
-import { audienceTypes, type ActivityAudienceType } from '../database/schema/activities.js'
+import { audienceTypes, registrationScopes, type ActivityAudienceType, type RegistrationScope } from '../database/schema/activities.js'
 
 export class CoverUploadDto {
   @ApiProperty() coverUrl!: string
@@ -31,6 +31,8 @@ export class QuestionWriteInput {
   @ApiPropertyOptional({ type: [String], nullable: true }) @IsOptional() @IsArray() @ArrayMaxSize(100) @IsString({ each: true }) @Length(1, 200, { each: true }) options?: string[] | null
 }
 export class ActivityWriteInput {
+  @ApiPropertyOptional({ enum: [...registrationScopes], description: '报名范围，新建缺省为全部，编辑缺省保留原值' })
+  @ValidateIf((_object, value) => value !== undefined) @IsIn(registrationScopes) registrationScope?: RegistrationScope
   @ApiPropertyOptional({ enum: [...audienceTypes], isArray: true, maxItems: 4, uniqueItems: true, description: '聚会面向的人员，仅作说明，空数组清空' })
   @ValidateIf((_object, value) => value !== undefined) @IsArray() @ArrayMaxSize(4) @ArrayUnique() @IsIn(audienceTypes, { each: true }) audienceTypes?: ActivityAudienceType[]
   @ApiPropertyOptional({ type: String, nullable: true, maxLength: 60, description: '选择其他时填写的聚会对象' })
@@ -57,6 +59,10 @@ export class ActivityWriteInput {
   @ApiProperty({ enum: ['free', 'paid'] }) @IsIn(['free', 'paid']) feeType!: 'free' | 'paid'
   @ApiPropertyOptional({ type: Number, nullable: true }) @IsOptional() @IsInt() @Min(1) @Max(4294967295) feeAmountCents?: number | null
   @ApiProperty({ type: [QuestionWriteInput] }) @IsArray() @ArrayMaxSize(100) @ValidateNested({ each: true }) @Type(() => QuestionWriteInput) questions!: QuestionWriteInput[]
+}
+export class ActivityCreateInput extends ActivityWriteInput {
+  @ApiPropertyOptional({ type: String, format: 'uuid', description: '再聚一次的来源活动，仅原发起人可使用' })
+  @ValidateIf((_object, value) => value !== undefined) @IsUUID() repeatOfActivityId?: string
 }
 export class CancelActivityInput {
   @ApiProperty() @IsString() @Length(1, 1000) @Matches(/\S/) reason!: string

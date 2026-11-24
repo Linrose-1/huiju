@@ -18,12 +18,12 @@ function evaluate(source, dependencies, globals = {}) {
   )
   return exports
 }
-function formHarness({ existing = null, lookupError = null, recoverSession = false } = {}) {
+function formHarness({ existing = null, lookupError = null, recoverSession = false, eligible } = {}) {
   let registration = existing
   let submitted = 0
   const navigations = []
   const session = reactive({ token: 'old', epoch: 0, member: { id: 'member-a', boundPhone: '13800000000' } })
-  const activity = { registrationState: 'open', questions: [] }
+  const activity = { registrationState: 'open', registrationScopeEligible: eligible, questions: [] }
   const api = {
     activity: async () => activity,
     myRegistration: async () => {
@@ -40,7 +40,7 @@ function formHarness({ existing = null, lookupError = null, recoverSession = fal
   }
   const source = readFileSync(new URL('../src/pages/registration/form.vue', import.meta.url), 'utf8')
     .match(/<script setup lang="ts">([\s\S]*?)<\/script>/)[1]
-  const page = evaluate(source + '\nexport { load, submit, id, allowed, loading, error, phone };', {
+  const page = evaluate(source + '\nexport { load, submit, id, allowed, loading, error, phone, editing };', {
     '@dcloudio/uni-app': { onLoad() {}, onShow() {}, onHide() {}, onUnload() {} },
     '@/services/api': { api, ApiError, errorMessage: e => e.message },
     '@/services/presentation': { canEdit: () => true },
@@ -74,7 +74,7 @@ test('a committed registration with a lost response recovers to its record even 
   assert.equal(h.page.loading.value, false)
 })
 test('reopening an active registration form goes to the existing record without resubmitting', async () => {
-  const h = formHarness({ existing: { status: 'active' } })
+  const h = formHarness({ existing: { status: 'active' }, eligible: false })
   await h.page.load()
   assert.equal(h.page.allowed.value, false)
   assert.equal(h.submitted(), 0)
@@ -85,6 +85,23 @@ test('cancelled registration can be submitted again under current activity eligi
   await h.page.load()
   assert.equal(h.page.allowed.value, true)
   assert.equal(h.navigations.length, 0)
+})
+test('activity scope prevents first and repeat registrations even when there are available places', async () => {
+  for (const existing of [null, { status: 'cancelled' }]) {
+    const h = formHarness({ existing, eligible: false })
+    await h.page.load()
+    assert.equal(h.page.allowed.value, false)
+    await h.page.submit()
+    assert.equal(h.submitted(), 0)
+    assert.deepEqual(h.navigations, [])
+  }
+})
+test('a participant outside the new signup scope can still edit an active registration', async () => {
+  const h = formHarness({ existing: { status: 'active', contactPhone: '13800000000', answers: [] }, eligible: false })
+  h.page.editing.value = true
+  await h.page.load()
+  assert.equal(h.page.allowed.value, true)
+  assert.equal(h.page.phone.value, '13800000000')
 })
 test('failed status lookup is not treated as absence or successful registration', async () => {
   const h = formHarness({ lookupError: new ApiError('NETWORK_ERROR', '连接失败') })

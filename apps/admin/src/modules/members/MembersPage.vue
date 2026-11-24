@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { adminApi, errorMessage, formatDate, type MemberSummary, type MemberDetail } from '../../services/admin'
+import CommunityPermissions from './CommunityPermissions.vue'
+import { adminApi, errorMessage, formatDate, isSuperAdmin, type MemberSummary, type MemberDetail } from '../../services/admin'
 import { useRequestScope } from '../../services/request-scope'
 const pageSize = 40
 const query = ref('')
@@ -301,6 +302,12 @@ onMounted(() => load(true))
             </p>
           </div>
         </div>
+        <CommunityPermissions
+          v-if="isSuperAdmin && detailOpen"
+          :key="detail.id"
+          :member-id="detail.id"
+          :member-label="detail.displayName || detail.memberNumber"
+        />
         <section class="member-detail-section">
           <h3>邀请关系</h3>
           <div class="member-invitations">

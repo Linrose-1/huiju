@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { communities } from '../database/schema/communities.js'
 import { fail, type FlowDatabase } from './common.js'
 
-export const DEFAULT_COMMUNITY_ID = 'xuejia'
+export { DEFAULT_COMMUNITY_ID } from '../database/schema/communities.js'
 type Transaction = Parameters<Parameters<FlowDatabase['db']['transaction']>[0]>[0]
 const shanghaiMonth = new Intl.DateTimeFormat('en', {
   timeZone: 'Asia/Shanghai', year: 'numeric', month: 'numeric',

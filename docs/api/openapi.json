@@ -165,7 +165,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ActivityWriteInput"
+                "$ref": "#/components/schemas/ActivityCreateInput"
               }
             }
           }
@@ -4595,10 +4595,20 @@
         ]
       }
     },
-    "/api/v1/communities/xuejia/me": {
+    "/api/v1/communities/{communityId}/me": {
       "get": {
         "operationId": "CommunityRosterController_me",
         "parameters": [
+          {
+            "name": "communityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "maxLength": 32,
+              "type": "string"
+            }
+          },
           {
             "name": "authorization",
             "required": true,
@@ -4630,10 +4640,20 @@
         ]
       }
     },
-    "/api/v1/communities/xuejia/members": {
+    "/api/v1/communities/{communityId}/members": {
       "get": {
         "operationId": "CommunityRosterController_list",
         "parameters": [
+          {
+            "name": "communityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "maxLength": 32,
+              "type": "string"
+            }
+          },
           {
             "name": "offset",
             "required": false,
@@ -4687,15 +4707,26 @@
         ]
       }
     },
-    "/api/v1/communities/xuejia/members/{memberId}": {
+    "/api/v1/communities/{communityId}/members/{memberId}": {
       "put": {
         "operationId": "CommunityRosterController_recognize",
         "parameters": [
+          {
+            "name": "communityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "maxLength": 32,
+              "type": "string"
+            }
+          },
           {
             "name": "memberId",
             "required": true,
             "in": "path",
             "schema": {
+              "format": "uuid",
               "type": "string"
             }
           },
@@ -7352,6 +7383,177 @@
             }
           },
           "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-members"
+        ]
+      }
+    },
+    "/api/v1/admin/members/{memberId}/community-permissions": {
+      "get": {
+        "operationId": "AdminCommunityPermissionsController_list",
+        "parameters": [
+          {
+            "name": "memberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityPermissionListDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "admin_session": []
+          }
+        ],
+        "tags": [
+          "admin-members"
+        ]
+      }
+    },
+    "/api/v1/admin/members/{memberId}/community-permissions/{communityId}": {
+      "put": {
+        "operationId": "AdminCommunityPermissionsController_set",
+        "parameters": [
+          {
+            "name": "communityId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "maxLength": 32,
+              "type": "string"
+            }
+          },
+          {
+            "name": "memberId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityPermissionsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityPermissionDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "",
             "content": {
               "application/json": {
@@ -13437,6 +13639,18 @@
             "type": "string",
             "nullable": true
           },
+          "registrationScope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "registered",
+              "unregistered"
+            ]
+          },
+          "registrationScopeEligible": {
+            "type": "boolean",
+            "description": "已识别的当前用户是否符合本活动的社群报名范围"
+          },
           "audienceTypes": {
             "type": "array",
             "items": {
@@ -13584,6 +13798,7 @@
         },
         "required": [
           "hostOrganization",
+          "registrationScope",
           "audienceTypes",
           "audienceOther",
           "organizingOrganization",
@@ -13633,6 +13848,18 @@
           "hostOrganization": {
             "type": "string",
             "nullable": true
+          },
+          "registrationScope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "registered",
+              "unregistered"
+            ]
+          },
+          "registrationScopeEligible": {
+            "type": "boolean",
+            "description": "已识别的当前用户是否符合本活动的社群报名范围"
           },
           "audienceTypes": {
             "type": "array",
@@ -13776,6 +14003,7 @@
         },
         "required": [
           "hostOrganization",
+          "registrationScope",
           "audienceTypes",
           "audienceOther",
           "organizingOrganization",
@@ -14313,9 +14541,18 @@
           "required"
         ]
       },
-      "ActivityWriteInput": {
+      "ActivityCreateInput": {
         "type": "object",
         "properties": {
+          "registrationScope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "registered",
+              "unregistered"
+            ],
+            "description": "报名范围，新建缺省为全部，编辑缺省保留原值"
+          },
           "audienceTypes": {
             "type": "array",
             "maxItems": 4,
@@ -14441,6 +14678,11 @@
             "items": {
               "$ref": "#/components/schemas/QuestionWriteInput"
             }
+          },
+          "repeatOfActivityId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "再聚一次的来源活动，仅原发起人可使用"
           }
         },
         "required": [
@@ -14460,6 +14702,18 @@
           "hostOrganization": {
             "type": "string",
             "nullable": true
+          },
+          "registrationScope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "registered",
+              "unregistered"
+            ]
+          },
+          "registrationScopeEligible": {
+            "type": "boolean",
+            "description": "已识别的当前用户是否符合本活动的社群报名范围"
           },
           "audienceTypes": {
             "type": "array",
@@ -14625,6 +14879,7 @@
         },
         "required": [
           "hostOrganization",
+          "registrationScope",
           "audienceTypes",
           "audienceOther",
           "organizingOrganization",
@@ -14651,6 +14906,156 @@
           "lifecycle",
           "moderation",
           "hasRegistrationEver"
+        ]
+      },
+      "ActivityWriteInput": {
+        "type": "object",
+        "properties": {
+          "registrationScope": {
+            "type": "string",
+            "enum": [
+              "all",
+              "registered",
+              "unregistered"
+            ],
+            "description": "报名范围，新建缺省为全部，编辑缺省保留原值"
+          },
+          "audienceTypes": {
+            "type": "array",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "description": "聚会面向的人员，仅作说明，空数组清空",
+            "items": {
+              "type": "string",
+              "enum": [
+                "member",
+                "friend",
+                "all",
+                "other"
+              ]
+            }
+          },
+          "audienceOther": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "选择其他时填写的聚会对象"
+          },
+          "hostOrganization": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "主办单位"
+          },
+          "organizingOrganization": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "承办单位"
+          },
+          "sponsorOrganization": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 60,
+            "description": "赞助单位"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "descriptionDelta": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DescriptionDeltaDto"
+              }
+            ]
+          },
+          "registrationNotice": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "imageUrls": {
+            "maxItems": 9,
+            "description": "有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverSourceUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "本人上传的封面原图，用于再次裁剪；清空封面时同步清空"
+          },
+          "location": {
+            "type": "string"
+          },
+          "locationLatitude": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -90,
+            "maximum": 90,
+            "description": "微信地图 GCJ-02 纬度，与经度成对提供或清空"
+          },
+          "locationLongitude": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -180,
+            "maximum": 180,
+            "description": "微信地图 GCJ-02 经度，与纬度成对提供或清空"
+          },
+          "consultationContact": {
+            "type": "string"
+          },
+          "startsAt": {
+            "type": "string"
+          },
+          "endsAt": {
+            "type": "string"
+          },
+          "registrationDeadline": {
+            "type": "string",
+            "nullable": true
+          },
+          "capacity": {
+            "type": "number",
+            "nullable": true
+          },
+          "feeType": {
+            "type": "string",
+            "enum": [
+              "free",
+              "paid"
+            ]
+          },
+          "feeAmountCents": {
+            "type": "number",
+            "nullable": true
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuestionWriteInput"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "description",
+          "location",
+          "consultationContact",
+          "startsAt",
+          "endsAt",
+          "feeType",
+          "questions"
         ]
       },
       "ManagedActivityListDto": {
@@ -15789,12 +16194,20 @@
           "isAdmin": {
             "type": "boolean"
           },
+          "canViewRoster": {
+            "type": "boolean"
+          },
+          "canRecognizeMembers": {
+            "type": "boolean"
+          },
           "isRegistered": {
             "type": "boolean"
           }
         },
         "required": [
           "isAdmin",
+          "canViewRoster",
+          "canRecognizeMembers",
           "isRegistered"
         ]
       },
@@ -15830,6 +16243,9 @@
       "CommunityRosterDto": {
         "type": "object",
         "properties": {
+          "canRecognizeMembers": {
+            "type": "boolean"
+          },
           "items": {
             "type": "array",
             "items": {
@@ -15841,6 +16257,7 @@
           }
         },
         "required": [
+          "canRecognizeMembers",
           "items",
           "total"
         ]
@@ -16549,6 +16966,66 @@
           "inviteCode",
           "inviter",
           "inviteeCount"
+        ]
+      },
+      "CommunityPermissionDto": {
+        "type": "object",
+        "properties": {
+          "canViewRoster": {
+            "type": "boolean"
+          },
+          "canRecognizeMembers": {
+            "type": "boolean"
+          },
+          "communityId": {
+            "type": "string"
+          },
+          "communityName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "canViewRoster",
+          "canRecognizeMembers",
+          "communityId",
+          "communityName"
+        ]
+      },
+      "CommunityPermissionListDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommunityPermissionDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "hasMore"
+        ]
+      },
+      "CommunityPermissionsInput": {
+        "type": "object",
+        "properties": {
+          "canViewRoster": {
+            "type": "boolean"
+          },
+          "canRecognizeMembers": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "canViewRoster",
+          "canRecognizeMembers"
         ]
       },
       "ActivityReportDto": {

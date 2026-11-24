@@ -13,12 +13,14 @@ import { useSessionStore } from '@/stores/session'
 const session = useSessionStore()
 const items = ref<CommunityRosterMember[]>([])
 const total = ref(0), hasMore = ref(false), ready = ref(false)
+const canRecognizeMembers = ref(false)
 const loading = ref(false), loadingMore = ref(false), busyId = ref('')
 const error = ref(''), moreError = ref(''), denied = ref(false)
 let offset = 0, generation = 0, visible = false
 
 function clear() {
   generation++
+  canRecognizeMembers.value = false
   items.value = []; offset = 0; total.value = 0; hasMore.value = false
   ready.value = false; loading.value = false; loadingMore.value = false
   busyId.value = ''; error.value = ''; moreError.value = ''; denied.value = false
@@ -39,6 +41,7 @@ async function load(append = false) {
     if (!visible || current !== generation) return
     const page = await api.communityMembers(offset)
     if (!visible || current !== generation) return
+    canRecognizeMembers.value = page.canRecognizeMembers
     const known = new Set(items.value.map(row => row.memberId))
     items.value.push(...page.items.filter(row => !known.has(row.memberId)))
     offset += page.items.length
@@ -54,7 +57,7 @@ async function load(append = false) {
   }
 }
 async function change(row: CommunityRosterMember) {
-  if (busyId.value) return
+  if (!visible || !canRecognizeMembers.value || busyId.value || loadingMore.value) return
   const current = generation, next = !row.isRegistered
   busyId.value = row.memberId
   try {
@@ -70,7 +73,11 @@ async function change(row: CommunityRosterMember) {
     if (index >= 0) items.value[index] = updated
     uni.showToast({ title: next ? '已认定为在册会员' : '已取消在册身份', icon: 'none' })
   } catch (e) {
-    if (visible && current === generation && !handleDenied(e)) uni.showToast({ title: errorMessage(e), icon: 'none' })
+    if (!visible || current !== generation) return
+    if (e instanceof ApiError && e.code === 'COMMUNITY_RECOGNITION_REQUIRED') {
+      uni.showToast({ title: '认定权限已变更，正在刷新名单', icon: 'none' })
+      await load()
+    } else if (!handleDenied(e)) uni.showToast({ title: errorMessage(e), icon: 'none' })
   } finally { if (current === generation) busyId.value = '' }
 }
 watch(() => [session.token, session.epoch], () => {
@@ -91,7 +98,7 @@ onReachBottom(() => { if (!moreError.value) void load(true) })
 <template>
   <view class="page-pad roster-page">
     <PageReturn />
-    <view v-if="denied" class="empty">仅学加社群管理员可管理成员</view>
+    <view v-if="denied" class="empty">你没有查看学加社群成员名单的权限</view>
     <RequestState v-else :loading="loading" :error="error" @retry="load()" />
     <template v-if="ready">
       <view class="heading"><text>学加社群</text><text class="count">{{ total }} 位用户</text></view>
@@ -105,7 +112,7 @@ onReachBottom(() => { if (!moreError.value) void load(true) })
             <view class="number">{{ row.userNumber }}</view>
             <text class="status" :class="{ registered: row.isRegistered }">{{ row.isRegistered ? '在册会员' : '非会用户' }}</text>
           </view>
-          <button class="action" :class="{ revoke: row.isRegistered }" :disabled="!!busyId" @click="change(row)">
+          <button v-if="canRecognizeMembers" class="action" :class="{ revoke: row.isRegistered }" :disabled="!!busyId || loadingMore" @click="change(row)">
             {{ row.isRegistered ? '取消认定' : '认定会员' }}
           </button>
         </view>

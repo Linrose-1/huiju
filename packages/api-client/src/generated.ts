@@ -708,7 +708,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/communities/xuejia/me": {
+    "/api/v1/communities/{communityId}/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -724,7 +724,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/communities/xuejia/members": {
+    "/api/v1/communities/{communityId}/members": {
         parameters: {
             query?: never;
             header?: never;
@@ -740,7 +740,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/communities/xuejia/members/{memberId}": {
+    "/api/v1/communities/{communityId}/members/{memberId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1101,6 +1101,38 @@ export interface paths {
         };
         get: operations["AdminMemberController_detail"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/members/{memberId}/community-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AdminCommunityPermissionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/members/{memberId}/community-permissions/{communityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["AdminCommunityPermissionsController_set"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2128,6 +2160,10 @@ export interface components {
         };
         ActivityListItemDto: {
             hostOrganization: string | null;
+            /** @enum {string} */
+            registrationScope: "all" | "registered" | "unregistered";
+            /** @description 已识别的当前用户是否符合本活动的社群报名范围 */
+            registrationScopeEligible?: boolean;
             audienceTypes: ("member" | "friend" | "all" | "other")[];
             audienceOther: string | null;
             organizingOrganization: string | null;
@@ -2169,6 +2205,10 @@ export interface components {
         };
         ActivityDto: {
             hostOrganization: string | null;
+            /** @enum {string} */
+            registrationScope: "all" | "registered" | "unregistered";
+            /** @description 已识别的当前用户是否符合本活动的社群报名范围 */
+            registrationScopeEligible?: boolean;
             audienceTypes: ("member" | "friend" | "all" | "other")[];
             audienceOther: string | null;
             organizingOrganization: string | null;
@@ -2324,7 +2364,12 @@ export interface components {
             publicToParticipants: boolean;
             options?: string[] | null;
         };
-        ActivityWriteInput: {
+        ActivityCreateInput: {
+            /**
+             * @description 报名范围，新建缺省为全部，编辑缺省保留原值
+             * @enum {string}
+             */
+            registrationScope?: "all" | "registered" | "unregistered";
             /** @description 聚会面向的人员，仅作说明，空数组清空 */
             audienceTypes?: ("member" | "friend" | "all" | "other")[];
             /** @description 选择其他时填写的聚会对象 */
@@ -2358,9 +2403,18 @@ export interface components {
             feeType: "free" | "paid";
             feeAmountCents?: number | null;
             questions: components["schemas"]["QuestionWriteInput"][];
+            /**
+             * Format: uuid
+             * @description 再聚一次的来源活动，仅原发起人可使用
+             */
+            repeatOfActivityId?: string;
         };
         ManagedActivityDto: {
             hostOrganization: string | null;
+            /** @enum {string} */
+            registrationScope: "all" | "registered" | "unregistered";
+            /** @description 已识别的当前用户是否符合本活动的社群报名范围 */
+            registrationScopeEligible?: boolean;
             audienceTypes: ("member" | "friend" | "all" | "other")[];
             audienceOther: string | null;
             organizingOrganization: string | null;
@@ -2399,6 +2453,46 @@ export interface components {
             /** @enum {string} */
             moderation: "normal" | "removed";
             hasRegistrationEver: boolean;
+        };
+        ActivityWriteInput: {
+            /**
+             * @description 报名范围，新建缺省为全部，编辑缺省保留原值
+             * @enum {string}
+             */
+            registrationScope?: "all" | "registered" | "unregistered";
+            /** @description 聚会面向的人员，仅作说明，空数组清空 */
+            audienceTypes?: ("member" | "friend" | "all" | "other")[];
+            /** @description 选择其他时填写的聚会对象 */
+            audienceOther?: string | null;
+            /** @description 主办单位 */
+            hostOrganization?: string | null;
+            /** @description 承办单位 */
+            organizingOrganization?: string | null;
+            /** @description 赞助单位 */
+            sponsorOrganization?: string | null;
+            title: string;
+            description: string;
+            descriptionDelta?: components["schemas"]["DescriptionDeltaDto"] | null;
+            registrationNotice?: string | null;
+            coverUrl?: string | null;
+            /** @description 有序活动图片，第一张为5:4封面；省略时保留已有图片，空数组清空 */
+            imageUrls?: string[];
+            /** @description 本人上传的封面原图，用于再次裁剪；清空封面时同步清空 */
+            coverSourceUrl?: string | null;
+            location: string;
+            /** @description 微信地图 GCJ-02 纬度，与经度成对提供或清空 */
+            locationLatitude?: number | null;
+            /** @description 微信地图 GCJ-02 经度，与纬度成对提供或清空 */
+            locationLongitude?: number | null;
+            consultationContact: string;
+            startsAt: string;
+            endsAt: string;
+            registrationDeadline?: string | null;
+            capacity?: number | null;
+            /** @enum {string} */
+            feeType: "free" | "paid";
+            feeAmountCents?: number | null;
+            questions: components["schemas"]["QuestionWriteInput"][];
         };
         ManagedActivityListDto: {
             counts: components["schemas"]["ActivityCountsDto"];
@@ -2676,6 +2770,8 @@ export interface components {
         };
         CommunityAccessDto: {
             isAdmin: boolean;
+            canViewRoster: boolean;
+            canRecognizeMembers: boolean;
             isRegistered: boolean;
         };
         CommunityRosterMemberDto: {
@@ -2686,6 +2782,7 @@ export interface components {
             isRegistered: boolean;
         };
         CommunityRosterDto: {
+            canRecognizeMembers: boolean;
             items: components["schemas"]["CommunityRosterMemberDto"][];
             total: number;
         };
@@ -2853,6 +2950,21 @@ export interface components {
             inviteCode: string;
             inviter: components["schemas"]["AdminMemberRelationDto"] | null;
             inviteeCount: number;
+        };
+        CommunityPermissionDto: {
+            canViewRoster: boolean;
+            canRecognizeMembers: boolean;
+            communityId: string;
+            communityName: string;
+        };
+        CommunityPermissionListDto: {
+            items: components["schemas"]["CommunityPermissionDto"][];
+            total: number;
+            hasMore: boolean;
+        };
+        CommunityPermissionsInput: {
+            canViewRoster: boolean;
+            canRecognizeMembers: boolean;
         };
         ActivityReportDto: {
             id: string;
@@ -3629,7 +3741,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ActivityWriteInput"];
+                "application/json": components["schemas"]["ActivityCreateInput"];
             };
         };
         responses: {
@@ -6477,7 +6589,9 @@ export interface operations {
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                communityId: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6501,7 +6615,9 @@ export interface operations {
             header: {
                 authorization: string;
             };
-            path?: never;
+            path: {
+                communityId: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -6523,6 +6639,7 @@ export interface operations {
                 authorization: string;
             };
             path: {
+                communityId: string;
                 memberId: string;
             };
             cookie?: never;
@@ -8281,6 +8398,98 @@ export interface operations {
                 };
             };
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCommunityPermissionsController_list: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityPermissionListDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+        };
+    };
+    AdminCommunityPermissionsController_set: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                communityId: string;
+                memberId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityPermissionsInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityPermissionDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDto"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

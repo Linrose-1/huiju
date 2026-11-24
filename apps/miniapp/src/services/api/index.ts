@@ -5,7 +5,7 @@ import type { FellowList, ConnectionPath } from './types'
 import type { CommunityAccess, CommunityRoster, CommunityRosterMember } from './types'
 import type { Leaderboard, LeaderboardPeriod, LeaderboardKind } from './types'
 import type { AdvertisingPublicAdList, AdvertisingIntroduction, AdvertisingBackground } from './types'
-import type { ActivityList, ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
+import type { ActivityCreateInput, ActivityList, ActivitySearchResult, ActivityQuestionHistory, WechatQr } from './types'
 import type { CirclePost, CircleList, CircleWriteInput, CircleIntentList, CircleImage, Attendance, CommentList, ReviewList, FeedbackContext, ReviewStats, AiActivityDraftResult, DraftConversation, DraftReplyContext } from './types'
 import type { Member, Activity, Session, Registration, RegistrationInput, ActivityWriteInput, ManagedActivity, ReadingList, ReadingStats, ProfileDetails, ProfileDetailsInput, CardSettings, MemberCard, ManagedActivityList, RegistrationList, PublicRoster, OrganizerRoster, NotificationList } from './types'
 export class ApiError extends Error {
@@ -135,7 +135,7 @@ export const api = {
   activityReaders: (id: string, offset = 0) => request<ReadingList>(`/activities/${encodeURIComponent(id)}/readers?offset=${offset}`, 'GET', undefined, 'none'),
   activityViewStats: (id: string) => request<ReadingStats>(`/activities/${encodeURIComponent(id)}/view-stats`, 'GET', undefined, true),
   uploadCover: (base64: string, mimeType: 'image/png' | 'image/jpeg') => request<{coverUrl: string}>('/media/covers', 'POST', { base64, mimeType }, true),
-  createActivity: (input: ActivityWriteInput) => request<ManagedActivity>('/activities', 'POST', input, true),
+  createActivity: (input: ActivityCreateInput) => request<ManagedActivity>('/activities', 'POST', input, true),
   updateActivity: (id: string, input: ActivityWriteInput) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/edit`, 'POST', input, true),
   publishActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/publish`, 'POST', {}, true),
   managedActivity: (id: string) => request<ManagedActivity>(`/activities/${encodeURIComponent(id)}/manage`, 'GET', undefined, true),

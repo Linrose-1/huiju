@@ -11,5 +11,5 @@ import { CommunityRosterService } from './community-roster.js'
 import { FellowsService } from './fellows.js'
 
 @Module({ imports: [DatabaseModule], controllers: [IdentityController, MemberCardController, FellowsController, CommunityRosterController],
-  providers: [IdentityService, WechatAdapter, MemberCardService, FellowsService, CommunityRosterService], exports: [IdentityService, WechatAdapter] })
+  providers: [IdentityService, WechatAdapter, MemberCardService, FellowsService, CommunityRosterService], exports: [IdentityService, WechatAdapter, CommunityRosterService] })
 export class IdentityModule {}

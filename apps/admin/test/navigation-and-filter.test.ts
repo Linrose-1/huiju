@@ -15,14 +15,14 @@ vi.mock('vue-router', async importOriginal => ({
 
 const scopes: vue.EffectScope[] = []
 const account = { id: 'operator', username: 'operator', displayName: '运营', role: 'operator' as const, active: true, mustChangePassword: false, createdAt: '2026-10-02T00:00:00Z' }
-function pageScript(path: string, exported: string, dependencies: Record<string, unknown>) {
+function pageScript(path: string, exported: string, dependencies: Record<string, unknown>, props: object = {}) {
   const source = readFileSync(new URL(path, import.meta.url), 'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)![1]
   const code = ts.transpileModule(`${source}\nexport { ${exported} };`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
   const scope = vue.effectScope()
   scopes.push(scope)
   const result: Record<string, unknown> = {}
-  scope.run(() => new Function('require', 'exports', code)(
-    (name: string) => name === 'vue' ? { ...vue, onMounted() {} } : dependencies[name], result,
+  scope.run(() => new Function('require', 'exports', 'defineProps', code)(
+    (name: string) => name === 'vue' ? { ...vue, onMounted() {} } : dependencies[name], result, () => props,
   ))
   return result
 }
@@ -113,6 +113,66 @@ describe('admin page navigation and filtering', () => {
     clearSession()
     await redirected
     expect(router.currentRoute.value.path).toBe('/login')
+  })
+  it('limits community authorization to super administrators and applies only the confirmed member and community', async () => {
+    const row = { communityId: 'c1', communityName: '测试社群', canViewRoster: false, canRecognizeMembers: false }
+    const read = vi.spyOn(adminApi, 'communityPermissions').mockResolvedValue({ items: [row], total: 1, hasMore: false })
+    const write = vi.spyOn(adminApi, 'setCommunityPermissions').mockResolvedValue({ ...row, canViewRoster: true })
+    let confirm!: () => void
+    const modal = vi.fn(() => new Promise<void>(resolve => { confirm = resolve }))
+    const section = pageScript('../src/modules/members/CommunityPermissions.vue', 'load, change, items, saveError', {
+      '../../services/admin': admin, '../../services/request-scope': { useRequestScope },
+      'element-plus': { ElMessageBox: { confirm: modal }, ElMessage: { success: vi.fn() } },
+    }, { memberId: 'member-1', memberLabel: '测试会员' }) as {
+      load(): Promise<void>; change(item: typeof row, next: string): Promise<void>
+      items: vue.Ref<(typeof row)[]>; saveError: vue.Ref<string>
+    }
+    session.account = { ...account }
+    await section.load()
+    await section.change(row, 'view')
+    expect(read).not.toHaveBeenCalled()
+    expect(modal).not.toHaveBeenCalled()
+    session.account = { ...account, role: 'super_admin' }
+    await section.load()
+    const first = section.change(row, 'view')
+    await section.change(row, 'recognize')
+    expect(modal).toHaveBeenCalledTimes(1)
+    confirm(); await first
+    expect(write).toHaveBeenCalledWith('member-1', 'c1', true, false)
+    expect(section.items.value[0].canViewRoster).toBe(true)
+    write.mockRejectedValueOnce(new Error('保存失败'))
+    const failure = section.change(section.items.value[0], 'recognize')
+    confirm(); await failure
+    expect(write).toHaveBeenLastCalledWith('member-1', 'c1', true, true)
+    expect(section.saveError.value).toBe('保存失败')
+    expect(section.items.value[0].canRecognizeMembers).toBe(false)
+    read.mockResolvedValueOnce({items:[{ ...row, canViewRoster:true, canRecognizeMembers:true }],total:1,hasMore:false})
+    await section.load()
+    expect(section.items.value[0].canRecognizeMembers).toBe(true)
+    expect(section.saveError.value).toBe('')
+    const stale = section.change(section.items.value[0], 'none')
+    clearSession(); confirm(); await stale
+    expect(write).toHaveBeenCalledTimes(2)
+  })
+  it('drops late permission responses when leaving one member and opening another', async () => {
+    session.account = { ...account, role: 'super_admin' }
+    const row = { communityId: 'xuejia', communityName: '学加', canViewRoster: true, canRecognizeMembers: false }
+    const result = {items:[row],total:1,hasMore:false}
+    let resolveFirst!: (value: typeof result) => void
+    const read = vi.spyOn(adminApi, 'communityPermissions')
+      .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve })).mockResolvedValue(result)
+    const make = (id: string) => pageScript('../src/modules/members/CommunityPermissions.vue', 'load, items', {
+      '../../services/admin': admin, '../../services/request-scope': { useRequestScope }, 'element-plus': {},
+    }, { memberId: id, memberLabel: id }) as { load(): Promise<void>; items: vue.Ref<(typeof row)[]> }
+    const first = make('member-a')
+    const pending = first.load()
+    scopes[scopes.length - 1].stop()
+    const second = make('member-b')
+    await second.load()
+    resolveFirst({ ...result, items:[{...row,canRecognizeMembers:true}] }); await pending
+    expect(read.mock.calls).toEqual([['member-a',0],['member-b',0]])
+    expect(first.items.value).toEqual([])
+    expect(second.items.value).toEqual([row])
   })
   it('discards an older dashboard response when the period changes', async () => {
     let finish!: (value: Awaited<ReturnType<typeof adminApi.analytics>>) => void

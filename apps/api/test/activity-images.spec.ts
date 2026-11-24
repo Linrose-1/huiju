@@ -19,14 +19,27 @@ const base = { ...activityValues(input), organizerMemberId: owner, lifecycle: 'p
 const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })
 const png = (width: number, height: number) => sharp({ create: { width, height, channels: 3, background: '#176448' } }).png().toBuffer()
 
-function serviceFixture() {
+function serviceFixture(source?: typeof base) {
   const transaction = vi.fn().mockResolvedValue(undefined)
-  const service = new OrganizerService({ db: { transaction } } as unknown as FlowDatabase, { require: vi.fn().mockResolvedValue({ id: owner }) } as unknown as IdentityService)
+  const select = () => ({ from: () => ({ where: () => source ? [source] : [] }) })
+  const service = new OrganizerService({ db: { select, transaction } } as unknown as FlowDatabase, { require: vi.fn().mockResolvedValue({ id: owner }) } as unknown as IdentityService)
   vi.spyOn(service, 'detail').mockResolvedValue({} as ManagedActivityDto)
   return { service, transaction }
 }
 
 describe('activity images', () => {
+  it('accepts a previous legacy cover only from an activity owned by the organizer', async () => {
+    const legacy = 'https://example.com/legacy.jpg'
+    const original = { ...base, id:'original', coverUrl:legacy, imageUrls:null }
+    const repeat = { ...input, repeatOfActivityId:original.id, imageUrls:[legacy] }
+    const {service, transaction} = serviceFixture(original)
+    await expect(service.create(repeat)).resolves.toBeDefined()
+    expect(transaction).toHaveBeenCalledOnce()
+    await expect(service.create({ ...repeat, imageUrls:['https://example.com/other.jpg'] })).rejects.toThrow('本人上传')
+    const foreign = serviceFixture({...original, organizerMemberId:'someone-else'})
+    await expect(foreign.service.create(repeat)).rejects.toThrow('仅活动发起人')
+    expect(foreign.transaction).not.toHaveBeenCalled()
+  })
   it('validates 0..9 unique URLs and rejects nullable or malformed image lists', async () => {
     const nine = Array.from({ length: 9 }, (_, index) => `${prefix}${owner}_00000000-0000-4000-8000-${String(index + 2).padStart(12, '0')}.png`)
     for (const imageUrls of [[], [cover], [cover, extra], [cover, extra, third], nine]) {

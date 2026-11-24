@@ -6,7 +6,7 @@ import { activityTimeRangeWeekday, chinaParts, dateTime, fee } from '@/services/
 import { myActivityState, myActivityLabel } from '@/services/my-activities'
 
 const props = defineProps<{ activity: Activity | ManagedActivity; registration?: MyRegistration; previousStart?: string; now: number }>()
-defineEmits<{ (e: 'open'): void; (e: 'edit'): void; (e: 'roster'): void }>()
+defineEmits<{ (e: 'open'): void; (e: 'edit'): void; (e: 'roster'): void; (e: 'repeat'): void }>()
 const state = computed(() => myActivityState(props.activity, undefined, props.now))
 const label = computed(() => myActivityLabel(props.activity, undefined, props.now))
 const time = computed(() => activityTimeRangeWeekday(props.activity.startsAt, props.activity.endsAt))
@@ -61,6 +61,7 @@ const schedule = computed(() => {
       <button v-if="state !== 'draft'" class="primary-action" @click.stop="$emit('roster')">报名名单</button>
       <button v-if="editable" :class="state === 'draft' ? 'primary-action' : 'action'" @click.stop="$emit('edit')">{{ state === 'draft' ? '编辑草稿' : '编辑' }}</button>
       <button class="action" @click.stop="$emit('open')">管理</button>
+      <button class="action" @click.stop="$emit('repeat')">再聚一次</button>
     </view>
   </view>
 </template>

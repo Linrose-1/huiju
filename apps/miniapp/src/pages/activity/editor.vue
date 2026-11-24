@@ -5,7 +5,7 @@ import { api, ApiError, errorMessage } from '@/services/api'
 import type { ActivityWriteInput, ManagedActivity, ActivityQuestionHistoryItem } from '@/services/api/types'
 import { loginPage, navigate, requireProfile, routes } from '@/services/navigation'
 import { API_BASE_URL, mediaUrl } from '@/services/api/environment'
-import { feeDisclaimer, activityTimeRangeWeekday, audienceOptions, audienceText, type AudienceType } from '@/services/presentation'
+import { feeDisclaimer, activityTimeRangeWeekday, audienceOptions, audienceText, registrationScopeOptions, registrationScopeText, type RegistrationScope, type AudienceType } from '@/services/presentation'
 import { useSessionStore } from '@/stores/session'
 import { chooseActivityImagePath, chooseActivityImagePaths, readActivityImage, chooseActivityLocation } from '@/services/wechat'
 import ActivityCoverCropper from '@/components/business/ActivityCoverCropper.vue'
@@ -24,6 +24,7 @@ type DraftQuestion = { key: number; id?: string; prompt: string; type: QuestionT
 const questionTypes: QuestionType[] = ['short_text', 'long_text', 'single', 'multiple']
 const questionLabels = ['简答', '长文本', '单选', '多选']
 const id = ref(''), loading = ref(true), busy = ref(false), error = ref(''), submitError = ref('')
+const repeatOf = ref('')
 const aiDraftApplied = ref(false)
 const aiDraftMissing = ref(false)
 let fromAi = false, fromShare = false
@@ -44,7 +45,7 @@ const organizationFields = [
   { key: 'organizingOrganization', label: '承办单位' },
   { key: 'sponsorOrganization', label: '赞助单位' },
 ] as const
-const form = reactive({ audienceTypes: [] as AudienceType[], audienceOther: '', title: '', description: '', location: '', consultationContact: '', hostOrganization: '', organizingOrganization: '', sponsorOrganization: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+const form = reactive({ registrationScope: 'all' as RegistrationScope, audienceTypes: [] as AudienceType[], audienceOther: '', title: '', description: '', location: '', consultationContact: '', hostOrganization: '', organizingOrganization: '', sponsorOrganization: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
 const previewAudience = computed(() => audienceText(form.audienceTypes, form.audienceOther))
 function toggleAudience(type: AudienceType) {
   if (busy.value || !editable.value || started.value) return
@@ -131,11 +132,11 @@ watch(() => form.capacity, value => { if (value || step.value === 0) capacityLim
 const locationFocus = ref(false)
 const dateField = ref<'start' | 'end' | 'deadline' | null>(null)
 const pickerDate = ref(''), pickerTime = ref('')
-const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : fromAi ? '?aiDraft=1' + (optionalOnly.value ? '&optionalOnly=1' : '') : ''))
+const target = computed(() => routes.editor + (id.value ? '?id=' + encodeURIComponent(id.value) : repeatOf.value ? '?repeatOf=' + encodeURIComponent(repeatOf.value) : fromAi ? '?aiDraft=1' + (optionalOnly.value ? '&optionalOnly=1' : '') : ''))
 
 // Only a new, manually created activity uses the device draft.
 function manualDraftKey() {
-  return !fromAi && !id.value && formOwner && formOwner === session.member?.id
+  return !fromAi && !repeatOf.value && !id.value && formOwner && formOwner === session.member?.id
     ? 'manual-activity:v1:' + API_BASE_URL + ':' + formOwner : ''
 }
 function draftSnapshot() {
@@ -231,7 +232,7 @@ function reset() {
   dragIndex.value = -1
   dragOffset.value = 0
   capacityLimited.value = false
-  Object.assign(form, { audienceTypes: [], audienceOther: '', title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
+  Object.assign(form, { registrationScope: 'all', audienceTypes: [], audienceOther: '', title: '', description: '', location: '', consultationContact: '', startDate: '', startTime: '', endDate: '', endTime: '', deadlineDate: '', deadlineTime: '', capacity: '', feeType: 'free', amount: '' })
   for (const { key } of organizationFields) form[key] = ''
   questions.value = []
   customDeadline.value = false
@@ -279,35 +280,41 @@ async function load() {
     const owner = useSessionStore().member?.id || ''
     if (formOwner && formOwner !== owner) reset()
     formOwner = owner
-    const activity = id.value ? await api.managedActivity(id.value) : null
+    const copying = !id.value && !!repeatOf.value
+    const readId = id.value || (copying && !initialized ? repeatOf.value : '')
+    const activity = readId ? await api.managedActivity(readId) : null
     if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
-    if (!activity || activity.lifecycle === 'draft') {
+    if (copying || !activity || activity.lifecycle === 'draft') {
       const access = await api.communityAccess()
       if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
       if (!access.isRegistered) { error.value = '只有本社群在册会员可以发起聚会。可联系社群管理员确认会员身份。'; return }
     }
     if (activity) {
       if (request !== generation || disposed || token !== session.token || epoch !== session.epoch) return
-      source.value = activity
+      source.value = copying ? null : activity
       if (!initialized) {
         descriptionDelta.value = activity.descriptionDelta || null
-        registrationNotice.value = activity.registrationNotice || ''
+        registrationNotice.value = copying ? '' : activity.registrationNotice || ''
         const images = activityImages(activity)
         coverUrl.value = images[0] || ''
         coverSourceUrl.value = activity.coverSourceUrl || ''
         extraImages.value = Array.from({ length: 8 }, (_, index) => images[index + 1] || '')
-        const start = dateParts(activity.startsAt), end = dateParts(activity.endsAt), deadline = dateParts(activity.registrationDeadline)
+        const blankTime = { date: '', time: '' }
+        const start = copying ? blankTime : dateParts(activity.startsAt), end = copying ? blankTime : dateParts(activity.endsAt), deadline = copying ? blankTime : dateParts(activity.registrationDeadline)
         Object.assign(form, { title: activity.title, description: activity.description, location: activity.location, consultationContact: activity.consultationContact, startDate: start.date, startTime: start.time, endDate: end.date, endTime: end.time, deadlineDate: deadline.date, deadlineTime: deadline.time, capacity: activity.capacity ? String(activity.capacity) : '', feeType: activity.feeType, amount: activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : '' })
-        form.audienceTypes = [...(activity.audienceTypes ?? [])]
-        form.audienceOther = activity.audienceOther ?? ''
-        for (const { key } of organizationFields) form[key] = activity[key] ?? ''
+        form.registrationScope = activity.registrationScope ?? 'all'
+        if (!copying) {
+          form.audienceTypes = [...(activity.audienceTypes ?? [])]
+          form.audienceOther = activity.audienceOther ?? ''
+          for (const { key } of organizationFields) form[key] = activity[key] ?? ''
+        }
         locationCoordinates.value = activity.locationLatitude != null && activity.locationLongitude != null ? { latitude: activity.locationLatitude, longitude: activity.locationLongitude } : null
-        customDeadline.value = activity.registrationDeadline !== activity.startsAt
+        customDeadline.value = !copying && activity.registrationDeadline !== activity.startsAt
       }
       // 首个报名后，以服务端已锁定的问题和金额为准，防止保留的草稿覆盖它们。
       if (!initialized || activity.hasRegistrationEver) {
         const currentQuestions = questions.value
-        const refreshed = activity.questions.map(question => ({ key: ++sequence, id: question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
+        const refreshed = activity.questions.map(question => ({ key: ++sequence, id: copying ? undefined : question.id, prompt: question.prompt, type: question.type as QuestionType, publicToParticipants: question.publicToParticipants ?? false, required: question.required, options: (question.options || []).join('\n') }))
         questions.value = initialized ? [...currentQuestions.map(question => question.id ? refreshed.find(item => item.id === question.id) : question).filter((question): question is DraftQuestion => !!question), ...refreshed.filter(question => !currentQuestions.some(item => item.id === question.id))] : refreshed
         form.feeType = activity.feeType
         form.amount = activity.feeAmountCents ? (activity.feeAmountCents / 100).toFixed(2) : ''
@@ -354,7 +361,7 @@ function payload(): ActivityWriteInput {
   if (source.value?.lifecycle === 'published' && Date.parse(source.value.startsAt) <= Date.now()) {
     if (!form.consultationContact.trim()) throw new Error('请填写咨询联系方式')
     const activity = source.value
-    return { title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, coverSourceUrl: activity.coverSourceUrl || null, imageUrls: activityImages(activity), location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType, publicToParticipants: !!questions.value.find(item => item.id === question.id)?.publicToParticipants })) }
+    return { registrationScope: activity.registrationScope ?? 'all', title: activity.title, description: activity.description, descriptionDelta: activity.descriptionDelta, registrationNotice: activity.registrationNotice, coverUrl: activity.coverUrl, coverSourceUrl: activity.coverSourceUrl || null, imageUrls: activityImages(activity), location: activity.location, locationLatitude: activity.locationLatitude ?? null, locationLongitude: activity.locationLongitude ?? null, consultationContact: form.consultationContact.trim(), startsAt: activity.startsAt, endsAt: activity.endsAt, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, feeType: activity.feeType as 'free' | 'paid', feeAmountCents: activity.feeAmountCents, questions: activity.questions.map(question => ({ ...question, type: question.type as QuestionType, publicToParticipants: !!questions.value.find(item => item.id === question.id)?.publicToParticipants })) }
   }
   if (!form.title.trim() || !form.description.trim() || !form.location.trim() || !form.consultationContact.trim()) throw new Error('请填写活动标题、介绍、地点和咨询联系方式')
   const audienceOther = form.audienceTypes.includes('other') ? form.audienceOther.trim() : null
@@ -387,7 +394,7 @@ function payload(): ActivityWriteInput {
     return { ...(question.id ? { id: question.id } : {}), type: question.type, prompt, required: question.required, options, publicToParticipants: !!question.publicToParticipants && !privateContactQuestion(prompt) }
   })
   return { title: form.title.trim(), description: form.description.trim(), descriptionDelta: descriptionDelta.value, registrationNotice: registrationNotice.value.trim() || null, location: form.location.trim(), locationLatitude: locationCoordinates.value?.latitude ?? null, locationLongitude: locationCoordinates.value?.longitude ?? null, consultationContact: form.consultationContact.trim(),
-    audienceTypes: [...form.audienceTypes], audienceOther,
+    registrationScope: form.registrationScope, audienceTypes: [...form.audienceTypes], audienceOther,
     hostOrganization: form.hostOrganization.trim() || null,
     organizingOrganization: form.organizingOrganization.trim() || null,
     sponsorOrganization: form.sponsorOrganization.trim() || null,
@@ -644,7 +651,7 @@ async function submit(publish = false) {
     if (!await requireProfile(target.value) || !current()) return
     if (formOwner !== (useSessionStore().member?.id || '')) { reset(); error.value = '登录身份已变更，请重新填写活动'; return }
     const key = manualDraftKey()
-    const activity = id.value ? await api.updateActivity(id.value, input) : await api.createActivity(input)
+    const activity = id.value ? await api.updateActivity(id.value, input) : await api.createActivity(repeatOf.value ? { ...input, repeatOfActivityId: repeatOf.value } : input)
     if (!current()) return
     id.value = activity.id
     onAiDraftSaved?.(activity.id)
@@ -673,7 +680,7 @@ const stopSessionWatch = watch(() => [session.token, session.epoch], () => {
   loading.value = false
   error.value = '登录身份已变更，请重新加载后填写活动'
 }, { flush: 'sync' })
-onLoad(options => { id.value = String(options?.id || ''); fromAi = options?.aiDraft === '1'; optionalOnly.value = fromAi && options?.optionalOnly === '1'; fromShare = !!id.value && options?.from === 'share' })
+onLoad(options => { id.value = String(options?.id || ''); repeatOf.value = id.value ? '' : String(options?.repeatOf || ''); fromAi = !repeatOf.value && options?.aiDraft === '1'; optionalOnly.value = fromAi && options?.optionalOnly === '1'; fromShare = !!id.value && options?.from === 'share' })
 onShow(load)
 onHide(() => { flushManualDraft(); clearQuestionHistory() })
 onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHistory(); disposed = true; generation++; stopSessionWatch() })
@@ -728,6 +735,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
     />
     <template v-if="!loading && !error">
       <view v-if="restoredDraft" class="notice">已恢复上次填写的本机草稿，可继续编辑。</view>
+      <view v-if="repeatOf && !id" class="notice">已带入上一场活动的内容，请设置本场的开始和结束时间。</view>
       <view
         v-if="aiDraftMissing"
         class="notice"
@@ -1080,6 +1088,24 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
           <view class="settings-note">当前活动统一需要报名，暂不支持关闭</view>
         </view>
         <view class="settings-card">
+          <view class="settings-heading"><text>报名范围</text></view>
+          <view class="settings-description">按活动所属社群的在册身份判断</view>
+          <view class="scope-options" role="radiogroup" aria-label="报名范围">
+            <button
+              v-for="option in registrationScopeOptions"
+              :key="option.key"
+              class="settings-option"
+              :class="{ selected: form.registrationScope === option.key }"
+              role="radio"
+              :aria-checked="form.registrationScope === option.key"
+              :disabled="busy || !editable || started"
+              @click="form.registrationScope = option.key"
+            >
+              <view class="radio-dot" />{{ option.label }}
+            </button>
+          </view>
+        </view>
+        <view class="settings-card">
           <view class="settings-heading">
             <text>报名人数限制</text><button
               class="help-button"
@@ -1341,6 +1367,7 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
               color="#164f41"
             /><text>{{ form.capacity ? '限额 ' + form.capacity + ' 人' : '不限人数' }} | 已报名 {{ source?.activeRegistrationCount || 0 }} 人</text>
           </view>
+          <view class="preview-meta"><text>报名范围：{{ registrationScopeText(form.registrationScope) }}</text></view>
           <view
             v-if="previewAudience"
             class="preview-meta"
@@ -1791,6 +1818,8 @@ onUnload(() => { flushManualDraft(); cropper.value?.cancel(); clearQuestionHisto
 .organization-field + .organization-field{margin-top:12rpx}
 .choice-row{display:flex;align-items:center;gap:16rpx;margin-bottom:12rpx;font-size:26rpx}
 .choice-row .field{flex:1;min-width:0;margin:0}
+.scope-options { display: grid; gap: 12rpx; margin-top: 16rpx; }
+.scope-options .settings-option { width: 100%; justify-content: flex-start; padding: 0 24rpx; }
 .audience-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx; }
 .audience-option { display: flex; align-items: center; gap: 12rpx; width: 100%; min-height: 80rpx; padding: 12rpx 18rpx; border: 1rpx solid #dee8e2; border-radius: 12rpx; background: #fafcfb; color: #42594e; font-size: 27rpx; line-height: 1.4; }
 .audience-option.chosen { border-color: #6a9d88; background: #eef6f1; color: #175f46; }

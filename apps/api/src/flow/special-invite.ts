@@ -5,6 +5,7 @@ import { activities } from '../database/schema/activities.js'
 import { activityInviteCodes, registrationOperations } from '../database/schema/registrations.js'
 import { complete, IdentityService } from './identity.js'
 import { fail, FlowDatabase } from './common.js'
+import { requireRegistrationScope } from './community-roster.js'
 import { createInviteCode, inviteHash, openInvite, sealInvite } from './special-invite-crypto.js'
 import { type InviteStatus, SpecialInviteCodeDto, SpecialInviteQuery, SpecialInviteVerifiedDto } from './special-invite-dto.js'
 
@@ -80,6 +81,7 @@ export class SpecialInviteService {
     const db = this.database.db
     const [activity] = await db.select().from(activities).where(eq(activities.id, activityId))
     if (!activity || activity.lifecycle === 'draft') fail('NOT_FOUND', '活动不存在', 404)
+    await requireRegistrationScope(db, activity, member.id)
     const row = await this.lookup(db, activityId, code, member.boundPhone!, false)
     this.usable(row, activity)
     return { valid: true, maskedPhone: maskedPhone(member.boundPhone!), expiresAt: new Date(Math.min(row.expiresAt.getTime(), inviteExpiresAt(activity).getTime())).toISOString() }

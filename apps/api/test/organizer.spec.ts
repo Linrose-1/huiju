@@ -20,6 +20,15 @@ const base = { ...activityValues(input), organizerMemberId: 'owner', lifecycle: 
 const now = new Date('2030-01-01T00:00:00Z')
 
 describe('organizer write boundaries', () => {
+  it('defaults new activities to both groups and preserves a restricted scope on legacy edits', async () => {
+    expect(activityValues(input).registrationScope).toBe('all')
+    const existing = { ...base, registrationScope: 'registered' as const }
+    expect(validateActivityEdit(existing, [], input, now).values.registrationScope).toBe('registered')
+    expect(validateActivityEdit(existing, [], { ...input, registrationScope: 'unregistered' }, now).values.registrationScope).toBe('unregistered')
+    for (const invalid of [null, 'other', ['registered']]) {
+      expect((await validate(plainToInstance(ActivityWriteInput, { ...input, registrationScope: invalid }))).map(e => e.property)).toContain('registrationScope')
+    }
+  })
   it.each([null, { isAdmin: true, isRegistered: false }])('requires registration for creating, editing and publishing drafts (%j)', async relation => {
     const member = { id: 'owner', boundPhone: 'test', displayName: '甲', avatarUrl: '/avatar', avatarSetByUser: true, nameSetByUser: true }
     const tx = {

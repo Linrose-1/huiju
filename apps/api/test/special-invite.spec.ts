@@ -107,6 +107,11 @@ describe('special invite lifecycle and ownership', () => {
       await expect(fixture([[activity], row ? [row] : []]).service.verify(activity.id, code)).rejects.toThrow()
     }
     await expect(fixture([[{ ...activity, feeType: 'free' }], [stored]]).service.verify(activity.id, code)).rejects.toThrow('暂不能')
+    const restricted = { ...activity, registrationScope: 'registered', communityId: 'xuejia' }
+    await expect(fixture([[restricted], [{ isRegistered: false }], [stored]]).service.verify(activity.id, code))
+      .rejects.toMatchObject({ response: { code: 'REGISTRATION_SCOPE_MISMATCH' } })
+    await expect(fixture([[restricted], [{ isRegistered: true }], [stored]]).service.verify(activity.id, code))
+      .resolves.toMatchObject({ valid: true })
   })
   it('lists only through owner access and returns bounded rows with masked phones', async () => {
     const row = invite()

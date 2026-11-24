@@ -15,8 +15,12 @@ import {
   varchar,
 } from 'drizzle-orm/mysql-core'
 import { adminAccounts, members } from './members.js'
+import { communities, DEFAULT_COMMUNITY_ID } from './communities.js'
 import type { DescriptionDelta } from '../../flow/activity-description.js'
 import type { ActivityImageData } from '../../flow/activity-images.js'
+
+export const registrationScopes = ['all', 'registered', 'unregistered'] as const
+export type RegistrationScope = typeof registrationScopes[number]
 
 export const audienceTypes = ['member', 'friend', 'all', 'other'] as const
 export type ActivityAudienceType = typeof audienceTypes[number]
@@ -32,6 +36,8 @@ export const activities = mysqlTable(
         onUpdate: 'restrict',
       }),
     title: varchar('title', { length: 200 }).notNull(),
+    communityId: varchar('community_id', { length: 32 }).notNull().default(DEFAULT_COMMUNITY_ID).references(() => communities.id),
+    registrationScope: mysqlEnum('registration_scope', registrationScopes).notNull().default('all'),
     audienceTypes: json('audience_types').$type<ActivityAudienceType[]>(),
     audienceOther: varchar('audience_other', { length: 60 }),
     hostOrganization: varchar('host_organization', { length: 60 }),

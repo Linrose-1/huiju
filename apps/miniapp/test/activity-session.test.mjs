@@ -239,6 +239,29 @@ test('member card entry preserves target and coalesces taps until profile gate r
   assert.equal(navigated.length, 1, 'unloaded page cannot navigate from late gate')
 })
 
+test('scope mismatch blocks a fresh registration but keeps the existing registration accessible', async t => {
+  const targets = []
+  const h = harness(t, 'member', {}, { navigate: target => targets.push(target), routes: { result: '/registration' }, requireProfile: async () => true })
+  h.session.member = { profileComplete: true }
+  h.page.activity.value = { registrationState: 'open', registrationScope: 'registered', registrationScopeEligible: false }
+  h.page.registrationKnown.value = true
+  await h.page.register()
+  assert.deepEqual(targets, [])
+  h.page.registration.value = { status: 'active' }
+  await h.page.register()
+  assert.deepEqual(targets, ['/registration?id=activity-a'])
+})
+
+test('a visitor can reach profile completion before signup scope is evaluated for the member', async t => {
+  const gates = []
+  const h = harness(t, 'visitor-token', {}, { routes: { form: '/form' }, requireProfile: async target => { gates.push(target); return false } })
+  h.session.member = { profileComplete: false }
+  h.page.activity.value = { registrationState: 'open', registrationScope: 'registered', registrationScopeEligible: false }
+  h.page.registrationKnown.value = true
+  await h.page.register()
+  assert.deepEqual(gates, ['/form?id=activity-a'])
+})
+
 test('private lookup failure keeps public activity visible, blocks unknown registration, and retries independently', async t => {
   const navigated = []
   const h = harness(t, 'member', {}, { navigate: target => navigated.push(target), routes: { result: '/registration' } })

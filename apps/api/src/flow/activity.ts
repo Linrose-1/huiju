@@ -18,6 +18,7 @@ import { readingEvents, readingVisitors } from '../database/schema/interactions.
 import { registrations, registrationAnswers, registrationOperations } from '../database/schema/registrations.js'
 import { fail, FlowDatabase } from './common.js'
 import { complete, IdentityService } from './identity.js'
+import { registrationScopeEligible, requireRegistrationScope } from './community-roster.js'
 import { ActivityDto, ActivityListDto, AnswerInput, MyActivitySummaryDto, PublicMemberDto, RegistrationDto, RegistrationInput } from './dto.js'
 import { ActivityListQuery } from './activity-list-dto.js'
 import type { LeaderboardQuery } from './leaderboard-dto.js'
@@ -119,6 +120,7 @@ export class ActivityService {
       .limit(1))[0] ?? null
     return {
       organizer,
+      registrationScope: activity.registrationScope,
       id: activity.id,
       title: state === 'removed' ? '活动已下架' : activity.title,
       hostOrganization: state === 'removed' ? null : activity.hostOrganization ?? null,
@@ -220,7 +222,9 @@ export class ActivityService {
     if (!activity || activity.lifecycle === 'draft') {
       fail('NOT_FOUND', '活动不存在', 404)
     }
-    return this.present(activity, member?.id)
+    const detail = await this.present(activity, member?.id)
+    if (member) detail.registrationScopeEligible = await registrationScopeEligible(this.database.db, activity, member.id)
+    return detail
   }
 
   async roster(id: string, query: PageQuery = new PageQuery(), header?: string) {
@@ -440,6 +444,7 @@ export class ActivityService {
       if (action === 'register' && state === 'full') {
         fail('CAPACITY_FULL', '活动名额已满', 409)
       }
+      if (action === 'register') await requireRegistrationScope(tx, activity, member.id, true)
       if (action === 'edit' && existing?.status !== 'active') {
         fail('REGISTRATION_NOT_FOUND', '没有可修改的有效报名', 404)
       }

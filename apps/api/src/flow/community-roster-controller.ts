@@ -1,28 +1,27 @@
-import { Controller, Get, Header, Headers, Query, Body, Put, Param, ParseUUIDPipe } from '@nestjs/common'
+import { Controller, Get, Header, Headers, Query, Body, Put, Param } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger'
-import { CommunityAccessDto, CommunityRecognitionInput, CommunityRosterDto, CommunityRosterMemberDto } from './community-roster-dto.js'
+import { CommunityAccessDto, CommunityMemberRouteParams, CommunityRecognitionInput, CommunityRosterDto, CommunityRosterMemberDto, CommunityRouteParams } from './community-roster-dto.js'
 import { CommunityRosterService } from './community-roster.js'
-import { DEFAULT_COMMUNITY_ID } from './member-number.js'
 import { PageQuery } from './pagination.js'
 
 @ApiTags('communities') @ApiBearerAuth()
-@Controller('communities/' + DEFAULT_COMMUNITY_ID)
+@Controller('communities/:communityId')
 export class CommunityRosterController {
   constructor(private readonly roster: CommunityRosterService) {}
 
   @Get('me') @Header('Cache-Control', 'private, no-store')
   @ApiOkResponse({ type: CommunityAccessDto })
-  me(@Headers('authorization') header?: string) { return this.roster.access(header) }
+  me(@Param() params: CommunityRouteParams, @Headers('authorization') header?: string) { return this.roster.access(header, params.communityId) }
 
   @Get('members') @Header('Cache-Control', 'private, no-store')
   @ApiOkResponse({ type: CommunityRosterDto })
-  list(@Query() query: PageQuery, @Headers('authorization') header?: string) {
-    return this.roster.list(query, header)
+  list(@Param() params: CommunityRouteParams, @Query() query: PageQuery, @Headers('authorization') header?: string) {
+    return this.roster.list(query, header, params.communityId)
   }
 
   @Put('members/:memberId') @Header('Cache-Control', 'private, no-store')
   @ApiOkResponse({ type: CommunityRosterMemberDto })
-  recognize(@Param('memberId', ParseUUIDPipe) memberId: string, @Body() input: CommunityRecognitionInput, @Headers('authorization') header?: string) {
-    return this.roster.recognize(memberId, input.isRegistered, header)
+  recognize(@Param() params: CommunityMemberRouteParams, @Body() input: CommunityRecognitionInput, @Headers('authorization') header?: string) {
+    return this.roster.recognize(params.memberId, input.isRegistered, header, params.communityId)
   }
 }

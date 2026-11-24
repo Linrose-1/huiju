@@ -71,6 +71,55 @@ function harness({ loadOptions = {}, stagedDraft = null, storage = new Map(), sh
   return { page, session, api, creates, updates, publishes, navigations, fill, unload: () => onUnload() }
 }
 
+test('registration scope defaults to both groups and editing preserves the saved choice independently of audience', async () => {
+  for (const scope of [undefined, 'registered', 'unregistered']) {
+    const h = harness({ record: activity({ registrationScope: scope, audienceTypes: ['other'], audienceOther: '本地创业者' }) })
+    h.page.id.value = 'activity-a'
+    await h.page.load()
+    assert.equal(h.page.form.registrationScope, scope ?? 'all')
+    h.page.form.registrationScope = 'unregistered'
+    const body = h.page.payload()
+    assert.equal(body.registrationScope, 'unregistered')
+    assert.deepEqual(body.audienceTypes, ['other'])
+    h.unload()
+  }
+})
+
+test('再聚一次 opens a new editable event without old times, participants or question IDs', async () => {
+  const old = activity({ id:'old-event', startsAt:'2020-01-01T01:00:00Z', endsAt:'2020-01-01T03:00:00Z',
+    lifecycle:'published', hasRegistrationEver:true, activeRegistrationCount:9, registrationScope:'unregistered',
+    capacity:20, feeType:'paid', feeAmountCents:1200, coverUrl:'https://example.com/old.jpg',
+    questions:[{id:'old-question',prompt:'饮食偏好',type:'short_text',required:true,publicToParticipants:false}] })
+  const h = harness({ loadOptions:{repeatOf:old.id}, record:old })
+  await h.page.load()
+  assert.equal(h.page.error.value,'')
+  assert.equal(h.page.source.value,null)
+  assert.equal(h.page.id.value,'')
+  assert.equal(h.page.form.registrationScope,'unregistered')
+  assert.equal(h.page.form.capacity,'20')
+  assert.equal(h.page.form.amount,'12.00')
+  assert.equal(h.page.coverUrl.value,old.coverUrl)
+  assert.equal(h.page.locked.value,false)
+  assert.equal(h.page.questions.value[0].id,undefined)
+  for (const field of ['startDate','startTime','endDate','endTime','deadlineDate','deadlineTime']) assert.equal(h.page.form[field],'')
+  await h.page.submit(true)
+  assert.equal(h.creates.length,0)
+  Object.assign(h.page.form,{startDate:'2099-11-01',endDate:'2099-11-01',startTime:'10:00',endTime:'12:00',title:'本期活动'})
+  await h.page.load()
+  assert.equal(h.page.form.title,'本期活动')
+  await h.page.submit(true)
+  assert.deepEqual(h.updates,[])
+  assert.equal(h.creates.length,1)
+  const input=h.creates[0]
+  assert.equal(input.repeatOfActivityId,old.id)
+  assert.equal(input.registrationDeadline,null)
+  assert.equal(input.questions[0].prompt,'饮食偏好')
+  for (const key of ['id','hasRegistrationEver','activeRegistrationCount','registrations','specialInviteCodes']) assert.equal(Object.hasOwn(input,key),false)
+  assert.equal(Object.hasOwn(input.questions[0],'id'),false)
+  assert.deepEqual(h.publishes,['activity-a'])
+  h.unload()
+})
+
 test('question dragging without simulator width moves by a finite row height', async () => {
   const h = harness({ windowInfo: {} })
   await h.page.load()

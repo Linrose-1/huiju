@@ -124,6 +124,7 @@ onPullDownRefresh(load)
           :now="now"
           @roster="navigate(routes.manage + '?id=' + item.id + '&section=roster')"
           @edit="navigate(routes.editor + '?id=' + item.id)"
+          @repeat="navigate(routes.editor + '?repeatOf=' + encodeURIComponent(item.id))"
           @open="open(item)"
         />
         <ListMore

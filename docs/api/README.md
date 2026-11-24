@@ -1,5 +1,15 @@
 # API 契约
 
+## 第 56、60 项　成员管理授权与再聚一次
+
+- 超管在 `GET /admin/members/:memberId/community-permissions` 分页查询目标会员已加入社群的有效权限，向同路径下的 `/:communityId` 发起 PUT，提交 `canViewRoster`、`canRecognizeMembers` 两个布尔值。允许认定须同时允许查看。变更记录与授权一同提交。后台写操作须使用现有会话、允许的 Origin 与 CSRF 令牌。
+- 小程序用 `GET /communities/:communityId/me` 获取本社群能力，名单响应也包含 `canRecognizeMembers`。名单查看和在册认定分别按当前有效授权校验。旧字段 `isAdmin` 仍表示具备认定权限。
+- 再次发起时，`POST /activities` 可带 `repeatOfActivityId`。服务端验证来源归属及新场次发起资格，新建独立活动与问题。客户端从原活动带入已确认的字段，重新填写时间，再走原有发布流程。
+
+## 第 55 项　活动报名范围
+
+创建和编辑活动使用 `registrationScope`，取值为 `all`（两者均可）、`registered`（仅本社群在册）、`unregistered`（仅本社群非在册）。创建时省略默认 `all`，编辑时省略保留原值。首次报名和取消后再报名都会检查当前在册身份；范围不匹配返回 `REGISTRATION_SCOPE_MISMATCH`。免费特邀码只影响报名费用。详情的 `registrationScopeEligible` 用于展示当前访问者的范围资格，最终结果由提交时的服务端校验决定。
+
 ## 第 41 项　我邀请的学友
 
 本人资料详情支持选填 `industry`、`schools`（最多 20 项，每项最多 100 字）和 `hometownCityCode`。行业与学校按完整名称匹配，忽略全半角、首尾空白和英文大小写。家乡按市级代码匹配，保留既有家乡文字以供展示。旧版客户端保存相同家乡时保留原市码，改写家乡时清除旧码；旧文字资料在重新选定城市后参与同乡匹配。

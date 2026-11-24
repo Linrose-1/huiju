@@ -83,6 +83,7 @@ test('previews only a currently published code at its original media URL and ign
   assert.equal(previews.length, 1)
   assert.equal(previews[0].current, 'https://app.example.test' + codeUrl)
   assert.deepEqual(previews[0].urls, [previews[0].current])
+  assert.equal(previews[0].showmenu, true)
   previews[0].complete()
   brand.value = { ...brand.value, partners: [] }
   result.previewCode(codeUrl)

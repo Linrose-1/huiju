@@ -1,4 +1,14 @@
 import type { Activity, Registration } from './api/types'
+export const registrationScopeOptions = [
+  { key: 'all', label: '在册和非在册均可' },
+  { key: 'registered', label: '仅在册会员' },
+  { key: 'unregistered', label: '仅非在册用户' },
+] as const
+export type RegistrationScope = typeof registrationScopeOptions[number]['key']
+export function registrationScopeText(scope: RegistrationScope = 'all') {
+  return registrationScopeOptions.find(option => option.key === scope)?.label ?? registrationScopeOptions[0].label
+}
+
 export const audienceOptions = [
   { key: 'member', label: '会员用户' },
   { key: 'friend', label: '非会用户' },
